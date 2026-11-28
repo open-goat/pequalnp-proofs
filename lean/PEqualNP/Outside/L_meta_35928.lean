@@ -6500,37 +6500,6 @@ set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma totalRoot_p : pOk 0 totalRootBounds = true := by decide +kernel
 
-def totalZeroCases : List (ℕ × ℕ) := [(0x100020400000000000000000000000000000010000000040, 1), (0x1000000800000000200000100080008000000000000000000000, 0), (0x3fefffeff7dfbfffffdffffdefff7fff7fff7ffffffefffedffebf, 0), (0x2000000000000800000000001200100, 0)]
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma totalZeroFull : mFull totalZeroCases = true := by decide +kernel
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma totalZero0 : chk [] totalRootBounds 0 13 0 0x100020400000000000000000000000000000010000000040 1 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma totalZero1 : chk [] totalRootBounds 0 13 0 0x1000000800000000200000100080008000000000000000000000 0 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma totalZero2 : chk [] totalRootBounds 0 13 0 0x3fefffeff7dfbfffffdffffdefff7fff7fff7ffffffefffedffebf 0 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma totalZero3 : chk [] totalRootBounds 0 13 0 0x2000000000000800000000001200100 0 = false := by decide +kernel
-
-lemma totalZeroChecked (p : ℕ × ℕ) (hp : p ∈ totalZeroCases) :
-    chk [] totalRootBounds 0 13 0 p.1 p.2 = false := by
-  simp only [totalZeroCases, List.mem_cons, List.not_mem_nil, or_false] at hp
-  rcases hp with rfl | rfl | rfl | rfl
-  · exact totalZero0
-  · exact totalZero1
-  · exact totalZero2
-  · exact totalZero3
-
 def rootPreparedWords : List W := [
   ⟨0x1fffffbf00000000000000000000000000000000000000000000000000000000000860025280c0006000300180300000000800010000400100000001000008010000000200400004000000000000000000fff001fbf80007f000083f80008200fe00020843f80008410fe00021048210fc006bff5ad557feabff55ffaffdff800000000000000000000000000000000000000000000000000009218fe0e639372c7, 0x40000020000000000100000000010000000000000000002108420000000000000001084010842108400000000000000000000000000108421084210842108421080000000000000000000000000000000000000000000084210842000000000000000000000000000040000000, 0x8000000000800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000, 0x8000000000840000020000000000100000000010000000000000000002108420000000000000001084010842108400000000000000000000000000108421084210842108421080000000000000000000000000000000000000000000084210842000000000000000000000000000040000000, 0x3⟩,
   ⟨0x1fffff807ffffe00000007ffffdf7dc000000000000000000000000000000000000c520b5a80a80054002a01502a05ad400c8001900064019024aa21b0090d81b000000340680006800000000000000000be00e00207c3800807001043f0fbee000f008000003c02104000f008402088003860005ad40000000000000000002d6b000000000000000001b555affd6d7feffc00000000000000098f5d06f32eb0f0e, 0x800000000000000000000400000000800000000000000000100001000000000000000000000800000020000000842108000000000000000021084200000000000004210840000000000000842108421084000000000000000210800108421084000042108421084200002000000, 0x20000000000000021084210800000000000000000000421084210840000000000000842108420000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000, 0x20000000800000021084210800000400000000800000421084210840100001000000842108420000000800000020000000842108000000000000000021084200000000000004210840000000000000842108421084000000000000000210800108421084000042108421084200002000000, 0x3⟩,
@@ -7559,31 +7528,539 @@ lemma binaryRootChecked (p : ℕ × ℕ) (hp : p ∈ binaryRootCases) :
   · exact binaryChecked
   · exact unaryChecked
 
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma totalPos (t : ℕ) (hpos : 0 < t) (hlt : t < 14) :
-    chk [] totalRootBounds 0 13 t FF 1 = false := by
-  interval_cases t <;> decide +kernel
-
-lemma lower14 : Imp [] 0 14 := by
-  apply imp_of (Or.inl rfl) totalRoot_p (by decide)
-  · exact totalRootBounds_sound
-  · right
-    intro t ht
-    by_cases h : t = 0
-    · subst t
-      exact ⟨totalZeroCases, totalZeroFull, totalZeroChecked⟩
-    · refine ⟨[(FF,1)], ffull, ?_⟩
-      intro p hp
-      obtain rfl := List.mem_singleton.mp hp
-      exact totalPos t (Nat.pos_of_ne_zero h) (by omega)
+namespace Monotone
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma needs15 {S : Finset ℕ} (hS : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0))
-    (hl : Live Z0 (mz 0) (tz 0) 14 1 S) : False := by
-  have hmin : ∀ q < 14, ¬ Sol Z0 (mz 0) (tz 0) q (C (mz 0) (WZ [] 0)) := fun q hq => lower14 q hq
-  have hm : Min Z0 (mz 0) (tz 0) 14 1 S :=
+lemma allRootInputsNeeded :
+    allInputsNeeded I.NN false I.AA rootPreparedWords 0 = true := by decide +kernel
+
+noncomputable def initialBinary (H : ℕ) (kind : Bool) (f : ℕ → List W → Bool) : Bool :=
+  nodePicked I.NN f false I.AA rootPreparedMask rootPreparedSlots 13 8
+    (Nat.sub rootPreparedBudget (sumc rootPreparedWords)) rootPreparedWords H kind
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 5000000 in
+lemma initialBinary_of_check
+    (h : BinarySearch.chk [] gradeRootBounds 0 13 0 FF 0 = true) :
+    ∃ b : Fin 8, initialBinary FF (cvOp b)
+      (BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 13 12 0) = true := by
+  simp only [BinarySearch.chk, frc_eq, st_eq, rootPreparedWords_eq, rootPreparedMask_eq,
+    rootPreparedSlots_eq, rootPreparedBudget_eq, rootPreparedL_eq, show pwr [] 0 = 0 from rfl] at h
+  change anySubC I.NN false I.AA rootPreparedWords 0 _ = true at h
+  rw [anySub_allInputs allRootInputsNeeded] at h
+  have haveRequired : hasP 0 rootPreparedWords = true := by decide +kernel
+  have len : rootPreparedWords.length = 8 := rfl
+  have budget : Nat.beq
+      (Nat.land (Nat.sub rootPreparedBudget (sumc rootPreparedWords)) rootPreparedSlots) rootPreparedSlots = true := by decide +kernel
+  have h8 : Nat.beq 8 14 = false := rfl
+  have h9 : Nat.beq 9 14 = false := rfl
+  have choose0 (F : ℕ → Bool) : tstC I.NN I.AA I.HX I.HY false I.AA 14 rootPreparedWords F = F 0 := by
+    simp only [tstC, len, h8, h9, bR, Bool.cond_false]
+  simp only [BinarySearch.startv, BinarySearch.topC, child, st_eq, bR, haveRequired, len, budget,
+    show Nat.ble 8 (Nat.sub 14 0) = true from rfl, show Nat.ble 8 1 = false from rfl,
+    Bool.cond_true, Bool.cond_false] at h
+  change tstC I.NN I.AA I.HX I.HY false I.AA 14 rootPreparedWords _ = true at h
+  rw [choose0] at h
+  let f := BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 13 12 0
+  let z := Nat.sub rootPreparedBudget (sumc rootPreparedWords)
+  have ifBool (b : Bool) : (bif b then true else false) = b := by cases b <;> rfl
+  change (bif nodeC I.NN f false I.AA rootPreparedMask rootPreparedSlots 13 8 z rootPreparedWords
+    (fun step xs => pairsC FF step (fs xs)) then true else false) = true at h
+  rw [ifBool] at h
+  exact node_picked I.NN f false I.AA rootPreparedMask rootPreparedSlots 13 8 z rootPreparedWords FF h
+
+
+lemma initialBinary_from_frontier (H : ℕ) (kind : Bool) (states : List (ℕ × List W))
+    (complete : initialBinary H kind (frontierMissing states) = false)
+    (checked : ∀ state ∈ states,
+      BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 13 12 0 state.1 state.2 = false) :
+    initialBinary H kind
+      (BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 13 12 0) = false := by
+  refine Bool.eq_false_iff.mpr fun original => ?_
+  unfold initialBinary at original complete
+  obtain ⟨_, hit⟩ := nodePicked_distribute
+    (branches := fun _ => frontierMissing states)
+    I.NN false I.AA rootPreparedMask rootPreparedSlots 13 8
+    (Nat.sub rootPreparedBudget (sumc rootPreparedWords)) rootPreparedWords H kind
+    (fun z v hit => by
+      refine ⟨0, ?_⟩
+      cases hm : frontierMissing states z v
+      · exact Bool.noConfusion ((checked (z,v) (frontierMissing_false hm)).symm.trans hit)
+      · exact hm)
+    original
+  exact Bool.noConfusion (complete.symm.trans hit)
+
+noncomputable def pureAt (e : ℕ) (state : SearchState) (f : ℕ → List W → Bool) : Bool :=
+  nodeC I.NN f false I.AA rootPreparedMask rootPreparedSlots e state.2.length state.1 state.2 pairsS
+
+noncomputable def pureSecond (state : SearchState) (f : ℕ → List W → Bool) : Bool :=
+  pureAt 12 state f
+
+noncomputable def mixedSecond (state : SearchState) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    BinarySearch.mv
+      (BinarySearch.look I.AA rootPreparedMask rootPreparedSlots 13)
+      I.AA rootPreparedMask rootPreparedSlots 12 0 z v 0))
+
+noncomputable def afterSecond (state : SearchState) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 12 11 0 z v))
+
+lemma pureAt_of_covered (e : ℕ) (state : SearchState) (remaining : SearchState → Bool)
+    (miss : ℕ → List W → Bool)
+    (complete : pureAt e state miss = false)
+    (covered : ∀ z v, miss z v = false → remaining (z,v) = false) :
+    pureAt e state (fun z v => remaining (z,v)) = false := by
+  refine Bool.eq_false_iff.mpr fun found => ?_
+  simp only [pureAt, nodeC_as_mode, pairsS] at found complete
+  have hp := pairs_distribute _ _ (fun a c =>
+    pair_distribute (fun left right da dc signal x y =>
+      mode_distribute rootPreparedMask rootPreparedSlots e state.2.length state.1 state.2
+      left right da dc signal x y
+      (g := fun _ => miss)
+      (fun z v hit => by
+        refine ⟨0, ?_⟩
+        cases missed : miss z v
+        · exact Bool.noConfusion ((covered z v missed).symm.trans hit)
+        · exact missed))
+    a c) _ found
+  obtain ⟨_, hh⟩ := hp
+  exact Bool.noConfusion (complete.symm.trans hh)
+
+lemma afterFirst_false (state : SearchState)
+    (two : 1 < state.2.length) (small : state.2.length < 12)
+    (mixed : mixedSecond state = false)
+    (pure : pureSecond state (fun z v => afterSecond (z,v)) = false) :
+    BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 13 12 0 state.1 state.2 = false := by
+  have lengthOkay : Nat.ble state.2.length 1 = false := by
+    cases h : Nat.ble state.2.length 1
+    · rfl
+    · exact absurd (Nat.le_of_ble_eq_true h) (Nat.not_le_of_gt two)
+  have choose0 (F : ℕ → Bool) : tstC I.NN I.AA I.HX I.HY false I.AA 13 state.2 F = F 0 := by
+    have h0 : Nat.beq state.2.length 13 = false := beq_f (by omega)
+    have h1 : Nat.beq state.2.length.succ 13 = false := beq_f (by omega)
+    simp only [tstC, bR, h0, h1, Bool.cond_false]
+  rw [show (13 : ℕ) = Nat.succ 12 from rfl, gradeLook1_step, lengthOkay, Bool.cond_false]
+  change cvC I.NN (pos 0) I.AA state.2 (tstC I.NN I.AA I.HX I.HY false I.AA 13 state.2 _) = _
+  rw [choose0]
+  simp only [afterSecond, frc_eq, st_eq] at pure
+  simp only [mixedSecond, frc_eq, st_eq] at mixed
+  change cvC I.NN (pos 0) I.AA state.2 (bif pureSecond state
+      (BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 12 11 0)
+    then true else _) = _
+  rw [pure, mixed]
+  simp [cvC, bR]
+
+noncomputable def mixedFromSecond (state : SearchState) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    BinarySearch.mv
+      (BinarySearch.look I.AA rootPreparedMask rootPreparedSlots 13)
+      I.AA rootPreparedMask rootPreparedSlots 11 0 z v 0))
+
+noncomputable def afterThird (state : SearchState) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 11 10 0 z v))
+
+lemma afterSecond_false (state : SearchState)
+    (two : 1 < state.2.length) (small : state.2.length < 11)
+    (mixed : mixedFromSecond state = false)
+    (pure : pureAt 11 state (fun z v => afterThird (z,v)) = false) :
+    afterSecond state = false := by
+  have lengthOkay : Nat.ble state.2.length 1 = false := by
+    cases h : Nat.ble state.2.length 1
+    · rfl
+    · exact absurd (Nat.le_of_ble_eq_true h) (Nat.not_le_of_gt two)
+  have choose0 (F : ℕ → Bool) : tstC I.NN I.AA I.HX I.HY false I.AA 12 state.2 F = F 0 := by
+    have h0 : Nat.beq state.2.length 12 = false := beq_f (by omega)
+    have h1 : Nat.beq state.2.length.succ 12 = false := beq_f (by omega)
+    simp only [tstC, bR, h0, h1, Bool.cond_false]
+  rw [afterSecond, frc_eq, st_eq, show (12 : ℕ) = Nat.succ 11 from rfl, gradeLook1_step,
+    lengthOkay, Bool.cond_false]
+  change cvC I.NN (pos 0) I.AA state.2 (tstC I.NN I.AA I.HX I.HY false I.AA 12 state.2 _) = _
+  rw [choose0]
+  simp only [afterThird, frc_eq, st_eq] at pure
+  simp only [mixedFromSecond, frc_eq, st_eq] at mixed
+  change cvC I.NN (pos 0) I.AA state.2 (bif pureAt 11 state
+      (BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 11 10 0)
+    then true else _) = _
+  rw [pure, mixed]
+  simp [cvC, bR]
+
+noncomputable def readyForThird (i : ℕ) : Bool :=
+  let state := secondAt i
+  let ids := thirdSuccessors i
+  (!pureAt 11 state (taggedMissing ids thirdAt)) &&
+    ((ids.all fun j => decide (j % 2048 < thirdCount)) &&
+      (decide (1 < state.2.length) && decide (state.2.length < 11)))
+
+noncomputable def thirdTest (j : ℕ) : Bool := !afterThird (thirdAt j)
+noncomputable def secondMixedTest (j : ℕ) : Bool := !mixedFromSecond (secondAt j)
+
+lemma checkedAfterSecond (i : ℕ) (hi : i < secondCount)
+    (ready : rangeCheck readyForThird 0 secondCount = true)
+    (mixed : rangeCheck secondMixedTest 0 secondCount = true)
+    (third : rangeCheck thirdTest 0 thirdCount = true) :
+    afterSecond (secondAt i) = false := by
+  have h := rangeCheck_at ready hi
+  simp only [readyForThird, Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨hc, hvalid, htwo, hsmall⟩ := h
+  refine afterSecond_false (secondAt i) htwo hsmall (boolOfNeg (rangeCheck_at mixed hi)) ?_
+  refine pureAt_of_covered 11 (secondAt i) afterThird (taggedMissing (thirdSuccessors i) thirdAt) (boolOfNeg hc) ?_
+  intro z v found
+  obtain ⟨j, hj, eq⟩ := taggedMissing_found found
+  rw [eq]
+  have hj' : j % 2048 < thirdCount := of_decide_eq_true (List.all_eq_true.mp hvalid j hj)
+  exact boolOfNeg (rangeCheck_at third hj')
+
+
+noncomputable def readyForSecond (i : ℕ) : Bool :=
+  let state := firstAt i
+  let ids := secondSuccessors i
+  (!pureSecond state (taggedMissing ids secondAt)) &&
+    ((ids.all fun j => decide (j % 2048 < secondCount)) &&
+      (decide (1 < state.2.length) && decide (state.2.length < 12)))
+
+noncomputable def firstMixedTest (i : ℕ) : Bool := !mixedSecond (firstAt i)
+
+lemma checkedAfterFirst (i : ℕ) (hi : i < firstCount)
+    (ready : rangeCheck readyForSecond 0 firstCount = true)
+    (mixed : rangeCheck firstMixedTest 0 firstCount = true)
+    (next : ∀ j < secondCount, afterSecond (secondAt j) = false) :
+    BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 13 12 0
+      (firstAt i).1 (firstAt i).2 = false := by
+  have h := rangeCheck_at ready hi
+  simp only [readyForSecond, Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨hc, hvalid, htwo, hsmall⟩ := h
+  refine afterFirst_false (firstAt i) htwo hsmall (boolOfNeg (rangeCheck_at mixed hi)) ?_
+  refine pureAt_of_covered 12 (firstAt i) afterSecond (taggedMissing (secondSuccessors i) secondAt) (boolOfNeg hc) ?_
+  intro z v found
+  obtain ⟨j, hj, eq⟩ := taggedMissing_found found
+  rw [eq]
+  have hj' : j % 2048 < secondCount := of_decide_eq_true (List.all_eq_true.mp hvalid j hj)
+  exact next _ hj'
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk0 : rangeCheck readyForSecond 0 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk1 : rangeCheck readyForSecond 8 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk2 : rangeCheck readyForSecond 16 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverage_all : rangeCheck readyForSecond 0 24 = true :=
+  (@rangeCheck_append readyForSecond 0 8 16 firstCoverageChunk0 (@rangeCheck_append readyForSecond 8 8 8 firstCoverageChunk1 firstCoverageChunk2))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk0 : rangeCheck firstMixedTest 0 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk1 : rangeCheck firstMixedTest 8 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk2 : rangeCheck firstMixedTest 16 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixed_all : rangeCheck firstMixedTest 0 24 = true :=
+  (@rangeCheck_append firstMixedTest 0 8 16 firstMixedChunk0 (@rangeCheck_append firstMixedTest 8 8 8 firstMixedChunk1 firstMixedChunk2))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk0 : rangeCheck readyForThird 0 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk1 : rangeCheck readyForThird 16 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk2 : rangeCheck readyForThird 32 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk3 : rangeCheck readyForThird 48 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk4 : rangeCheck readyForThird 64 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk5 : rangeCheck readyForThird 80 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk6 : rangeCheck readyForThird 96 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk7 : rangeCheck readyForThird 112 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk8 : rangeCheck readyForThird 128 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk9 : rangeCheck readyForThird 144 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk10 : rangeCheck readyForThird 160 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk11 : rangeCheck readyForThird 176 5 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverage_all : rangeCheck readyForThird 0 181 = true :=
+  (@rangeCheck_append readyForThird 0 96 85 (@rangeCheck_append readyForThird 0 48 48 (@rangeCheck_append readyForThird 0 16 32 secondCoverageChunk0 (@rangeCheck_append readyForThird 16 16 16 secondCoverageChunk1 secondCoverageChunk2)) (@rangeCheck_append readyForThird 48 16 32 secondCoverageChunk3 (@rangeCheck_append readyForThird 64 16 16 secondCoverageChunk4 secondCoverageChunk5))) (@rangeCheck_append readyForThird 96 48 37 (@rangeCheck_append readyForThird 96 16 32 secondCoverageChunk6 (@rangeCheck_append readyForThird 112 16 16 secondCoverageChunk7 secondCoverageChunk8)) (@rangeCheck_append readyForThird 144 16 21 secondCoverageChunk9 (@rangeCheck_append readyForThird 160 16 5 secondCoverageChunk10 secondCoverageChunk11))))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk0 : rangeCheck secondMixedTest 0 24 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk1 : rangeCheck secondMixedTest 24 24 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk2 : rangeCheck secondMixedTest 48 24 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk3 : rangeCheck secondMixedTest 72 24 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk4 : rangeCheck secondMixedTest 96 24 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk5 : rangeCheck secondMixedTest 120 24 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk6 : rangeCheck secondMixedTest 144 24 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk7 : rangeCheck secondMixedTest 168 13 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixed_all : rangeCheck secondMixedTest 0 181 = true :=
+  (@rangeCheck_append secondMixedTest 0 96 85 (@rangeCheck_append secondMixedTest 0 48 48 (@rangeCheck_append secondMixedTest 0 24 24 secondMixedChunk0 secondMixedChunk1) (@rangeCheck_append secondMixedTest 48 24 24 secondMixedChunk2 secondMixedChunk3)) (@rangeCheck_append secondMixedTest 96 48 37 (@rangeCheck_append secondMixedTest 96 24 24 secondMixedChunk4 secondMixedChunk5) (@rangeCheck_append secondMixedTest 144 24 13 secondMixedChunk6 secondMixedChunk7)))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk0 : rangeCheck thirdTest 0 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk1 : rangeCheck thirdTest 28 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk2 : rangeCheck thirdTest 56 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk3 : rangeCheck thirdTest 84 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk4 : rangeCheck thirdTest 112 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk5 : rangeCheck thirdTest 140 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk6 : rangeCheck thirdTest 168 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk7 : rangeCheck thirdTest 196 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk8 : rangeCheck thirdTest 224 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk9 : rangeCheck thirdTest 252 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk10 : rangeCheck thirdTest 280 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk11 : rangeCheck thirdTest 308 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk12 : rangeCheck thirdTest 336 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk13 : rangeCheck thirdTest 364 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk14 : rangeCheck thirdTest 392 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk15 : rangeCheck thirdTest 420 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk16 : rangeCheck thirdTest 448 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk17 : rangeCheck thirdTest 476 28 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk18 : rangeCheck thirdTest 504 2 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTail_all : rangeCheck thirdTest 0 506 = true :=
+  (@rangeCheck_append thirdTest 0 252 254 (@rangeCheck_append thirdTest 0 112 140 (@rangeCheck_append thirdTest 0 56 56 (@rangeCheck_append thirdTest 0 28 28 thirdTailChunk0 thirdTailChunk1) (@rangeCheck_append thirdTest 56 28 28 thirdTailChunk2 thirdTailChunk3)) (@rangeCheck_append thirdTest 112 56 84 (@rangeCheck_append thirdTest 112 28 28 thirdTailChunk4 thirdTailChunk5) (@rangeCheck_append thirdTest 168 28 56 thirdTailChunk6 (@rangeCheck_append thirdTest 196 28 28 thirdTailChunk7 thirdTailChunk8)))) (@rangeCheck_append thirdTest 252 140 114 (@rangeCheck_append thirdTest 252 56 84 (@rangeCheck_append thirdTest 252 28 28 thirdTailChunk9 thirdTailChunk10) (@rangeCheck_append thirdTest 308 28 56 thirdTailChunk11 (@rangeCheck_append thirdTest 336 28 28 thirdTailChunk12 thirdTailChunk13))) (@rangeCheck_append thirdTest 392 56 58 (@rangeCheck_append thirdTest 392 28 28 thirdTailChunk14 thirdTailChunk15) (@rangeCheck_append thirdTest 448 28 30 thirdTailChunk16 (@rangeCheck_append thirdTest 476 28 2 thirdTailChunk17 thirdTailChunk18)))))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma initialCoverage (kind : Bool) : initialBinary FF kind (frontierMissing (initialStates kind)) = false := by
+  cases kind <;> decide +kernel
+
+lemma binaryCertificate (kind : Bool) :
+    initialBinary FF kind (BinarySearch.look1 I.AA rootPreparedMask rootPreparedSlots 13 13 12 0) = false := by
+  apply initialBinary_from_frontier FF kind (initialStates kind) (initialCoverage kind)
+  intro state membership
+  obtain ⟨i, hi, rfl⟩ := List.mem_map.mp membership
+  have hi' : i < firstCount := of_decide_eq_true (List.all_eq_true.mp (allInitialIndices kind) i hi)
+  exact checkedAfterFirst i hi' firstCoverage_all firstMixed_all
+    (fun j hj => checkedAfterSecond j hj secondCoverage_all secondMixed_all thirdTail_all)
+
+lemma binaryChecked : BinarySearch.chk [] gradeRootBounds 0 13 0 FF 0 = false := by
+  refine Bool.eq_false_iff.mpr fun h => ?_
+  obtain ⟨b,hb⟩ := initialBinary_of_check h
+  exact Bool.noConfusion ((binaryCertificate (cvOp b)).symm.trans hb)
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked : BinarySearch.chk [] gradeRootBounds 0 13 0 0 1 = false := by decide +kernel
+
+lemma rootChecked (p : ℕ × ℕ) (hp : p ∈ binaryRootCases) :
+    BinarySearch.chk [] gradeRootBounds 0 13 0 p.1 p.2 = false := by
+  simp only [binaryRootCases, List.mem_cons, List.not_mem_nil, or_false] at hp
+  rcases hp with rfl | rfl
+  · exact binaryChecked
+  · exact unaryChecked
+
+end Monotone
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma x2Pair : Lg I.NN (mz 0) (tz 0) 210 := by
+  unfold Lg
+  decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma x2Region : mz 4 &&& mz 0 = mz 4 := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma x2Target : tz 4 ≠ 0 ∧ tz 4 ≠ mz 4 := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma x2SeparatorsKilled : (rawL []).all (fun w =>
+    !(sepb I.NN true (w &&& mz 0) 210) || Nat.beq ((w &&& mz 0) &&& mz 4) 0) = true := by
+  decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma x2SeparatorConstant {x : ℕ} (hin : x ∈ C (mz 0) (WZ [] 0))
+    (hsep : sepb I.NN true x 210 = true) : Cst (mz 4) x := by
+  rcases hin with h | h
+  · obtain ⟨w, hw, rfl⟩ := h
+    have hz := List.all_eq_true.mp x2SeparatorsKilled w hw
+    simp only [hsep, Bool.not_true, Bool.false_or] at hz
+    exact Or.inl (Nat.eq_of_beq_eq_true hz)
+  · simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at h
+    rcases h with rfl | rfl
+    · exact Or.inl (by simp)
+    · exact Or.inr (by rw [Nat.and_comm, x2Region])
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma x2ProjectedInputs {S : Finset ℕ} (hs : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0)) :
+    C (mz 4) (Im (mz 4) S) ⊆ C (mz 4) (WZ [] 4) := by
+  rintro x (⟨word, hw, rfl⟩ | hx)
+  · rcases hs hw with h | h
+    · obtain ⟨w, input, rfl⟩ := h
+      exact Or.inl ⟨w, input, by
+        change (w &&& mz 0) &&& mz 4 = w &&& mz 4
+        rw [Nat.and_assoc, Nat.and_comm (mz 0), x2Region]⟩
+    · simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at h
+      rcases h with rfl | rfl
+      · exact Or.inr (by simp)
+      · apply Or.inr
+        change mz 0 &&& mz 4 ∈ ({0, mz 4} : Set ℕ)
+        rw [Nat.and_comm, x2Region]
+        exact Set.mem_insert_of_mem _ rfl
+  · exact Or.inr hx
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma lower13 : Imp [] 0 13 := by
+  intro q hq solution
+  classical
+  let existsSol : ∃ n, Sol Z0 (mz 0) (tz 0) n (C (mz 0) (WZ [] 0)) := ⟨q, solution⟩
+  obtain ⟨k, hk, t, S, hS, live⟩ := (Nat.find_spec existsSol).live
+  have leSize := le_trans hk (Nat.find_min' existsSol solution)
+  have ambient : C (mz 0) (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0) := by
+    rintro x (hx | hx)
+    · exact hS hx
+    · exact Or.inr hx
+  have minimal : Min Z0 (mz 0) (tz 0) k t S :=
+    ⟨live, fun n hn smaller => Nat.find_min existsSol (lt_of_lt_of_le hn hk) (smaller.mono le_rfl ambient)⟩
+  obtain ⟨wire, hwire, separated⟩ := live.cov x2Pair.1 x2Pair.2.1 x2Pair.2.2.1 x2Pair.2.2.2
+  have constant := x2SeparatorConstant (hS hwire) (sepb_weak (pos' t) separated)
+  have killed : 0 < (S.filter (Cst (mz 4))).card :=
+    Finset.card_pos.mpr ⟨wire, Finset.mem_filter.mpr ⟨hwire, constant⟩⟩
+  obtain ⟨n, leaner, solved⟩ := minimal.const x2Region
+    (by rw [tz_sub x2Region]; exact x2Target.1) (by rw [tz_sub x2Region]; exact x2Target.2)
+  rw [tz_sub x2Region] at solved
+  exact strongRows_sound (4,12) (by decide) n (by omega) (solved.mono le_rfl (x2ProjectedInputs hS))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rootInputs {k t : ℕ} {S : Finset ℕ} (hS : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0))
+    (hl : Live Z0 (mz 0) (tz 0) k t S)
+    (hmin : ∀ q < k, ¬ Sol Z0 (mz 0) (tz 0) q (C (mz 0) (WZ [] 0))) :
+    (S : Set ℕ) ⊆ WZ [] 0 := by
+  have hm : Min Z0 (mz 0) (tz 0) k t S :=
     ⟨hl, fun q hq hs => hmin q hq (hs.mono le_rfl fun _ h => h.elim (fun hs => hS hs) Or.inr)⟩
   have hmasks : ∀ x ∈ S, x &&& mz 0 = x := by
     intro x hx
@@ -7593,14 +8070,78 @@ lemma needs15 {S : Finset ℕ} (hS : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0))
       rcases e with rfl | rfl <;> simp
   have ht : tz 0 &&& mz 0 = tz 0 := by simp only [tz, nl, Nat.and_assoc, Nat.and_self]
   obtain ⟨hzero, hone⟩ := hm.proper ht (by decide +kernel) (by decide +kernel) hmasks
-  have hs' : (S : Set ℕ) ⊆ WZ [] 0 := by
-    intro x hx
-    rcases hS hx with h | h
-    · exact h
-    · simp at h
-      rcases h with rfl | rfl
-      · exact (hzero hx).elim
-      · exact (hone hx).elim
+  intro x hx
+  rcases hS hx with h | h
+  · exact h
+  · simp at h
+    rcases h with rfl | rfl
+    · exact (hzero hx).elim
+    · exact (hone hx).elim
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma totalPos (t : ℕ) (hpos : 2 ≤ t) (hlt : t < 14) :
+    chk [] totalRootBounds 0 13 t FF 1 = false := by
+  interval_cases t <;> decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rootBounds_same : gradeRootBounds = totalRootBounds := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma gradeZero_sound : ∀ e ∈ gradeRootBounds, HasGrade 0 e := by
+  intro e he
+  rw [rootBounds_same] at he
+  rcases e with ⟨z,k⟩
+  simpa using gradeWeak (t := 0) (totalRootBounds_sound (z,k) he)
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma gradedThirteenOne : BinarySearch.chk [] gradeRootBounds 0 13 1 FF 1 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma lower14 : Imp [] 0 14 := by
+  intro q hq solution
+  obtain ⟨k, hk, t, S, hS, live⟩ := solution.live
+  have ambient : C (mz 0) (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0) := by
+    rintro x (hx | hx)
+    · exact hS hx
+    · exact Or.inr hx
+  have size : k = 13 := by
+    by_contra small
+    exact lower13 k (by omega) (live.sol.mono le_rfl hS)
+  subst k
+  have hm : ∀ u < 13, ¬ Sol Z0 (mz 0) (tz 0) u (C (mz 0) (WZ [] 0)) := fun u hu => lower13 u hu
+  have inputs := rootInputs hS live hm
+  have minimum : Min Z0 (mz 0) (tz 0) 13 t S :=
+    ⟨live, fun u hu smaller => hm u hu (smaller.mono le_rfl ambient)⟩
+  have ht := minimum.size.2
+  by_cases z : t = 0
+  · subst t
+    exact BinarySearch.rejectMinimum (L := 14) gradeRoot_p (by decide) (by decide)
+      gradeZero_sound inputs live hm binaryRootCases binaryRootFull Monotone.rootChecked
+  by_cases u : t = 1
+  · subst t
+    refine BinarySearch.rejectMinimum (L := 14) gradeRoot_p (by decide) (by decide)
+      gradeRootBounds_sound inputs live hm [(FF,1)] ffull ?_
+    intro p hp
+    obtain rfl := List.mem_singleton.mp hp
+    exact gradedThirteenOne
+  refine imp_of_live (L := 14) (Or.inl rfl) totalRoot_p (by decide) totalRootBounds_sound
+    (by decide) hS live hm (Or.inr ?_)
+  refine ⟨[(FF,1)], ffull, ?_⟩
+  intro p hp
+  obtain rfl := List.mem_singleton.mp hp
+  exact totalPos t (by omega) (by omega)
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma needs15 {S : Finset ℕ} (hS : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0))
+    (hl : Live Z0 (mz 0) (tz 0) 14 1 S) : False := by
+  have hmin : ∀ q < 14, ¬ Sol Z0 (mz 0) (tz 0) q (C (mz 0) (WZ [] 0)) := fun q hq => lower14 q hq
+  have hs' := rootInputs hS hl hmin
   refine BinarySearch.rejectMinimum (L := 15) gradeRoot_p (by decide) (by decide)
     gradeRootBounds_sound hs' hl hmin binaryRootCases binaryRootFull binaryRootChecked
 
