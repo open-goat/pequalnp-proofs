@@ -573,10 +573,19 @@ end Refute2003.PolyHash
 
 namespace Refute2003.BundleBuild
 
-class Ops (M : Type → Type) (W : Type) [Monad M] where
-  const : Bool → W
-  land : W → W → M W
-  lor : W → W → M W
+structure Ops (M : Type → Type) (W : Type) [Monad M] where
+  constant : Bool → W
+  andGate : W → W → M W
+  orGate : W → W → M W
+
+abbrev Ops.const {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] : Bool → W :=
+  (default : Ops M W).constant
+
+abbrev Ops.land {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] : W → W → M W :=
+  (default : Ops M W).andGate
+
+abbrev Ops.lor {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] : W → W → M W :=
+  (default : Ops M W).orGate
 
 abbrev Dual (W : Type) := W × W
 abbrev Word (W : Type) (w : Nat) := Fin w → Dual W
@@ -607,7 +616,7 @@ def mapMList {M : Type → Type} [Monad M] {A B : Type}
     pure (b :: bs)
 
 section Emit
-variable {M : Type → Type} {W : Type} [Monad M] [Ops M W]
+variable {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)]
 
 def allList (xs : List W) : M W :=
   xs.foldlM Ops.land (Ops.const (M := M) (W := W) true)
@@ -763,7 +772,7 @@ end Refute2003.BundleBuild
 
 namespace Refute2003.BundleBuild
 
-structure Sem (S W : Type) [Ops (StateM S) W] where
+structure Sem (S W : Type) [Inhabited (Ops (StateM S) W)] where
   ext : S → S → Prop
   refl : ∀ s, ext s s
   trans : ∀ {s t u}, ext s t → ext t u → ext s u
@@ -779,7 +788,7 @@ structure Sem (S W : Type) [Ops (StateM S) W] where
     ext s R.2 ∧ rep R.2 R.1 (p ∨ q)
 
 section
-variable {S W : Type} [Ops (StateM S) W] (v : Sem S W)
+variable {S W : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
 
 def Good {A : Type} (s : S) (p : StateM S A) (P : S → A → Prop) : Prop :=
   let R := p.run s
@@ -1234,7 +1243,7 @@ end Refute2003.Bundle
 namespace Refute2003.BundleBuild
 open Refute2003.Bundle
 
-def ExactSketch {S W α : Type} [Ops (StateM S) W] (v : Sem S W)
+def ExactSketch {S W α : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
     {r b w : Nat} (s : S) (sk : Sketch W r b w)
     (word : α → Fin w → Bool) (hash : Fin r → α → Fin b) (A : Finset α) : Prop :=
   SketchRep v s sk (active hash A) (rails word hash A)
@@ -1245,7 +1254,7 @@ def Perfect {α : Type} {r b : Nat} (hash : Fin r → α → Fin b) (A : Finset 
 def RailsMono {w : Nat} (f : Rails w → Prop) : Prop :=
   ∀ {R R'}, RailsLE R R' → f R → f R'
 
-structure HashCheck {S W α : Type} [Ops (StateM S) W] (v : Sem S W)
+structure HashCheck {S W α : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
     {r b w : Nat} (word : α → Fin w → Bool) (hash : Fin r → α → Fin b)
     (run : Fin r → Fin b → Word W w → StateM S W) where
   spec : Fin r → Fin b → Rails w → Prop
@@ -1254,7 +1263,7 @@ structure HashCheck {S W α : Type} [Ops (StateM S) W] (v : Sem S W)
   good : ∀ h c t a R, WordRep v t a R →
     Good v t (run h c a) (fun u out => v.rep u out (spec h c R))
 
-structure MapCheck {S W α β : Type} [Ops (StateM S) W] (v : Sem S W)
+structure MapCheck {S W α β : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
     {w w' : Nat} (word : α → Fin w → Bool) (word' : β → Fin w' → Bool)
     (map : α → β) (run : Word W w → StateM S (Word W w')) where
   spec : Rails w → Rails w'
@@ -1263,7 +1272,7 @@ structure MapCheck {S W α β : Type} [Ops (StateM S) W] (v : Sem S W)
   good : ∀ t a R, WordRep v t a R →
     Good v t (run a) (fun u out => WordRep v u out (spec R))
 
-def identityMap {S W α : Type} [Ops (StateM S) W] (v : Sem S W)
+def identityMap {S W α : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
     {w : Nat} (word : α → Fin w → Bool) :
     MapCheck v word word id (fun code => pure code) where
   spec := id
@@ -1272,7 +1281,7 @@ def identityMap {S W α : Type} [Ops (StateM S) W] (v : Sem S W)
   good := fun t a _ ha => Good.ret v t a _ ha
 
 section Implementation
-variable {S W : Type} [Ops (StateM S) W] (v : Sem S W)
+variable {S W : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
 
 theorem ExactSketch.extend {α : Type} {r b w : Nat} {s t : S}
     {sk : Sketch W r b w} {word : α → Fin w → Bool}
@@ -1488,16 +1497,44 @@ end Refute2003.BundleBuild
 
 namespace Refute2003.BundleBuild
 
-class Budget (M : Type → Type) [Monad M] where
-  within : {A : Type} → M A → Nat → Prop
-  weaken {A : Type} {p : M A} {k l : Nat} : within p k → k ≤ l → within p l
-  ret {A : Type} (a : A) : within (pure a) 0
-  seq {A B : Type} {p : M A} {f : A → M B} {k l : Nat} :
-    within p k → (∀ a, within (f a) l) → within (p >>= f) (k+l)
+structure Budget (M : Type → Type) [Monad M] where
+  withinCost : {A : Type} → M A → Nat → Prop
+  weakenCost {A : Type} {p : M A} {k l : Nat} : withinCost p k → k ≤ l → withinCost p l
+  returnCost {A : Type} (a : A) : withinCost (pure a) 0
+  bindCost {A B : Type} {p : M A} {f : A → M B} {k l : Nat} :
+    withinCost p k → (∀ a, withinCost (f a) l) → withinCost (p >>= f) (k+l)
 
-class UnitGateBudget (M : Type → Type) (W : Type) [Monad M] [Ops M W] [Budget M] : Prop where
-  land (a b : W) : Budget.within (Ops.land a b : M W) 1
-  lor (a b : W) : Budget.within (Ops.lor a b : M W) 1
+abbrev Budget.within {M : Type → Type} [Monad M] [Inhabited (Budget M)]
+    {A : Type} (p : M A) (k : Nat) : Prop :=
+  (default : Budget M).withinCost p k
+
+theorem Budget.weaken {M : Type → Type} [Monad M] [Inhabited (Budget M)]
+    {A : Type} {p : M A} {k l : Nat} : Budget.within p k → k ≤ l → Budget.within p l :=
+  (default : Budget M).weakenCost
+
+theorem Budget.ret {M : Type → Type} [Monad M] [Inhabited (Budget M)] {A : Type} (a : A) :
+    Budget.within (pure a : M A) 0 :=
+  (default : Budget M).returnCost a
+
+theorem Budget.seq {M : Type → Type} [Monad M] [Inhabited (Budget M)]
+    {A B : Type} {p : M A} {f : A → M B} {k l : Nat} :
+    Budget.within p k → (∀ a, Budget.within (f a) l) → Budget.within (p >>= f) (k+l) :=
+  (default : Budget M).bindCost
+
+structure UnitGateBudget (M : Type → Type) (W : Type) [Monad M]
+    [Inhabited (Ops M W)] [Inhabited (Budget M)] : Prop where
+  andCost (a b : W) : Budget.within (Ops.land a b : M W) 1
+  orCost (a b : W) : Budget.within (Ops.lor a b : M W) 1
+
+theorem UnitGateBudget.land {M : Type → Type} {W : Type} [Monad M]
+    [Inhabited (Ops M W)] [Inhabited (Budget M)] [Fact (UnitGateBudget M W)] (a b : W) :
+    Budget.within (Ops.land a b : M W) 1 :=
+  (Fact.out : UnitGateBudget M W).andCost a b
+
+theorem UnitGateBudget.lor {M : Type → Type} {W : Type} [Monad M]
+    [Inhabited (Ops M W)] [Inhabited (Budget M)] [Fact (UnitGateBudget M W)] (a b : W) :
+    Budget.within (Ops.lor a b : M W) 1 :=
+  (Fact.out : UnitGateBudget M W).orCost a b
 
 def sumFin : (n : Nat) → (Fin n → Nat) → Nat
   | 0, _ => 0
@@ -1533,7 +1570,7 @@ theorem sumList_const {A : Type} (xs : List A) (c : Nat) :
   | cons a as ih => simp [sumList, ih, Nat.succ_mul, Nat.add_comm]
 
 section BudgetLemmas
-variable {M : Type → Type} [Monad M] [Budget M]
+variable {M : Type → Type} [Monad M] [Inhabited (Budget M)]
 
 theorem then_ret {A B : Type} {p : M A} {k : Nat} (f : A → B)
     (h : Budget.within p k) : Budget.within (p >>= fun a => pure (f a)) k := by
@@ -1571,7 +1608,7 @@ theorem fold_uniform {A S : Type} (xs : List A) (f : S → A → M S)
 end BudgetLemmas
 
 section Gates
-variable {M : Type → Type} {W : Type} [Monad M] [Ops M W] [Budget M] [UnitGateBudget M W]
+variable {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] [Inhabited (Budget M)] [Fact (UnitGateBudget M W)]
 
 theorem land_cost (a b : W) : Budget.within (Ops.land a b : M W) 1 :=
   UnitGateBudget.land a b
@@ -1813,13 +1850,13 @@ namespace Refute2003.BundleBuild
 open Refute2003.Bundle
 open scoped BigOperators
 
-structure StageModel {S W : Type} [Ops (StateM S) W] (v : Sem S W) {q w : Nat}
+structure StageModel {S W : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W) {q w : Nat}
     (word : Fin q → Fin w → Bool) (layout : Layout (StateM S) W q w) where
   hash : Fin layout.hashes → Fin q → Fin layout.buckets
   check : HashCheck v word hash layout.checkCell
   mem : ∀ h c a, a ∈ layout.entries h c ↔ hash h a = c
 
-def StageModel.ofStatic {S W : Type} [Ops (StateM S) W] (v : Sem S W) {q w h b : Nat}
+def StageModel.ofStatic {S W : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W) {q w h b : Nat}
     (word : Fin q → Fin w → Bool) (hash : Fin h → Fin q → Fin b)
     (check : Fin h → Fin b → Word W w → StateM S W)
     (ok : HashCheck v word hash check) : StageModel v word (staticLayout hash check) where
@@ -1832,7 +1869,7 @@ def stages {L : Type} (layouts : Nat → L) : Nat → List L
   | e+1 => layouts (e+1) :: stages layouts e
 
 section Step
-variable {S W : Type} [Ops (StateM S) W] (v : Sem S W)
+variable {S W : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
 
 theorem step_correct {q r b w : Nat} {s : S} {sk : Sketch W r b w}
     {word : Fin q → Fin w → Bool} {hash : Fin r → Fin q → Fin b} {A : Finset (Fin q)}
@@ -1996,7 +2033,7 @@ namespace Refute2003.BundleBuild
 open Refute2003.Bundle
 
 section Emit
-variable {M : Type → Type} {W : Type} [Monad M] [Ops M W]
+variable {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)]
 
 def encodeRaw {α : Type} {r b w : Nat} (labels : List α)
     (word : α → Fin w → Bool) (hash : Fin r → α → Fin b) (Y : α → W) :
@@ -2021,7 +2058,7 @@ def detectGroup {α : Type} {q r b w ra ba wa : Nat} (labels : List α)
 end Emit
 
 section Semantics
-variable {S W : Type} [Ops (StateM S) W] (v : Sem S W)
+variable {S W : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
 
 theorem raw_or_correct {α : Type} {s : S} (labels : List α) (Y : α → W) (YP : α → Prop)
     (hY : ∀ a, v.rep s (Y a) (YP a)) :
@@ -2109,7 +2146,7 @@ theorem detectGroup_correct {α : Type} {q r b w ra ba wa : Nat} {s : S}
 end Semantics
 
 section Budgets
-variable {M : Type → Type} {W : Type} [Monad M] [Ops M W] [Budget M] [UnitGateBudget M W]
+variable {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] [Inhabited (Budget M)] [Fact (UnitGateBudget M W)]
 
 theorem encodeRaw_cost {α : Type} {r b w : Nat} (labels : List α)
     (word : α → Fin w → Bool) (hash : Fin r → α → Fin b) (Y : α → W) :
@@ -2851,7 +2888,7 @@ open BundleBuild
 noncomputable section
 
 section Emit
-variable {M : Type → Type} {α W : Type} [Monad M] [Ops M W]
+variable {M : Type → Type} {α W : Type} [Monad M] [Inhabited (Ops M W)]
 variable {n R G : ℕ}
 
 set_option maxHeartbeats 600000 in
@@ -2884,7 +2921,7 @@ def accept (scan : Fin n ≃ α) (h : Fin R → α → Fin G)
 end Emit
 
 section CoreSemantics
-variable {α S W : Type} [DecidableEq α] [Ops (StateM S) W] (v : Sem S W)
+variable {α S W : Type} [DecidableEq α] [Inhabited (Ops (StateM S) W)] (v : Sem S W)
 variable {n R G q T : ℕ}
 
 set_option maxHeartbeats 600000 in
@@ -3073,8 +3110,8 @@ theorem accept_promised (scan : Fin n ≃ α) (h : Fin R → α → Fin G)
 end CoreSemantics
 
 section Cost
-variable {M : Type → Type} {α W : Type} [Monad M] [Ops M W]
-variable [BundleBuild.Budget M] [UnitGateBudget M W]
+variable {M : Type → Type} {α W : Type} [Monad M] [Inhabited (Ops M W)]
+variable [Inhabited (BundleBuild.Budget M)] [Fact (UnitGateBudget M W)]
 variable {n R G : ℕ}
 
 set_option maxHeartbeats 600000 in
@@ -3716,10 +3753,12 @@ theorem emitCode_eval (op : AOOp) (a b : Signal) (S : Machine n) (x : Fin n → 
   change Ref.read r.prog x r.out = _
   rw [emit_correct, Signal.read_asRef, Signal.read_asRef]
 
-instance physicalOps (n : Nat) : BundleBuild.Ops (Code n) Signal where
-  const := .const
-  land := emitCode .and
-  lor := emitCode .or
+instance physicalOps (n : Nat) : Inhabited (BundleBuild.Ops (Code n) Signal) where
+  default := {
+    constant := .const
+    andGate := emitCode .and
+    orGate := emitCode .or
+  }
 
 theorem run_pure (a : A) (S : Machine n) : ((pure a : Code n A).run S) = (a,S) := rfl
 
@@ -3753,24 +3792,28 @@ namespace Refute2003
 def physicalWithin (a : Code n A) (k : Nat) : Prop :=
   ∀ S, S.Extends (a.run S).2 ∧ (a.run S).2.1 ≤ S.1+k
 
-instance physicalBudget (n : Nat) : BundleBuild.Budget (Code n) where
-  within := physicalWithin
-  weaken h hk S := ⟨(h S).1, (h S).2.trans (Nat.add_le_add_left hk _)⟩
-  ret _ S := ⟨Machine.Extends.refl S, Nat.le_refl _⟩
-  seq := by
-    intro A B p f k l h g S
-    change S.Extends ((p >>= f).run S).2 ∧ ((p >>= f).run S).2.1 ≤ S.1+(k+l)
-    rw [run_bind]
-    have h₁ := h S
-    have h₂ := g (p.run S).1 (p.run S).2
-    refine ⟨h₁.1.trans h₂.1, ?_⟩
-    have h₃ := h₁.2
-    have h₄ := h₂.2
-    omega
+instance physicalBudget (n : Nat) : Inhabited (BundleBuild.Budget (Code n)) where
+  default := {
+    withinCost := physicalWithin
+    weakenCost h hk S := ⟨(h S).1, (h S).2.trans (Nat.add_le_add_left hk _)⟩
+    returnCost _ S := ⟨Machine.Extends.refl S, Nat.le_refl _⟩
+    bindCost := by
+      intro A B p f k l h g S
+      change S.Extends ((p >>= f).run S).2 ∧ ((p >>= f).run S).2.1 ≤ S.1+(k+l)
+      rw [run_bind]
+      have h₁ := h S
+      have h₂ := g (p.run S).1 (p.run S).2
+      refine ⟨h₁.1.trans h₂.1, ?_⟩
+      have h₃ := h₁.2
+      have h₄ := h₂.2
+      omega
+  }
 
-instance physicalUnitBudget (n : Nat) : BundleBuild.UnitGateBudget (Code n) Signal where
-  land a b S := ⟨emitCode_append .and a b S, emitCode_bound .and a b S⟩
-  lor a b S := ⟨emitCode_append .or a b S, emitCode_bound .or a b S⟩
+instance physicalUnitBudget (n : Nat) : Fact (BundleBuild.UnitGateBudget (Code n) Signal) where
+  out := {
+    andCost a b S := ⟨emitCode_append .and a b S, emitCode_bound .and a b S⟩
+    orCost a b S := ⟨emitCode_append .or a b S, emitCode_bound .or a b S⟩
+  }
 
 theorem budget_append (a : Code n A) (k : Nat)
     (h : BundleBuild.Budget.within a k) (S : Machine n) : S.Extends (a.run S).2 :=
@@ -3883,26 +3926,26 @@ theorem geometry_hit {K : Type*} [Field K] (P L : Label K → Prop) :
     · exact Or.inr (Or.inr (Or.inr ⟨hl,Or.inl hp⟩))
 
 def verticalCode {K : Type} (number : K ≃ Fin q)
-    {M : Type → Type} {W : Type} [Monad M] [Ops M W] (px ly : Label K → W) : M W :=
+    {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] (px ly : Label K → W) : M W :=
   BundleBuild.anyFin q (fun i => do
     let ps ← BundleBuild.anyFin q (fun j => pure (px (.inl (number.symm i,number.symm j))))
     let hasP ← Ops.lor (px (.inr (.inr ()))) ps
     Ops.land (ly (.inr (.inl (number.symm i)))) hasP)
 
 def slopeInfinityCode {K : Type} (number : K ≃ Fin q)
-    {M : Type → Type} {W : Type} [Monad M] [Ops M W] (px ly : Label K → W) : M W :=
+    {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] (px ly : Label K → W) : M W :=
   BundleBuild.anyFin q (fun i => do
     let ls ← BundleBuild.anyFin q (fun j => pure (ly (.inl (number.symm i, number.symm j))))
     Ops.land (px (.inr (.inl (number.symm i)))) ls)
 
 def infinityCode {K : Type} (number : K ≃ Fin q)
-    {M : Type → Type} {W : Type} [Monad M] [Ops M W] (px ly : Label K → W) : M W := do
+    {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] (px ly : Label K → W) : M W := do
   let sl ← BundleBuild.anyFin q (fun i => pure (px (.inr (.inl (number.symm i)))))
   let hasP ← Ops.lor (px (.inr (.inr ()))) sl
   Ops.land (ly (.inr (.inr ()))) hasP
 
 def specialCode {K : Type} (number : K ≃ Fin q)
-    {M : Type → Type} {W : Type} [Monad M] [Ops M W] (px ly : Label K → W) : M W := do
+    {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] (px ly : Label K → W) : M W := do
   let a ← verticalCode number px ly
   let b ← slopeInfinityCode number px ly
   let c ← infinityCode number px ly
@@ -3912,7 +3955,7 @@ def specialCode {K : Type} (number : K ≃ Fin q)
 def specialCost (q : Nat) : Nat := q*(q+3) + q*(q+2) + (q+2) + 2
 
 section SpecialBudget
-variable {M : Type → Type} {W : Type} [Monad M] [Ops M W] [Budget M] [UnitGateBudget M W]
+variable {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] [Inhabited (Budget M)] [Fact (UnitGateBudget M W)]
 variable {K : Type} (number : K ≃ Fin q) (px ly : Label K → W)
 
 theorem vertical_budget :
@@ -3956,7 +3999,7 @@ theorem special_budget :
 end SpecialBudget
 
 section SpecialCorrect
-variable {S W : Type} [Ops (StateM S) W] (v : Sem S W)
+variable {S W : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
 variable {K : Type} (number : K ≃ Fin q)
 
 private theorem exists_number (P : K → Prop) : (∃ i, P (number.symm i)) ↔ ∃ p, P p := by
@@ -4462,7 +4505,7 @@ namespace BundleBuild
 open WordAlgebra
 
 section GenericWord
-variable {S W : Type} [Ops (StateM S) W] (v : Sem S W)
+variable {S W : Type} [Inhabited (Ops (StateM S) W)] (v : Sem S W)
 
 def DualRep (s : S) (a : Dual W) (r : Rail) : Prop :=
   ∀ z, v.rep s (selected a z) (r z)
@@ -4603,7 +4646,7 @@ theorem hornerBits_correct {s : S} (c : Fin w → Fin w → Fin w → Bool)
 end GenericWord
 
 section PolyColumn
-variable {S W : Type} [Ops (StateM S) W]
+variable {S W : Type} [Inhabited (Ops (StateM S) W)]
 variable {K : Type*} [Field K] [Algebra (ZMod 2) K]
 variable (basis : Module.Basis (Fin w) (ZMod 2) K)
 
@@ -4714,7 +4757,7 @@ noncomputable def renderPolyHash (v : Sem S W)
 end PolyColumn
 
 section WordCost
-variable {M : Type → Type} {W : Type} [Monad M] [Ops M W] [Budget M] [UnitGateBudget M W]
+variable {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] [Inhabited (Budget M)] [Fact (UnitGateBudget M W)]
 
 theorem column_do_cost (c : Fin w → Fin w → Fin w → Bool) (x : Fin w → Bool)
     (ab : Word W (w+w)) :
@@ -4726,14 +4769,14 @@ theorem column_do_cost (c : Fin w → Fin w → Fin w → Bool) (x : Fin w → B
 
 end WordCost
 section AffineHash
-variable {M : Type → Type} {W : Type} [Monad M] [Ops M W]
+variable {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)]
 
 def affineCheckBits (matrix : Fin o → Fin w → Bool) (offset : Fin o → Bool)
     (want : Fin o → Bool) (a : Word W w) : M W := do
   let b ← affineBits matrix offset a
   sameWord b want
 
-theorem affineCheckBits_cost [Budget M] [UnitGateBudget M W]
+theorem affineCheckBits_cost [Inhabited (Budget M)] [Fact (UnitGateBudget M W)]
     (matrix : Fin o → Fin w → Bool) (offset : Fin o → Bool)
     (want : Fin o → Bool) (a : Word W w) :
     Budget.within (affineCheckBits (M := M) matrix offset want a) (o*(w*6)+o) :=
@@ -4746,7 +4789,7 @@ def affineHash (buckets : (Fin o → Bool) ≃ Fin m) (matrix : Fin r → Fin o 
 end AffineHash
 
 section AffineHashCorrect
-variable {S W : Type} [Ops (StateM S) W]
+variable {S W : Type} [Inhabited (Ops (StateM S) W)]
 
 def renderAffineHash (v : Sem S W) (buckets : (Fin o → Bool) ≃ Fin m)
     (matrix : Fin r → Fin o → Fin w → Bool) (offset : Fin r → Fin o → Bool)
@@ -4780,7 +4823,7 @@ def renderAffineHash (v : Sem S W) (buckets : (Fin o → Bool) ≃ Fin m)
 end AffineHashCorrect
 
 section ArithmeticCost
-variable {S W : Type} [Ops (StateM S) W] [Budget (StateM S)] [UnitGateBudget (StateM S) W]
+variable {S W : Type} [Inhabited (Ops (StateM S) W)] [Inhabited (Budget (StateM S))] [Fact (UnitGateBudget (StateM S) W)]
 
 theorem columnBits_cost (c : Fin w → Fin w → Fin w → Bool) (x : Fin w → Bool)
     (ab : Word W (w+w)) :
@@ -4970,7 +5013,7 @@ theorem GroupCharge_scaled {q d T r b w ra ba wa e L cm own : Nat}
     _ = _ := by unfold D U; ring
 
 section Implement
-variable {M : Type → Type} {W : Type} [Monad M] [Ops M W] [Budget M] [UnitGateBudget M W]
+variable {M : Type → Type} {W : Type} [Monad M] [Inhabited (Ops M W)] [Inhabited (Budget M)] [Fact (UnitGateBudget M W)]
 
 theorem detectGroup_scaled {α : Type} {q r b w ra ba wa : Nat} (labels : List α)
     (word : α → Fin w → Bool) (hash : Fin r → α → Fin b) (Y : α → W)
@@ -5105,7 +5148,7 @@ structure DesignSound : Prop where
 end Data
 
 section Physical
-variable {S W : Type} [Ops (StateM S) W]
+variable {S W : Type} [Inhabited (Ops (StateM S) W)]
 variable {K : Type} [Field K] [Algebra (ZMod 2) K] {k : Nat} (D : Design K k)
 
 noncomputable def linearCheck {w : Nat} (mat : Fin (PH k) → Fin (pw k) → Fin w → Bool)
@@ -5186,7 +5229,7 @@ theorem group_correct (v : Sem S W) (data : DesignSound D) {s : S}
 end Physical
 
 section Cost
-variable {S W : Type} [Ops (StateM S) W] [Budget (StateM S)] [UnitGateBudget (StateM S) W]
+variable {S W : Type} [Inhabited (Ops (StateM S) W)] [Inhabited (Budget (StateM S))] [Fact (UnitGateBudget (StateM S) W)]
 variable {K : Type} [Field K] [Algebra (ZMod 2) K] {k : Nat} (D : Design K k)
 
 theorem arith_cost_bound (k : Nat) :
