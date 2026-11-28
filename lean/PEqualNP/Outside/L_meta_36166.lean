@@ -5047,11 +5047,1430 @@ lemma chk2 : r2.all (fun e => okE [] (pr rs3 e.1) e) = true := by decide +kernel
 lemma i2 : ∀ e ∈ r2, Imp [] e.1 e.2 := okAll (T := rs3) chk2 is3
 def rs2 : List (ℕ × ℕ) := r2 ++ rs3
 lemma is2 : ∀ e ∈ rs2, Imp [] e.1 e.2 := apI i2 is3
-def r1 : List (ℕ × ℕ) := [(1, 13), (2, 11), (4, 12), (8, 12), (16, 11), (32, 10), (64, 10), (128, 11)]
+def allInputsNeeded (nn : ℕ) (d : Bool) (l : ℕ) (v : List W) : ℕ → Bool :=
+  List.rec (motive := fun _ => ℕ → Bool) (fun _ => true)
+    (fun w ws rest bits =>
+      !Nat.beq (Nat.lor bits (covC nn d l ws)) l &&
+        rest (Nat.lor bits (spC nn d l w.s))) v
+
+lemma anySub_allInputs {nn : ℕ} {d : Bool} {l : ℕ} {v : List W} {bits : ℕ}
+    (needed : allInputsNeeded nn d l v bits = true) (test : List W → Bool) :
+    anySubC nn d l v bits test = test v := by
+  induction v generalizing bits test with
+  | nil => rfl
+  | cons w ws ih =>
+    let included := Nat.lor bits (spC nn d l w.s)
+    let skip := Nat.beq (Nat.lor bits (covC nn d l ws)) l
+    change (!skip && allInputsNeeded nn d l ws included) = true at needed
+    simp only [Bool.and_eq_true] at needed
+    have mustKeep : skip = false := Bool.eq_false_iff.mpr (fun h => by rw [h] at needed; simp at needed)
+    change Bool.rec (motive := fun _ => Bool)
+      (Bool.rec (motive := fun _ => Bool) false (anySubC nn d l ws bits test) skip)
+      true (st included (fun c => anySubC nn d l ws c (fun r => test (w :: r)))) = _
+    rw [st_eq, ih needed.2, mustKeep]
+    cases test (w :: ws) <;> rfl
+
+
+
+
+def e8Q : List (ℕ × ℕ) := (pr rs2 1).filter (fun row => row.2 ≥ 4)
+
+def e8Words : List W := [
+  ⟨0x7fb76cf800000000000000000000000000000000000000000000000000000000000460023004c00042003001800000000200000080002000000000000800004000000000020010000000000000000000007fb000f9f80003f000041f80003f000043f0000400000080200800020080403e00157faabfd6ff4463023fb1fd8000000000000000000000000000000000000000000000000000000000103600430102c1, 0x20000000842108421084000000000000000000000008421084000000000000000000040000000, 0x0, 0x20000000842108421084000000000000000000000008421084000000000000000000040000000, 3⟩,
+  ⟨0x7fb76c0000000000000000000000000003f7bb60000000f03c0f030000000000000440822046820463002081040000002208110882802080000801088828004100004630021010800000000000000000005582400001090000c20100091000118020853300000000f03c0f0300000000004804000200060004630000000000008020001118fec00000001801188fec000000004630000000000001e1379000010980, 0x21084210802000001080200040008401000210042100001000000800008001000210000000400, 0x0, 0x21084210802000001080200040008401000210042100001000000800008001000210000000400, 3⟩,
+  ⟨0x1fbddb3f7f3678000000000000000000000000000000000000000000000111c000c00300000000c00600004a609c0001070041c0000000000060000300000000001800c000000000000000000006007008183dc0307f007903c0020780002078002000000401004020100400020e0157fa00000000000000000000006b62bfd1118fec63fb000000000000000000000000000000000000136258043210b81, 0x1084000840000000000210842108420000000000008000000210842000000000000002000000, 0x0, 0x1084000840000000000210842108420000000000008000000210842000000000000002000000, 3⟩,
+  ⟨0x1fbddb00000001fbddb3f7bd670000000000000000000000000000000001013088b802c0000000b00580006b4013000004c0013000013401005c0402e0000000001600b000000000000000000001800604143c1808403000c21d81843d0710038000000002008020100800020100c10000abfd0000000000000000006b60000000000000000001b41188fec607f60000000000000000000f5100103210b00, 0x21080210002108000000210800000001084210800000400000200000108420000000000100000, 0x0, 0x21080210002108000000210800000001084210800000400000200000108420000000000100000, 3⟩,
+  ⟨0x3f7f36000000000000000000000000000f0000f0003c0007000000108000400100401020400210000020880101820060800000001008200201040004010208004100000000000000000000090240808409216a12000804901005210100920800000f0000f0003c0007002048100000000000403020001fd8000060800101800060000000041008000607f6000403020001fd8000117041142000880, 0x20080210000008020084000800100420004010802100000004000002000020004010800000001, 0x0, 0x20080210000008020084000800100420004010802100000004000002000020004010800000001, 3⟩,
+  ⟨0x1fbddb00000003f7bb678000000000000000000000000000028802420b000000028014000200202c00000a000280001a40000120000900000420005802c000000000000000000006040c202210304300620a31c304220600c62367800000100401000040201008818000080006ff4000000000000006002bfd000000000000001b4000000000000000463023fb1fd80020f5329100200b01, 0x4200000000420000000042100001084000042000020000010000100001084000000008000, 0x0, 0x4200000000420000000042100001084000042000020000010000100001084000000008000, 3⟩,
+  ⟨0x3f7bd600000000000000f03c000003c0e000000000010081000404200201200800001000101100040201200001011800806004000042002022010000000000000000000001210810108420203040810482124b4400208241000000f03c000003c0e00004210000008000000460023fb0000000300000110000063fb000030118000060000000460023fb00000021933011022009c1, 0x1004010040100401004010002008020080200840100000080000040000400080200800000020, 0x0, 0x1004010040100401004010002008020080200840100000080000040000400080200800000020, 3⟩]
+
+def e8M : ℕ := 0x7fb76cf9fbddb3f7f3679fbddb3f7bd673f7bb67800000f03c0f0303c0e0703eed957faabfd6ff4463023fb1fd8006b62bfd1118fec63fb0001b41188fec607f6000463023fb1fd80000000000000000007fb76cf9fbddb3f7f3679fbddb3f7bd673f7bb67800000f03c0f0303c0e0703eed957faabfd6ff4463023fb1fd8006b62bfd1118fec63fb0001b41188fec607f6000463023fb1fd80021f7379143210bc1
+
+def e8G : ℕ := 0x210842108421084210842108421084210842108421084210842108421084210842108421084210
+
+def e8B : ℕ := 0x318c6318c62f8be318c62f8c5ef8bdf17c5ef5bdef7bdaf5ad6f6ad6b6a5694b5ab4b4e739ca53
+
+def e8L : ℕ := 0x7fb76cf9fbddb3f7f3679fbddb3f7bd673f7bb67800000f03c0f0303c0e0703eed957faabfd6ff4463023fb1fd8006b62bfd1118fec63fb0001b41188fec607f6000463023fb1fd8000000000000000000
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma chk1 : r1.all (fun e => okE [] (pr rs2 e.1) e) = true := by decide +kernel
-lemma i1 : ∀ e ∈ r1, Imp [] e.1 e.2 := okAll (T := rs2) chk1 is2
+lemma e8Words_eq : avl (PZ e8Q) (mz 1) (rawL []) = e8Words := Eq.refl e8Words
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8M_eq : mz 1 = e8M := Eq.refl e8M
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8G_eq : pL (e8Q.map fun _ => 16) = e8G := Eq.refl e8G
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8B_eq : pL (e8Q.map fun e => 16 + (12 - e.2)) = e8B := Eq.refl e8B
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8L_eq : lz 1 = e8L := Eq.refl e8L
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma allE8Inputs (d : Bool) :
+    allInputsNeeded I.NN d e8L e8Words 0 = true := by
+  cases d <;> decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma searchInputs_e8 (t H ph : ℕ)
+    (test : ℕ → ℕ → ℕ → ℕ → ℕ → ℕ → ℕ → ℕ → ℕ → List W → Bool) :
+    searchInputs [] e8Q 1 12 t H ph test =
+      guardStart t H ph (test I.NN I.AA I.HX I.HY e8L e8M e8G e8B 0) e8Words := by
+  simp only [searchInputs, frc_eq, st_eq, e8Words_eq, e8M_eq, e8G_eq, e8B_eq, e8L_eq]
+  change anySubC I.NN (pos t) e8L e8Words 0 _ = _
+  rw [anySub_allInputs (allE8Inputs (pos t))]
+  rfl
+
+namespace CofactorZero
+abbrev rootPreparedMask : ℕ := e8M
+abbrev rootPreparedSlots : ℕ := e8G
+abbrev rootPreparedBudget : ℕ := e8B
+abbrev rootPreparedWords : List W := e8Words
+
+
+
+
+lemma pair_distribute {f : W → W → ℕ → ℕ → ℕ → ℕ → ℕ → Bool}
+    {g : Fin 8 → W → W → ℕ → ℕ → ℕ → ℕ → ℕ → Bool}
+    (h : ∀ a c da dc s x y, f a c da dc s x y = true → ∃ b, g b a c da dc s x y = true)
+    (a c : XW) : pair f a c = true → ∃ b, pair (g b) a c = true := by
+  obtain ⟨w,s,q,u⟩ := a
+  obtain ⟨w',s',q',u'⟩ := c
+  simp only [pair,bR]
+  cases hb : f w w' (Nat.xor (Nat.land u s') u) (Nat.xor (Nat.land u' s) u')
+      (Nat.land s s') (Nat.lor w.a w'.a) (Nat.land w.b w'.b)
+  · simp only [hb,Bool.cond_false]
+    intro hor
+    obtain ⟨b,hb⟩ := h _ _ _ _ _ _ _ hor
+    refine ⟨b, ?_⟩
+    rw [hb]
+    simp
+  · intro _
+    obtain ⟨b,hb⟩ := h _ _ _ _ _ _ _ hb
+    exact ⟨b,by rw [hb]; rfl⟩
+
+
+
+noncomputable def initialBinary (H : ℕ) (kind : Bool) (f : ℕ → List W → Bool) : Bool :=
+  nodePicked I.NN f false e8L rootPreparedMask rootPreparedSlots 12 7
+    (Nat.sub rootPreparedBudget (sumc rootPreparedWords)) rootPreparedWords H kind
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rootStart_eq (H : ℕ) (kind : Bool) :
+    startPairPicked I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots rootPreparedBudget
+      12 0 0 H 0 rootPreparedWords kind =
+    initialBinary H kind (look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 12 11 0) := by
+  have haveRequired : hasP 0 rootPreparedWords = true := by decide +kernel
+  have len : rootPreparedWords.length = 7 := rfl
+  have budget : Nat.beq
+      (Nat.land (Nat.sub rootPreparedBudget (sumc rootPreparedWords)) rootPreparedSlots) rootPreparedSlots = true := by decide +kernel
+  simp only [startPairPicked, child, st_eq, topPairPicked, bR, haveRequired, len, budget,
+    show Nat.ble 7 (Nat.sub 13 0) = true from rfl, show Nat.ble 7 1 = false from rfl,
+    Bool.cond_true, Bool.cond_false]
+  change (bif initialBinary H kind (look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots
+      12 12 11 0) then true else false) = _
+  cases initialBinary H kind (look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots
+      12 12 11 0) <;> rfl
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma initialBinary_of_check (H : ℕ) (kind : Bool)
+    (h : chkPairPicked [] e8Q 1 12 0 H 0 kind = true) :
+    initialBinary H kind
+      (look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 12 11 0) = true := by
+  rw [← chkPairFast_eq, chkPairFast, searchInputs_e8] at h
+  simp only [guardStart, rootStart_eq, bR] at h
+  cases hp : relevantStart 0 H 0 rootPreparedWords
+  · simp [hp] at h
+  · simpa [hp] using h
+
+def wordEquals (a b : W) : Bool :=
+  (a.s == b.s) && (a.a == b.a) && (a.b == b.b) && (a.c == b.c) && (a.r == b.r)
+
+lemma wordEquals_spec {a b : W} (h : wordEquals a b = true) : a = b := by
+  cases a
+  cases b
+  simp [wordEquals, Bool.and_eq_true] at h ⊢
+  rcases h with ⟨⟨⟨⟨hs, ha⟩, hb⟩, hc⟩, hr⟩
+  exact ⟨hs, ha, hb, hc, hr⟩
+
+def frontierMissing (states : List (ℕ × List W)) (z : ℕ) (v : List W) : Bool :=
+  !(states.any fun state => (z == state.1) && List.isEqv v state.2 wordEquals)
+
+noncomputable def rootWithGate (i j mask : ℕ) (kind : Bool) : List W :=
+  let zero : W := ⟨0, 0, 0, 0, 3⟩
+  let a := rootPreparedWords.getD i zero
+  let b := rootPreparedWords.getD j zero
+  let keep := (rootPreparedWords.zipIdx.filter fun e => mask.testBit e.2).map Prod.fst
+  addS (opW kind a b) keep
+
+lemma frontierMissing_false {states : List (ℕ × List W)} {z : ℕ} {v : List W}
+    (h : frontierMissing states z v = false) : (z, v) ∈ states := by
+  simp only [frontierMissing, Bool.not_eq_false', List.any_eq_true, Bool.and_eq_true, beq_iff_eq] at h
+  obtain ⟨⟨j, w⟩, membership, rfl, he⟩ := h
+  have hw : v = w := by
+    clear membership
+    induction v generalizing w with
+    | nil => cases w <;> simp_all [List.isEqv]
+    | cons a v ih =>
+      cases w with
+      | nil => simp [List.isEqv] at he
+      | cons b w =>
+        simp only [List.isEqv, Bool.and_eq_true] at he
+        rw [wordEquals_spec he.1, ih w he.2]
+  rwa [hw]
+
+lemma initialBinary_from_frontier (H : ℕ) (kind : Bool) (states : List (ℕ × List W))
+    (complete : initialBinary H kind (frontierMissing states) = false)
+    (checked : ∀ state ∈ states,
+      look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 12 11 0 state.1 state.2 = false) :
+    chkPairPicked [] e8Q 1 12 0 H 0 kind = false := by
+  refine Bool.eq_false_iff.mpr fun h => ?_
+  have original := initialBinary_of_check H kind h
+  unfold initialBinary at original complete
+  obtain ⟨_, hit⟩ := nodePicked_distribute
+    (branches := fun _ => frontierMissing states)
+    I.NN false e8L rootPreparedMask rootPreparedSlots 12 7
+    (Nat.sub rootPreparedBudget (sumc rootPreparedWords)) rootPreparedWords H kind
+    (fun z v hit => by
+      refine ⟨0, ?_⟩
+      cases hm : frontierMissing states z v
+      · exact Bool.noConfusion ((checked (z,v) (frontierMissing_false hm)).symm.trans hit)
+      · exact hm)
+    original
+  exact Bool.noConfusion (complete.symm.trans hit)
+
+abbrev SearchState := ℕ × List W
+
+noncomputable def pureAt (e : ℕ) (state : SearchState) (f : ℕ → List W → Bool) : Bool :=
+  nodeC I.NN f false e8L rootPreparedMask rootPreparedSlots e state.2.length state.1 state.2 pairsS
+
+noncomputable def pureSecond (state : SearchState) (f : ℕ → List W → Bool) : Bool :=
+  pureAt 11 state f
+
+noncomputable def mixedSecond (state : SearchState) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    mvC I.NN I.AA I.HX I.HY
+      (lookC I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12)
+      e8L rootPreparedMask rootPreparedSlots 11 0 z v 0))
+
+noncomputable def afterSecond (state : SearchState) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 11 10 0 z v))
+
+lemma pureAt_of_covered (e : ℕ) (state : SearchState) (remaining : SearchState → Bool)
+    (miss : ℕ → List W → Bool)
+    (complete : pureAt e state miss = false)
+    (covered : ∀ z v, miss z v = false → remaining (z,v) = false) :
+    pureAt e state (fun z v => remaining (z,v)) = false := by
+  refine Bool.eq_false_iff.mpr fun found => ?_
+  simp only [pureAt, nodeC_as_mode, pairsS] at found complete
+  have hp := pairs_distribute _ _ (fun a c =>
+    pair_distribute (fun left right da dc signal x y =>
+      mode_distribute rootPreparedMask rootPreparedSlots e state.2.length state.1 state.2
+      left right da dc signal x y
+      (g := fun _ => miss)
+      (fun z v hit => by
+        refine ⟨0, ?_⟩
+        cases missed : miss z v
+        · exact Bool.noConfusion ((covered z v missed).symm.trans hit)
+        · exact missed))
+    a c) _ found
+  obtain ⟨_, hh⟩ := hp
+  exact Bool.noConfusion (complete.symm.trans hh)
+
+lemma pureAt_from_frontier (e : ℕ) (state : SearchState) (states : List SearchState)
+    (remaining : SearchState → Bool)
+    (complete : pureAt e state (frontierMissing states) = false)
+    (checked : ∀ x ∈ states, remaining x = false) :
+    pureAt e state (fun z v => remaining (z,v)) = false :=
+  pureAt_of_covered e state remaining (frontierMissing states) complete
+    (fun z v h => checked (z,v) (frontierMissing_false h))
+
+lemma pureSecond_from_frontier (state : SearchState) (states : List SearchState)
+    (complete : pureSecond state (frontierMissing states) = false)
+    (checked : ∀ x ∈ states, afterSecond x = false) :
+    pureSecond state (fun z v => afterSecond (z,v)) = false :=
+  pureAt_from_frontier 11 state states afterSecond complete checked
+
+lemma afterFirst_false (state : SearchState)
+    (two : 1 < state.2.length) (small : state.2.length < 11)
+    (mixed : mixedSecond state = false)
+    (pure : pureSecond state (fun z v => afterSecond (z,v)) = false) :
+    look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 12 11 0 state.1 state.2 = false := by
+  have lengthOkay : Nat.ble state.2.length 1 = false := by
+    cases h : Nat.ble state.2.length 1
+    · rfl
+    · exact absurd (Nat.le_of_ble_eq_true h) (Nat.not_le_of_gt two)
+  have choose0 (F : ℕ → Bool) : tstC I.NN I.AA I.HX I.HY false e8L 12 state.2 F = F 0 := by
+    have h0 : Nat.beq state.2.length 12 = false := beq_f (by omega)
+    have h1 : Nat.beq state.2.length.succ 12 = false := beq_f (by omega)
+    simp only [tstC, bR, h0, h1, Bool.cond_false]
+  rw [show (12 : ℕ) = Nat.succ 11 from rfl, look1C_step, lengthOkay, Bool.cond_false]
+  change cvC I.NN (pos 0) e8L state.2 (tstC I.NN I.AA I.HX I.HY false e8L 12 state.2 _) = _
+  rw [choose0]
+  simp only [afterSecond, frc_eq, st_eq] at pure
+  simp only [mixedSecond, frc_eq, st_eq] at mixed
+  change cvC I.NN (pos 0) e8L state.2 (bif pureSecond state
+      (look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 11 10 0)
+    then true else _) = _
+  rw [pure, mixed]
+  simp [cvC, bR]
+
+noncomputable def secondTransition (state : SearchState) (i j kept : ℕ) (kind : Bool) : SearchState :=
+  let zero : W := ⟨0, 0, 0, 0, 3⟩
+  let a := state.2.getD i zero
+  let b := state.2.getD j zero
+  let word := opW kind a b
+  let keptWords := (state.2.zipIdx.filter fun e => kept.testBit e.2).map Prod.fst
+  let budget := Nat.sub (Nat.add state.1 (Nat.land a.c b.c)) word.c
+  let usedA := if kept.testBit i then a.c else 0
+  let usedB := if kept.testBit j then b.c else 0
+  (Nat.sub (Nat.sub budget usedA) usedB, addS word keptWords)
+
+noncomputable def firstStates : List SearchState := [
+  ⟨0x2539ce739d2549d2939d275ace959ceb3ad271a4e73a4e9194ab494e748ce51a5251a465294232, rootWithGate 0 1 127 true⟩,
+  ⟨0x274a5294a52749d294a5295ad295a52b4ad292a5294a4e9294ab49ce7494e52a5272a465294632, rootWithGate 0 1 125 true⟩,
+  ⟨0x25294a949ce5394e739ce539ca5394a74ad292a52949ca718c6728c63494e52a5272a421294632, rootWithGate 0 2 127 false⟩,
+  ⟨0x2739ce949ce749d294a5274a4e749ce94ad292a52949ce9294a9394a5494e52a5272a463294632, rootWithGate 0 2 127 true⟩,
+  ⟨0x252952529ce5394e739ce539d295a52b29ca50952949ca718c6749ce7284612a5272a425094632, rootWithGate 0 3 127 false⟩,
+  ⟨0x2539d273a525395294a5274a5295a52b3a4e719d294a4a9294a949ce738ca32a5272a465194632, rootWithGate 0 3 127 true⟩,
+  ⟨0x254952529ce5394e739ce959d293a4a74aca90952529ca718c6b49ce3494e12a4a709425294630, rootWithGate 0 4 127 false⟩,
+  ⟨0x2549d273a5274952749ce95a5294a4e94ace919d273a4e92946b49ce5494e32a4e719c65294631, rootWithGate 0 4 127 true⟩,
+  ⟨0x254a4a549ce5394e739ce95aca53a52b29ca92a4a549ca718c6b29ce7294e5094a72a425284632, rootWithGate 0 5 127 false⟩,
+  ⟨0x274a4e74a52749ce74a5295ace74a52b3a4e92a4e74a4e7294ab39ce7394e519ce72a46528c632, rootWithGate 0 5 127 true⟩,
+  ⟨0x273a4e93a4e739ce93a4e94ad2759d294a52729ce93a4e928cab49ca7494a529d2529c65294612, rootWithGate 0 6 127 true⟩,
+  ⟨0x27294a739d275a56b4a5654a4a7494a93ad271a4e73a52b29ce938ca548ce51a5251a4a3294232, rootWithGate 1 2 127 true⟩,
+  ⟨0x25294e52a56549d6b4a5654a4e959ceb2a4e509ce73aceb29ce9494e7384a31a5251a4a5194232, rootWithGate 1 3 127 true⟩,
+  ⟨0x25394e52a56759d6949d275a4e949ca93ace709ce52ad2b29cab494e548ce31a4e509ca5294231, rootWithGate 1 4 127 true⟩,
+  ⟨0x2739ca53a5675a5294a5675aca749ceb2a4e71a4a53ad2929ceb394e738ce509ce51a4a528c232, rootWithGate 1 5 127 true⟩,
+  ⟨0x2729ca72a5274a52b3a5274ace7594e93a52519ca72ad2b294eb494a748ca519d2319ca5294212, rootWithGate 1 6 127 true⟩,
+  ⟨0x25294a529ce53956b5ad6539ca5394a729ca50952949cab39ce728c63284612a5272a4a1094632, rootWithGate 2 3 127 false⟩,
+  ⟨0x27294e73a52749d6b5ad6539ce749ce93a4e719d294a4eb39ce7394a538ca32a5272a4a3194632, rootWithGate 2 3 127 true⟩,
+  ⟨0x25294a529ce95956759ce539ca5394a74aca90952529d2b39c6728c63494e12a4a7094a1294630, rootWithGate 2 4 127 false⟩,
+  ⟨0x27394e73a52959d695a52749ce739ca74ace919d273a52b39ca9394a3494e32a4e719ca3294631, rootWithGate 2 4 127 true⟩,
+  ⟨0x29294a549ce95a4e75ad6539ca5394a729ca92a4a549d2739ce728c63294e5094a72a4a1284632, rootWithGate 2 5 127 false⟩,
+  ⟨0x2939ca74a5295a5295ad674a4a539ce93a4e92a4e74a52939ce9294a5394e519ce72a4a328c632, rootWithGate 2 5 127 true⟩,
+  ⟨0x2929ca93a4e94a52b4ad273a4e5494e74a52729ce93a52b394e939465494a529d2529ca3294612, rootWithGate 2 6 127 true⟩,
+  ⟨0x25295252ad653956759ce539d293a4a729ca5095252acab39c6749ce3284612a4a7094a5094630, rootWithGate 3 4 127 false⟩,
+  ⟨0x25395252ad67495695a52749d294a4e93a4a7095273aceb39ca949ce538ca12a4e719ca5194631, rootWithGate 3 4 127 true⟩,
+  ⟨0x25294a52ad65394e75ad6539ca53a52b29ca5094a54aca739ce729ce728461094a72a4a5084632, rootWithGate 3 5 127 false⟩,
+  ⟨0x2739ce53ad6749d295ad674a4e74a52b29ca719ce74ace939ce939ce728ca319ce72a4a518c632, rootWithGate 3 5 127 true⟩,
+  ⟨0x2729ce72ad2739d2b4ad273a52759d2939ce5194e93aceb394e949ca738c6329d2529ca5194612, rootWithGate 3 6 127 true⟩,
+  ⟨0x25494a52ad69594e759ce959ca53a4a729ca9094a52ad2739c6b29ce3294e1094a7094a5284630, rootWithGate 4 5 127 false⟩,
+  ⟨0x2749ce53ad6959d275a5295a4e73a4e93a4a919ce53ad2939cab39ce5394e319ca719ca528c631, rootWithGate 4 5 127 true⟩,
+  ⟨0x2739ce72ad2949d294a4e94a52749ce74a4e7194e72ad2b394ab49ca5494a329ce5194a5294611, rootWithGate 4 6 127 true⟩,
+  ⟨0x293a4a73ad294a4e94ad294ace549d2939ce729ca73ad29394eb39ca7394a5194e529ca528c612, rootWithGate 5 6 127 true⟩]
+
+def firstCount : ℕ := 32
+
+noncomputable def firstAt (i : ℕ) : SearchState := firstStates.getD i (0, [])
+
+noncomputable def decodeStep (width : ℕ) (parent : ℕ → SearchState) (entry : ℕ) : SearchState :=
+  let before := parent (entry % 2 ^ width)
+  let left := (entry >>> width) % 16
+  let right := (entry >>> (width + 4)) % 16
+  let dropLeft := if entry.testBit (width + 8) then 2 ^ left else 0
+  let dropRight := if entry.testBit (width + 9) then 2 ^ right else 0
+  let kept := 2 ^ before.2.length - 1 - dropLeft - dropRight
+  secondTransition before left right kept (entry.testBit (width + 10))
+
+
+def secondCount : ℕ := 281
+
+def secondCodes : List ℕ := [0xac61d610e29035080a8204746a32ad1d558ec9c433a3199190b886a4642a3a131d858a454721e3a810c898c41c6302218614c90c63c5212389310c288644656a310d1949, 0xcab464463aa718d38a854741e3a8b0c418864c631632070c878a41c5302388f184388204651a399719470860e756eb2234c41ca668545632859d4a08655751e320398c9, 0x8a44c621e328110c78a62c540f3b2d5d95ae6ae743e288718cf8e674762eb90014818e68c764a290d19148e6185306b11b1908aa688521232050c428ecee531ea9871081, 0xa8553202988119168e8ac7646299f1ccd8ea5c632e3195108a8e64c72163b071d008c2085308318b1c40ccad5646221111d5d8caae652421935947ac23c5406b22f1909, 0x8c68c532e3b1308418e82c532a398f1d438642c630e210710c08e22c31002a0315028ca9a544caa2315098c83c6516baa790cca865d2106308f1842ce855741631821081, 0x8c64c4226310b19008a20c431629879ccfae45c6102208718d40c656767ababb1d90cc8746320321518c28ecd64316a1870c818ca7c753a3b1b58800a81c545a3a271d51, 0x8c40c7356219f1ccc8e85c322a39071cc00a650320631095953ac69c322232b71d5a8ecc4510b321359058a60d5200320615098a68c6456299d18cd8ca5c652a3a931d87, 0x8ec04432a398b1d0306444320e32891c438a614410b2a0f5505aa22c43062a2b19138ca8c751e2082194a8c82d7446299318c78ca1d72382a2d18458a206732ab9875c43, 0x1943ae8d4531f3a9f5d4dae468645a32af98ceac45c6222288b1d958c87c743a3b199d8aaec4d712632831d118e69c432e31151c89]
+
+noncomputable def secondAt (i : ℕ) : SearchState :=
+  let block := secondCodes.getD (i / 32) 0
+  decodeStep 6 firstAt ((block >>> (17 * (i % 32))) % 131072)
+
+def secondBuckets : List ℕ := [0x80080000080040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, 0x801c20060801400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020040000000000800c0000, 0x1805c00000000060140000000000804c000018040000000000000000000600d000000000180280000000000000000000000000000000000002009000002008000000000, 0x809c000008098000000000000000000000000000000000000000000000202500000000000000000000000000020084000000000c01b00000000000000000000000201a000000000, 0x202c000000000000000000000000000080ac0000000000000080a80000000002029080a00000000000000, 0x202e000000000000000000000000000000000000000000000000000000000000000000000000080b40000000000000000000000000000000000000000, 0x6035000000000000000000180c80000000000000000002031000000000100bc0000000000000000000000000000000, 0x204300000000018100203f00000000000000000000000000000000203e00000203d000000000080f00000000000000000006039000000000000002038000000000, 0x204a000000000000000000000000000000000000000000000000000000101200000000000000000000000000000000000002047000002046081140000000002044, 0x813c000008138000000000000008134000000000204c0000000000000000000000000000000000000000000000000000000000000000000000000000000000812c0000000000000, 0x81546052081440000000000000000000000081400000, 0x8180000000000000000000605d000000000000000000000000000000000000181680000201580000000000000, 0x2069081a00000000002067281880000000002061000000000000000000000000000, 0x206e000000000000000000000000000081b4000000000000000000000000000206c101a80000000000000000000000, 0x8210000018204000000000000008200000000000207f101f40000000000000000000000181e80000000000000000006077000000000081d8000000000000000000c070081bc0000, 0x20890000000001021c2086000000000000000000000000000000002085000000000000000000000000000000000000, 0x208f00000000000000000000000000010234608a000000000000000000, 0x2093000000000000000000000000000000002092000000000000000000000000000000000000000000000000000000000000000000002091000000000082400000, 0x827c000000000000000000209e00000000000000000000000209d0000000000827000000000000000000000000826c0000000000000000006098000000000202500000, 0x20ad082b000000000000000000000000000020ab000000000182a000001829400000000000000829020a30000000000000060a0, 0x20b30000000000000000000000000000000060b0000000000102b80000, 0x82d400000000000000000000000000000000000000000000000000000000000000000000000000000000020b4000000000000000000000000000000000000, 0x82ec0000000000000000000000000000000082e800000000000000000020b90000040b70000000000000000000000000000000000000000000000000020b6000000000000000000, 0x1833c00000833800001832c00000000000000000020ca0832420c80000000000000000000000020c70831800000000000000000060c30000000000000000001830000000000080bc, 0x20d50000000000000000000000000000000000000000040d30000000000000000000000000000000000000000000000000000000000000000000000000000020d2, 0x80db0000000000000000000000000000000000000000000000000000001836000000000000000000000000000000000000000000000020d70000000000000020d6, 0x839400000000000000000020e40000000000000000000838c00000000000000000000000000000000000000000000080df000000000000000000000000000000000000000000000, 0x60ef0000000000000000000000000000000000000000020ee0000000000000020ed083b00000000000000000000000000000000083ac20ea0000000000000060e70000020e6, 0x83dc00000000000000000020f60000080f2000000000000000000000000000000000000000000000000000000, 0x183fc00000000000000000000000000000000000060fc083ec00000000000000000000000000020fa0000020f9000000000083e00000000000000000000000000000000000000000, 0x8438000000000210d2042481050000000000000000000000000000000021040000000000000000000840c0000000002102000000000000000000000000000000000000000000000, 0x846000000000000000000000000000021170000000000845800001844c211208444410f000000000000000000000000000000000000000000000000000000000000000]
+
+def thirdCount : ℕ := 1277
+
+def thirdCodes : List ℕ := [0xb0eb6b06b6b04b6ca897ca895aa8fa8867e8867dd0893ca893d0af8aa8f8b0ab5b08b5b04b58866f8e6388e89ca86928e8fe90837908368ea4b90a9690e098c8da908348c8d99083390cfa90832aca63, 0xb08b98a6e08e640d0e75d0b01ceb01d0e74d0e73b0ebfb08bfd0b00ceb00b0ebe8c70688506aea72b0abdb06bd8ec1f8ec1e8ec1db0abc8c8518e8a48ec1c8ec1bd0afeb0aba8e8a98e8a8d0e6cae66c, 0xae8798ed10b0cc58a6e6d0e78b0ec4b0cc4b08c48ec278c7138e649d0e77b0cc38cab78eb0f8ec26b0cc7b0ac7b08c7f0e05cec6faecbbae4bb8a8858c8e48e90d8ca308ea558ecb5d089a8e842b0cb9, 0xaeacdce906cc90690e2cae8cb8ca28f0c0ff0c0ecea51aeaca0eae20c8e10c8e00c8dfcec7faecc8aeac80a9068ca2bee80bcc6a4ac67dac47dd0e7cb0ec6b0ac68c8578ec29864868ecb8d0c54aec79, 0x8ea6c90ab690e2f8cad38a89390ab54a8d38c8f890855886b58a892cec60aea8caec8b8c8638cacc8cacbec61eaa486aec858cabbf0e18cec89aecd3aead3eea16ac887cc90fa870fae8d2f0a1290c00, 0x90c0a90e32d0c6cac66cb0ce3b06e3ce8b6a86b6ae892ae692ae4920c6ed8c8fe9085c9085b8ca4b90ab990c098ea758ea7390abf90e3790e3690e35ca8b58869ccca638e8058a6058e693906e490e30, 0x8c87d90ac690e3e0eaf8ce6b7ca807aa86d0c6f388650d0a05cea05d0e93aea93b0ee4b0ae4b04e48c86f8e8bb8ec388c9018e80f8ecda8c9009085f90c0c8e80e9085e90e348ecd990c0b90e338ecd8, 0xb0ce8b08e88ec428e663d0e98b0ce78cae18ea1f8ec418cae08ea1e8cadf8ea1d8ec40ce8beca8becea0caa80cce8bdca8bdaea97ae697cea0baa80bae8958c61e8841eaea94886a48c61c8c87e8c61b, 0xa81f0a81e0a81d8ea858ece4f0c31cea6f0866faeaedee830cc6bbac69cac49caea9f8e8d2d0a128eacdb0aeb8e8cb8ece2d0c75d0e9aaec9aae89acec738ec20b0ee9b0ce98a706d0e99aec99b0ee8, 0xaeaa2d0c7bb0ef18a857aeca1b0cf0b0af08e8d3d0ea0b0cef8caea8ea298ec47eea37ac8a9cc81ea861eac8a88a4288a686ce8c58c827aec9eae89e8a70fec833ca6caaa67daa47d0ca204cae92ca37, 0x8e8308a6308e6b58a8b68e82f8ea92d08dad08d9b08fab06fa864e08e67e8e67d0e90d8caf7cecb18ec4da8486cea84aeaf6ae4f6f0c3acea82aeaf3ae8f3cea818c8288ece98ece8ae8f7cec7cd0ea2, 0x8ca7390ae990c378ea9990ae890e5c8ecfd90c3690e5b8ecfc90c3590e5a8e8378ea96ce6e08c4868c80c8e8348ea9390ae48c80b8e8338ecfa8e8328c8058e831908858ecf890c3090e558a8b5886e4, 0xcea37aeaba8c8a98c8a8d0a31cca31d0c93aca93b0d0db0b0db050d8a86f8e8ed8ea38ce8e4ca8e4cea30aa830aeab5ae8b5ae4b5886bb8c6388c89ccc8e3a86e3ac892ac692ac4928ca758ea9a8ecfe, 0x8cb068ec648ec638ec62886f890892aecc7aeac7ae8c7d0c9ab0d168ea418ea40ce8e98c842aecb9ae8b98a61e8c640ec855ca6edaa69caa49cf0854ae910ce6e6cc6e60ece20cae10cae00cadf8ea9f, 0xd08fe8e8aab0a09b0809886e08e6a8acad3eca63cecd5aec06ae606d08f88e69cceaaeceaacd0ed0b0e02b0c028cb178ec6aec85caa8aaca6f3c86f3aa6a88842888686eec57d0ec2d0ec1b0e00b0c00, 0x8a8e48eab5d0ed7b0e080a7068ec808c8308e855d0901ce901d0edaae6dad0900ce900b0e0cb060c86506ae8d9b080bb060b8c4e08e41ed0ed8b0e0ab080a8c6518e6a48ec7e8ec7dceab3aea078c850, 0xae81bae41bcecb6ac6b6aece3ae6e3ae4e38c8378e85c8e85b8ca968eab98ec098eab8d0a54aeaddcea538eb10b0a16886e6d0edcb0e15b08158ec88b0a148ec878c8b78e90f0a4288ec0590e85ceab4, 0x90e8b90e8acc90dca90dcca55aa855acab5ac8b5ac4b5886ed8a6388a89caeae48c8bbf0e75f0875f0e73ae820ce706cc706f0a72cece1aec1fcece0ac6e0aec1eae61ececdfaec1dae61d8ca86ce851, 0xd0cc28ec66d0eeeb0c2c8ea638ea62ac628cecbfaece9ae8e9aece88c6638ca1f8ca1e8ca1deea7fac82bf0c79ce713ca713ceab7cece5aec26aea260a8578ca8e8ca8dcc70f8ec128ec1190c6090e8c, 0x90a0b90e95ccacbac8f28a8288ead890a0a90e948a8b38e8078ea6d886058e6f8906308e86c908b690e92cecc6aeaf1aecf08c8d38ca298a8f8908b5eec85ccabb086bbacaedac4ed0e83190c6790e8f, 0xb0830b04308c66f8e6bb8ec9cd0a6caa66cb0a2fb062fb042f0c638aa6d2ac4f66a8478a9018e8748eadaeea8c8a900908be90a0ceec8bacaf5cc863ca863ccacc8e872908bd90e97acaf3ac8f38ead9, 0xcc80fd0cdad080ecc80eb0c34b0634d0cd9ac8d9b0c33b0833b06338a4e0b0c328a6518e6ca8ea7e8ea7d0ca750ca738eca3ce80cce80bae8faae6fa8641e8c67e8c67dd0805ce805d0ef8ae8f8b0e30, 0x8e8858ec30ce8168c888aeb02ae9028870f8eae2d0a75d0efeaeafecea738ea20b0e37b0a3788706d0efdaeafdb0e36b0a36b08368ecaab0a358c8e18e81f8eca98c8e08e81e8c8df8e81d8eca8d080f, 0x8eae98ec378eae88ec368ec35d0f03aed03b0e3cb0c3cb083cf0c9aaea41ceae0aa6e0aea408c886ea897ea895cc61e8a486c861ca867ec861ba641ba867da847d8eae4f0a93ce86fae838ae438b0a3e, 0xae9168a6638ca418ca40c6428a6486f0ca7ceae6ced14aea494a8412a8a94a8402a8a808686f0ca1ceaeaaea47ae847cea85cca85cece4acae4aed0daeb0dae50d8a8bb8c8ed8ca38ced068c6288cabf, 0x908e9908e88ec4b90c9690eb9cec01aec4dae64d8a80c8e8978a80b8e8958eafa8e894ccaf7ac804886318c6f8906558c86c908e390c928a8058e893908e48eaf890a3090eb5886308e892cece9aed16, 0xce8378c8aaaea09ae8098861e8c6a8d0a938e838d0831cc831d0cf8ac8f8b0c55b0855b04558a66f8e6ed8ea9cce8308c69cca82fa862faa892aa692aa4928eafe90a378eafd90a3690eba90a358e89a, 0xd0d01d0e0fae60fd0d00ced00b0e5fb0c5fb065f8a506aec0eb0c5eb065e8e463d0e0db0c5d8ca518eaa48ecca8ecc8cc834cc833ac8fa8a67e8a67d8cade8eb0390a3c8ec4f90c9f90ec7d0e058ecbb, 0xc86f8cae2d0a9ad0cfeac8fecca998ea42b0c5cb0a5cacafdb0c5bb0a5b8eaaa8e6f3d0cfc8a8e18e8418eaa98a8e08a8df8e8408eaa8d0e12b0e60b0a608c9068eccc8eccbea8b5c8638a869ca849c, 0xac827cc649ca649aea69f0cc2d0e23f0ec1aec66b0e65ceb06ccb0608706cec22aec63aea63cec21aea628ecd6eeabdac61ecc8a4ac81bac41b86428d0e19d0e18b0e67b0c678ca578ecd48ecd388486, 0xaa8b5886388ea0590ee48c6058e631906858ec6c90cb690ee38a8318c8939090d8caf890a5590cb58a8308e8b5ce8b3ae86d886558c6508c892f0cd1aec6bceb17ccb178ca63aa6280a6860c66fee8c5, 0x8ec758ec7390cbf90ee990ee890ee7d0c05cec050a805d0e31aec31b0e85b0c85b04858ca6f8eabb8ecedcc8558a69cae8308c6bbceab6aa6b6aea2fae62fae42ff08d9ce651ae67dae47d8e8ba8ea09, 0xcc85eaec34ae63486463ac80bae833ae6338a41eaec32ae8328a6a48c6ca8ca7e8ca7d0cabf8ec7c8ec7b90cc690ef190ef090eefcc85c8a8aaac8098a6a8f0edef0addae887ce8b7a86b790a6090eeb, 0xaea3bd0c11cec118eccdb0e8c8a906aec3ab0c8bb0a8b8ecf58e863d0e39b0c8a8ca828eacc8ecf48ecf38ca818eacb8ecf2ceabfaea37aea368c81f8c81e8c81dee6e0ac486ce85fcc85fcec0cce85e, 0xaea90cc8ce8a628d0e3db0c8f8ead3aec3ceece9ee8e9ac842cc663ca663aca41cca1eaa61eaca40ac6408a886ac88deeae4cc8bbac838ac4380e8938a90e8e8698ead20c89c8ec83d0c12cec12d0e3b, 0xd0872ca872b0a97b0697d0e4bb0e96b0896d0ad9aa8d9b08958c6e0884e08e61e8e61db0a94886518e61c8e87e8e61b8e87dea8f3a8628d086ca866cb0892b0692b0492eecf0cca29aca47ac847cec45, 0x8ca058ea3190a858ec9390ce490f0da647df08f8ce66fae69cae49cd0e4faea4fb0e9fb0a9fb089f886858c6308e6558c8b68e8e38ec928a8558c8b58e8e48ea30d0875d0874ca874d0adaaa8da8e820, 0xce885cc885cec30ac830aec55ae855ae4558a6bb8c6ed8ca9c8ea378ea36f0afeae8a9ce8e0a86e0ae8a88c4288c6868e8e98ec96d08798e827b0c9e8a6b70cae24ca9a2cafeaeaa30a8e10a8e00a8df, 0xae85b8caaa8c6f3cec35aea5a8a81f8c8418caa98a81e8a81d8c8408caa8ecb0dca8edaa838aa438cec57f0b0baeaafce8e6cc8e6eed068ea3c8ec9fceae48c8388ec9a90ce98ec9990ce890f1690ce7, 0x8ec060a886d0e68eeb13cca61886938e8f88a6f890830906b58a86c9082f90a928caac8eaf78ec048a6d28ca20ceae9cec37ac837ccae88ca42aec5caea5c88663aca36aec5baea5b]
+
+noncomputable def thirdAt (i : ℕ) : SearchState :=
+  let block := thirdCodes.getD (i / 32) 0
+  decodeStep 9 secondAt ((block >>> (20 * (i % 32))) % 1048576)
+
+def thirdBuckets : List ℕ := [0xa01d00000000000000a0180000000000000000005003800000000000000000000000000000000803400000000000000000000003001c000000000000000000c001080000000, 0x3812400000000000000000000000000000000000000000000000003010cc03db80980000000000000000000000000000000000008022000000000, 0x2021c000000000a082000000000000000000401e80000000000000000008076201c8a06d201a40000000000000000000000281900000000002063000024051000002050, 0x826440970000000001025400000000000000000000000000000000000000000000000003023c000000000000000000408d00000000000000000000000000000000408b, 0x282d400000000020b400000c0ae302a000000000040a60000020a500000000000000000000000000000001009d00000000000000000000000209c000000000102680000, 0x360f20000000009837c00000000000000000000001037400000000000000000020dc0000000000000000000836c00002035c0000503340000000000000782f880ba, 0x214200000000000000000000001e13300000000000000e12c00000000000000a1272048c000030474411b0000081170000000002044c4111000000000000000000204340000, 0x414f00000000008538000000000000000000000000000000000000000000000000000000000000000000000000614b00000c1450000000001050c0000000000000, 0x30588000000000000000000000000000000000000000000000000008584000000000000000000000038568e153000002152085440000000000000000000000, 0x1419200000000050620000000000000000000a18300000000000000000000001e174000000000105c80000105c00000000010168, 0x406f000000000041ba186dc0000000000000000000000000000000000000000206cc000000000c1ad206a501a100000000000000000000000000008680819c, 0x8748000000000000000000000000000000000000000000000000008744000000000000000000000000000a1cc000000000387140000087100000000000000, 0x107f800000000081fa0000041f800002a1e30000000001878000000000000000000000003076800000000000000000021d90876000000000000001875400000000041d3000000000, 0xa21900000000000000000000000000000000c21300001e2040000000000000000000000000000880c0000108040000000000000000000000000000000000002200000000000, 0x426038964000000001025100000000000000424f00000000000000000000000000000000000000000000000000824b00000c245388f80000000014234108ca821e000000000, 0x309bca26a00000000000000000000000000000000426800000000000000000000000a263000000000089880000000000000000000000, 0x1e29600000000000000000000000229500000000008a50000000000229308a4b4278000000000189d40000, 0x22e50000082e108b80000010b78000000000000000000000028b6400000000000000000302c100000000000000000090abc000018ab0e2a5000000000000000000000000000, 0x1430300000230200000000000000000000000000000000000008c04000000000c2fb28bd8c2f000000000050b980000, 0xc32400000000000000000000000000000000432200000000000000000000000000000000000000000000040c68000020c58000000000000000000a31100000000000000830d, 0xc34100000000000000000030cec000018ce0c33200000000000000000010cc0000000000000000000c32a000000000000000000000000000000000000, 0xa8e28c38400000000020e00000090db8000030da0000000000000000000000040d80000000000000030d68000000000000000000435800000000000000000050d38000000000e347, 0x8ea0000038e8400000000023a000000000000000000000000000000000000000000000000000239f000000000000000000000000000, 0x20f14000000000000010f0c000000000000000000000008f08000000000000000000000000000000000000000008f04000000000a3bc00000000000000000070eb8000000000a3a9, 0x10f70000000000000000000c3d600000000000000000000000000000000000030f4000000000043ce00000000000000000028f240000000000000000000000000000000, 0x840700000a40200000000011000000000000000000000c3fa58fbc000010fb4e3e620f8800000000000000000000000000043e010f780000000000000000000000000000000, 0x91340000000000000000008449000000000091200000000008444000000000000000000c10b0000000000c4260000044240000000009104800000904400000000000003102c0000, 0x2919484610000000001117c000000000000000000000000000000000000000000000000000000000000000000000000000009178000009174645a00000000009165644e000000000, 0x112204486d11b0000000000000000000000000000000000000000000000000000000000000000446a000000000000000000000000000000000000000000000000000000, 0x44b400000e4ad000000000112ac84a700000000039280e49900000000000000000021254a49000000c48a000000000000000000000000000, 0xc135084d02932c24ca0000000000000000000000000000000000000000000001132000000000000000000000000000000000000044c6313000000000000000512d80000, 0x113ec00000000000000000000000000024fa000000000000000000093e40000093e00000000000000413c00000000000000193b400000000000000000024ec000000000]
+
+def bucketMissing (count : ℕ) (atState : ℕ → SearchState)
+    (table : List ℕ) (z : ℕ) (v : List W) : Bool :=
+  st (z % 65521 % 1024) fun tag =>
+    st (((table.getD (tag / 32) 0) >>> (18 * (tag % 32))) % 262144) fun code =>
+      let a := code % 8192
+      let n := code / 8192
+      if a + n ≤ count then frontierMissing ((List.range' a n).map atState) z v else true
+
+lemma bucketMissing_found {count : ℕ} {atState : ℕ → SearchState} {table : List ℕ}
+    {z : ℕ} {v : List W} (h : bucketMissing count atState table z v = false) :
+    ∃ i < count, atState i = (z,v) := by
+  unfold bucketMissing at h
+  simp only [st_eq] at h
+  split at h
+  · rename_i ok
+    obtain ⟨i, hi, same⟩ := List.mem_map.mp (frontierMissing_false h)
+    exact ⟨i, lt_of_lt_of_le (List.mem_range'_1.mp hi).2 ok, same⟩
+  · contradiction
+
+
+noncomputable def mixedFromSecond (state : SearchState) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    mvC I.NN I.AA I.HX I.HY
+      (lookC I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12)
+      e8L rootPreparedMask rootPreparedSlots 10 0 z v 0))
+
+noncomputable def afterThird (state : SearchState) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 10 9 0 z v))
+
+lemma afterSecond_false (state : SearchState)
+    (two : 1 < state.2.length) (small : state.2.length < 10)
+    (mixed : mixedFromSecond state = false)
+    (pure : pureAt 10 state (fun z v => afterThird (z,v)) = false) :
+    afterSecond state = false := by
+  have lengthOkay : Nat.ble state.2.length 1 = false := by
+    cases h : Nat.ble state.2.length 1
+    · rfl
+    · exact absurd (Nat.le_of_ble_eq_true h) (Nat.not_le_of_gt two)
+  have choose0 (F : ℕ → Bool) : tstC I.NN I.AA I.HX I.HY false e8L 11 state.2 F = F 0 := by
+    have h0 : Nat.beq state.2.length 11 = false := beq_f (by omega)
+    have h1 : Nat.beq state.2.length.succ 11 = false := beq_f (by omega)
+    simp only [tstC, bR, h0, h1, Bool.cond_false]
+  rw [afterSecond, frc_eq, st_eq, show (11 : ℕ) = Nat.succ 10 from rfl, look1C_step,
+    lengthOkay, Bool.cond_false]
+  change cvC I.NN (pos 0) e8L state.2 (tstC I.NN I.AA I.HX I.HY false e8L 11 state.2 _) = _
+  rw [choose0]
+  simp only [afterThird, frc_eq, st_eq] at pure
+  simp only [mixedFromSecond, frc_eq, st_eq] at mixed
+  change cvC I.NN (pos 0) e8L state.2 (bif pureAt 10 state
+      (look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 10 9 0)
+    then true else _) = _
+  rw [pure, mixed]
+  simp [cvC, bR]
+
+def rangeCheck (test : ℕ → Bool) (start count : ℕ) : Bool :=
+  (List.range' start count).all test
+
+lemma rangeCheck_append (test : ℕ → Bool) {s a b : ℕ}
+    (left : rangeCheck test s a = true) (right : rangeCheck test (s+a) b = true) :
+    rangeCheck test s (a+b) = true := by
+  unfold rangeCheck at *
+  rw [← List.range'_append_1, List.all_append, left, right]
+  rfl
+
+lemma rangeCheck_at {test : ℕ → Bool} {n i : ℕ} (checked : rangeCheck test 0 n = true) (hi : i < n) :
+    test i = true :=
+  List.all_eq_true.mp checked _ (List.mem_range'_1.mpr ⟨Nat.zero_le _, by simpa using hi⟩)
+
+lemma boolOfNeg {b : Bool} (h : (!b) = true) : b = false := by cases b <;> simp_all
+
+
+
+noncomputable def readyForThird (i : ℕ) : Bool :=
+  let state := secondAt i
+  (!pureAt 10 state (bucketMissing thirdCount thirdAt thirdBuckets)) &&
+    (decide (1 < state.2.length) && decide (state.2.length < 10))
+
+noncomputable def thirdTest (j : ℕ) : Bool := !afterThird (thirdAt j)
+noncomputable def secondMixedTest (j : ℕ) : Bool := !mixedFromSecond (secondAt j)
+
+lemma checkedAfterSecond (i : ℕ) (hi : i < secondCount)
+    (ready : rangeCheck readyForThird 0 secondCount = true)
+    (mixed : rangeCheck secondMixedTest 0 secondCount = true)
+    (third : rangeCheck thirdTest 0 thirdCount = true) :
+    afterSecond (secondAt i) = false := by
+  have h := rangeCheck_at ready hi
+  simp only [readyForThird, Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨hc, htwo, hsmall⟩ := h
+  refine afterSecond_false (secondAt i) htwo hsmall (boolOfNeg (rangeCheck_at mixed hi)) ?_
+  refine pureAt_of_covered 10 (secondAt i) afterThird
+    (bucketMissing thirdCount thirdAt thirdBuckets) (boolOfNeg hc) ?_
+  intro z words found
+  obtain ⟨j, hj, eq⟩ := bucketMissing_found found
+  rw [← eq]
+  exact boolOfNeg (rangeCheck_at third hj)
+
+noncomputable def readyForSecond (i : ℕ) : Bool :=
+  let state := firstAt i
+  (!pureSecond state (bucketMissing secondCount secondAt secondBuckets)) &&
+    (decide (1 < state.2.length) && decide (state.2.length < 11))
+
+noncomputable def mixedSecondPicked (state : SearchState) (b : Fin 8) : Bool :=
+  frc state.2 (fun v => st state.1 (fun z =>
+    mvPicked I.NN I.AA I.HX I.HY
+      (lookC I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12)
+      e8L rootPreparedMask rootPreparedSlots 11 0 z v 0 b))
+
+lemma mixedSecondPicked_all (state : SearchState)
+    (checked : ∀ b, mixedSecondPicked state b = false) : mixedSecond state = false := by
+  refine Bool.eq_false_iff.mpr fun h => ?_
+  simp only [mixedSecond, frc_eq, st_eq] at h
+  obtain ⟨b,hb⟩ := mv_picked _ _ _ _ _ _ _ _ _ _ _ _ _ h
+  have hc := checked b
+  simp only [mixedSecondPicked, frc_eq, st_eq] at hc
+  exact Bool.noConfusion (hc.symm.trans hb)
+
+noncomputable def firstMixedTest (i : ℕ) : Bool := !mixedSecond (firstAt i)
+
+lemma checkedAfterFirst (i : ℕ) (hi : i < firstCount)
+    (ready : rangeCheck readyForSecond 0 firstCount = true)
+    (mixed : rangeCheck firstMixedTest 0 firstCount = true)
+    (next : ∀ j < secondCount, afterSecond (secondAt j) = false) :
+    look1C I.NN I.AA I.HX I.HY e8L rootPreparedMask rootPreparedSlots 12 12 11 0
+      (firstAt i).1 (firstAt i).2 = false := by
+  have h := rangeCheck_at ready hi
+  simp only [readyForSecond, Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨hc, htwo, hsmall⟩ := h
+  refine afterFirst_false (firstAt i) htwo hsmall (boolOfNeg (rangeCheck_at mixed hi)) ?_
+  refine pureAt_of_covered 11 (firstAt i) afterSecond
+    (bucketMissing secondCount secondAt secondBuckets) (boolOfNeg hc) ?_
+  intro z words found
+  obtain ⟨j, hj, eq⟩ := bucketMissing_found found
+  rw [← eq]
+  exact next j hj
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk0 : rangeCheck readyForSecond 0 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk1 : rangeCheck readyForSecond 4 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk2 : rangeCheck readyForSecond 8 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk3 : rangeCheck readyForSecond 12 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk4 : rangeCheck readyForSecond 16 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk5 : rangeCheck readyForSecond 20 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk6 : rangeCheck readyForSecond 24 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverageChunk7 : rangeCheck readyForSecond 28 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstCoverage_all : rangeCheck readyForSecond 0 firstCount = true := by
+  exact (@rangeCheck_append readyForSecond 0 16 16
+    (@rangeCheck_append readyForSecond 0 8 8
+    (@rangeCheck_append readyForSecond 0 4 4
+    firstCoverageChunk0 firstCoverageChunk1) (@rangeCheck_append readyForSecond 8 4 4
+    firstCoverageChunk2 firstCoverageChunk3)) (@rangeCheck_append readyForSecond 16 8 8
+    (@rangeCheck_append readyForSecond 16 4 4
+    firstCoverageChunk4 firstCoverageChunk5) (@rangeCheck_append readyForSecond 24 4 4
+    firstCoverageChunk6 firstCoverageChunk7)))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk0 : rangeCheck firstMixedTest 0 3 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk1 : rangeCheck firstMixedTest 3 6 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk2 : rangeCheck firstMixedTest 9 5 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk3 : rangeCheck firstMixedTest 14 6 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk4 : rangeCheck firstMixedTest 20 6 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk5 : rangeCheck firstMixedTest 26 4 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixedChunk6 : rangeCheck firstMixedTest 30 2 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma firstMixed_all : rangeCheck firstMixedTest 0 firstCount = true := by
+  exact (@rangeCheck_append firstMixedTest 0 14 18
+    (@rangeCheck_append firstMixedTest 0 3 11
+    firstMixedChunk0 (@rangeCheck_append firstMixedTest 3 6 5
+    firstMixedChunk1 firstMixedChunk2)) (@rangeCheck_append firstMixedTest 14 12 6
+    (@rangeCheck_append firstMixedTest 14 6 6
+    firstMixedChunk3 firstMixedChunk4) (@rangeCheck_append firstMixedTest 26 4 2
+    firstMixedChunk5 firstMixedChunk6)))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk0 : rangeCheck readyForThird 0 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk1 : rangeCheck readyForThird 8 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk2 : rangeCheck readyForThird 16 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk3 : rangeCheck readyForThird 24 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk4 : rangeCheck readyForThird 32 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk5 : rangeCheck readyForThird 40 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk6 : rangeCheck readyForThird 48 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk7 : rangeCheck readyForThird 56 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk8 : rangeCheck readyForThird 64 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk9 : rangeCheck readyForThird 72 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk10 : rangeCheck readyForThird 80 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk11 : rangeCheck readyForThird 88 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk12 : rangeCheck readyForThird 96 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk13 : rangeCheck readyForThird 104 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk14 : rangeCheck readyForThird 112 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk15 : rangeCheck readyForThird 120 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk16 : rangeCheck readyForThird 128 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk17 : rangeCheck readyForThird 136 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk18 : rangeCheck readyForThird 144 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk19 : rangeCheck readyForThird 152 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk20 : rangeCheck readyForThird 160 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk21 : rangeCheck readyForThird 168 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk22 : rangeCheck readyForThird 176 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk23 : rangeCheck readyForThird 184 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk24 : rangeCheck readyForThird 192 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk25 : rangeCheck readyForThird 200 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk26 : rangeCheck readyForThird 208 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk27 : rangeCheck readyForThird 216 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk28 : rangeCheck readyForThird 224 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk29 : rangeCheck readyForThird 232 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk30 : rangeCheck readyForThird 240 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk31 : rangeCheck readyForThird 248 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk32 : rangeCheck readyForThird 256 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk33 : rangeCheck readyForThird 264 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk34 : rangeCheck readyForThird 272 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverageChunk35 : rangeCheck readyForThird 280 1 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondCoverage_all : rangeCheck readyForThird 0 secondCount = true := by
+  exact (@rangeCheck_append readyForThird 0 144 137
+    (@rangeCheck_append readyForThird 0 72 72
+    (@rangeCheck_append readyForThird 0 32 40
+    (@rangeCheck_append readyForThird 0 16 16
+    (@rangeCheck_append readyForThird 0 8 8
+    secondCoverageChunk0 secondCoverageChunk1) (@rangeCheck_append readyForThird 16 8 8
+    secondCoverageChunk2 secondCoverageChunk3)) (@rangeCheck_append readyForThird 32 16 24
+    (@rangeCheck_append readyForThird 32 8 8
+    secondCoverageChunk4 secondCoverageChunk5) (@rangeCheck_append readyForThird 48 8 16
+    secondCoverageChunk6 (@rangeCheck_append readyForThird 56 8 8
+    secondCoverageChunk7 secondCoverageChunk8)))) (@rangeCheck_append readyForThird 72 32 40
+    (@rangeCheck_append readyForThird 72 16 16
+    (@rangeCheck_append readyForThird 72 8 8
+    secondCoverageChunk9 secondCoverageChunk10) (@rangeCheck_append readyForThird 88 8 8
+    secondCoverageChunk11 secondCoverageChunk12)) (@rangeCheck_append readyForThird 104 16 24
+    (@rangeCheck_append readyForThird 104 8 8
+    secondCoverageChunk13 secondCoverageChunk14) (@rangeCheck_append readyForThird 120 8 16
+    secondCoverageChunk15 (@rangeCheck_append readyForThird 128 8 8
+    secondCoverageChunk16 secondCoverageChunk17))))) (@rangeCheck_append readyForThird 144 72 65
+    (@rangeCheck_append readyForThird 144 32 40
+    (@rangeCheck_append readyForThird 144 16 16
+    (@rangeCheck_append readyForThird 144 8 8
+    secondCoverageChunk18 secondCoverageChunk19) (@rangeCheck_append readyForThird 160 8 8
+    secondCoverageChunk20 secondCoverageChunk21)) (@rangeCheck_append readyForThird 176 16 24
+    (@rangeCheck_append readyForThird 176 8 8
+    secondCoverageChunk22 secondCoverageChunk23) (@rangeCheck_append readyForThird 192 8 16
+    secondCoverageChunk24 (@rangeCheck_append readyForThird 200 8 8
+    secondCoverageChunk25 secondCoverageChunk26)))) (@rangeCheck_append readyForThird 216 32 33
+    (@rangeCheck_append readyForThird 216 16 16
+    (@rangeCheck_append readyForThird 216 8 8
+    secondCoverageChunk27 secondCoverageChunk28) (@rangeCheck_append readyForThird 232 8 8
+    secondCoverageChunk29 secondCoverageChunk30)) (@rangeCheck_append readyForThird 248 16 17
+    (@rangeCheck_append readyForThird 248 8 8
+    secondCoverageChunk31 secondCoverageChunk32) (@rangeCheck_append readyForThird 264 8 9
+    secondCoverageChunk33 (@rangeCheck_append readyForThird 272 8 1
+    secondCoverageChunk34 secondCoverageChunk35))))))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk0 : rangeCheck secondMixedTest 0 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk1 : rangeCheck secondMixedTest 8 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk2 : rangeCheck secondMixedTest 16 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk3 : rangeCheck secondMixedTest 24 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk4 : rangeCheck secondMixedTest 32 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk5 : rangeCheck secondMixedTest 40 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk6 : rangeCheck secondMixedTest 48 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk7 : rangeCheck secondMixedTest 56 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk8 : rangeCheck secondMixedTest 64 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk9 : rangeCheck secondMixedTest 72 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk10 : rangeCheck secondMixedTest 80 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk11 : rangeCheck secondMixedTest 88 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk12 : rangeCheck secondMixedTest 96 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk13 : rangeCheck secondMixedTest 104 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk14 : rangeCheck secondMixedTest 112 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk15 : rangeCheck secondMixedTest 120 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk16 : rangeCheck secondMixedTest 128 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk17 : rangeCheck secondMixedTest 136 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk18 : rangeCheck secondMixedTest 144 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk19 : rangeCheck secondMixedTest 152 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk20 : rangeCheck secondMixedTest 160 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk21 : rangeCheck secondMixedTest 168 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk22 : rangeCheck secondMixedTest 176 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk23 : rangeCheck secondMixedTest 184 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk24 : rangeCheck secondMixedTest 192 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk25 : rangeCheck secondMixedTest 200 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk26 : rangeCheck secondMixedTest 208 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk27 : rangeCheck secondMixedTest 216 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk28 : rangeCheck secondMixedTest 224 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk29 : rangeCheck secondMixedTest 232 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk30 : rangeCheck secondMixedTest 240 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk31 : rangeCheck secondMixedTest 248 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk32 : rangeCheck secondMixedTest 256 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk33 : rangeCheck secondMixedTest 264 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk34 : rangeCheck secondMixedTest 272 8 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixedChunk35 : rangeCheck secondMixedTest 280 1 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma secondMixed_all : rangeCheck secondMixedTest 0 secondCount = true := by
+  exact (@rangeCheck_append secondMixedTest 0 144 137
+    (@rangeCheck_append secondMixedTest 0 72 72
+    (@rangeCheck_append secondMixedTest 0 32 40
+    (@rangeCheck_append secondMixedTest 0 16 16
+    (@rangeCheck_append secondMixedTest 0 8 8
+    secondMixedChunk0 secondMixedChunk1) (@rangeCheck_append secondMixedTest 16 8 8
+    secondMixedChunk2 secondMixedChunk3)) (@rangeCheck_append secondMixedTest 32 16 24
+    (@rangeCheck_append secondMixedTest 32 8 8
+    secondMixedChunk4 secondMixedChunk5) (@rangeCheck_append secondMixedTest 48 8 16
+    secondMixedChunk6 (@rangeCheck_append secondMixedTest 56 8 8
+    secondMixedChunk7 secondMixedChunk8)))) (@rangeCheck_append secondMixedTest 72 32 40
+    (@rangeCheck_append secondMixedTest 72 16 16
+    (@rangeCheck_append secondMixedTest 72 8 8
+    secondMixedChunk9 secondMixedChunk10) (@rangeCheck_append secondMixedTest 88 8 8
+    secondMixedChunk11 secondMixedChunk12)) (@rangeCheck_append secondMixedTest 104 16 24
+    (@rangeCheck_append secondMixedTest 104 8 8
+    secondMixedChunk13 secondMixedChunk14) (@rangeCheck_append secondMixedTest 120 8 16
+    secondMixedChunk15 (@rangeCheck_append secondMixedTest 128 8 8
+    secondMixedChunk16 secondMixedChunk17))))) (@rangeCheck_append secondMixedTest 144 72 65
+    (@rangeCheck_append secondMixedTest 144 32 40
+    (@rangeCheck_append secondMixedTest 144 16 16
+    (@rangeCheck_append secondMixedTest 144 8 8
+    secondMixedChunk18 secondMixedChunk19) (@rangeCheck_append secondMixedTest 160 8 8
+    secondMixedChunk20 secondMixedChunk21)) (@rangeCheck_append secondMixedTest 176 16 24
+    (@rangeCheck_append secondMixedTest 176 8 8
+    secondMixedChunk22 secondMixedChunk23) (@rangeCheck_append secondMixedTest 192 8 16
+    secondMixedChunk24 (@rangeCheck_append secondMixedTest 200 8 8
+    secondMixedChunk25 secondMixedChunk26)))) (@rangeCheck_append secondMixedTest 216 32 33
+    (@rangeCheck_append secondMixedTest 216 16 16
+    (@rangeCheck_append secondMixedTest 216 8 8
+    secondMixedChunk27 secondMixedChunk28) (@rangeCheck_append secondMixedTest 232 8 8
+    secondMixedChunk29 secondMixedChunk30)) (@rangeCheck_append secondMixedTest 248 16 17
+    (@rangeCheck_append secondMixedTest 248 8 8
+    secondMixedChunk31 secondMixedChunk32) (@rangeCheck_append secondMixedTest 264 8 9
+    secondMixedChunk33 (@rangeCheck_append secondMixedTest 272 8 1
+    secondMixedChunk34 secondMixedChunk35))))))
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk0 : rangeCheck thirdTest 0 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk1 : rangeCheck thirdTest 25 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk2 : rangeCheck thirdTest 50 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk3 : rangeCheck thirdTest 75 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk4 : rangeCheck thirdTest 100 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk5 : rangeCheck thirdTest 125 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk6 : rangeCheck thirdTest 150 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk7 : rangeCheck thirdTest 175 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk8 : rangeCheck thirdTest 200 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk9 : rangeCheck thirdTest 225 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk10 : rangeCheck thirdTest 250 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk11 : rangeCheck thirdTest 275 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk12 : rangeCheck thirdTest 300 20 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk13 : rangeCheck thirdTest 320 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk14 : rangeCheck thirdTest 345 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk15 : rangeCheck thirdTest 370 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk16 : rangeCheck thirdTest 395 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk17 : rangeCheck thirdTest 420 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk18 : rangeCheck thirdTest 445 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk19 : rangeCheck thirdTest 470 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk20 : rangeCheck thirdTest 495 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk21 : rangeCheck thirdTest 520 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk22 : rangeCheck thirdTest 545 16 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk23 : rangeCheck thirdTest 561 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk24 : rangeCheck thirdTest 586 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk25 : rangeCheck thirdTest 611 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk26 : rangeCheck thirdTest 636 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk27 : rangeCheck thirdTest 661 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk28 : rangeCheck thirdTest 686 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk29 : rangeCheck thirdTest 711 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk30 : rangeCheck thirdTest 736 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk31 : rangeCheck thirdTest 761 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk32 : rangeCheck thirdTest 786 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk33 : rangeCheck thirdTest 811 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk34 : rangeCheck thirdTest 836 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk35 : rangeCheck thirdTest 861 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk36 : rangeCheck thirdTest 886 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk37 : rangeCheck thirdTest 911 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk38 : rangeCheck thirdTest 936 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk39 : rangeCheck thirdTest 961 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk40 : rangeCheck thirdTest 986 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk41 : rangeCheck thirdTest 1011 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk42 : rangeCheck thirdTest 1036 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk43 : rangeCheck thirdTest 1061 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk44 : rangeCheck thirdTest 1086 22 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk45 : rangeCheck thirdTest 1108 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk46 : rangeCheck thirdTest 1133 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk47 : rangeCheck thirdTest 1158 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk48 : rangeCheck thirdTest 1183 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk49 : rangeCheck thirdTest 1208 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk50 : rangeCheck thirdTest 1233 25 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTailChunk51 : rangeCheck thirdTest 1258 19 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma thirdTail_all : rangeCheck thirdTest 0 thirdCount = true := by
+  exact (@rangeCheck_append thirdTest 0 636 641
+    (@rangeCheck_append thirdTest 0 320 316
+    (@rangeCheck_append thirdTest 0 150 170
+    (@rangeCheck_append thirdTest 0 75 75
+    (@rangeCheck_append thirdTest 0 25 50
+    thirdTailChunk0 (@rangeCheck_append thirdTest 25 25 25
+    thirdTailChunk1 thirdTailChunk2)) (@rangeCheck_append thirdTest 75 25 50
+    thirdTailChunk3 (@rangeCheck_append thirdTest 100 25 25
+    thirdTailChunk4 thirdTailChunk5))) (@rangeCheck_append thirdTest 150 75 95
+    (@rangeCheck_append thirdTest 150 25 50
+    thirdTailChunk6 (@rangeCheck_append thirdTest 175 25 25
+    thirdTailChunk7 thirdTailChunk8)) (@rangeCheck_append thirdTest 225 50 45
+    (@rangeCheck_append thirdTest 225 25 25
+    thirdTailChunk9 thirdTailChunk10) (@rangeCheck_append thirdTest 275 25 20
+    thirdTailChunk11 thirdTailChunk12)))) (@rangeCheck_append thirdTest 320 150 166
+    (@rangeCheck_append thirdTest 320 75 75
+    (@rangeCheck_append thirdTest 320 25 50
+    thirdTailChunk13 (@rangeCheck_append thirdTest 345 25 25
+    thirdTailChunk14 thirdTailChunk15)) (@rangeCheck_append thirdTest 395 25 50
+    thirdTailChunk16 (@rangeCheck_append thirdTest 420 25 25
+    thirdTailChunk17 thirdTailChunk18))) (@rangeCheck_append thirdTest 470 75 91
+    (@rangeCheck_append thirdTest 470 25 50
+    thirdTailChunk19 (@rangeCheck_append thirdTest 495 25 25
+    thirdTailChunk20 thirdTailChunk21)) (@rangeCheck_append thirdTest 545 41 50
+    (@rangeCheck_append thirdTest 545 16 25
+    thirdTailChunk22 thirdTailChunk23) (@rangeCheck_append thirdTest 586 25 25
+    thirdTailChunk24 thirdTailChunk25))))) (@rangeCheck_append thirdTest 636 325 316
+    (@rangeCheck_append thirdTest 636 150 175
+    (@rangeCheck_append thirdTest 636 75 75
+    (@rangeCheck_append thirdTest 636 25 50
+    thirdTailChunk26 (@rangeCheck_append thirdTest 661 25 25
+    thirdTailChunk27 thirdTailChunk28)) (@rangeCheck_append thirdTest 711 25 50
+    thirdTailChunk29 (@rangeCheck_append thirdTest 736 25 25
+    thirdTailChunk30 thirdTailChunk31))) (@rangeCheck_append thirdTest 786 75 100
+    (@rangeCheck_append thirdTest 786 25 50
+    thirdTailChunk32 (@rangeCheck_append thirdTest 811 25 25
+    thirdTailChunk33 thirdTailChunk34)) (@rangeCheck_append thirdTest 861 50 50
+    (@rangeCheck_append thirdTest 861 25 25
+    thirdTailChunk35 thirdTailChunk36) (@rangeCheck_append thirdTest 911 25 25
+    thirdTailChunk37 thirdTailChunk38)))) (@rangeCheck_append thirdTest 961 147 169
+    (@rangeCheck_append thirdTest 961 75 72
+    (@rangeCheck_append thirdTest 961 25 50
+    thirdTailChunk39 (@rangeCheck_append thirdTest 986 25 25
+    thirdTailChunk40 thirdTailChunk41)) (@rangeCheck_append thirdTest 1036 25 47
+    thirdTailChunk42 (@rangeCheck_append thirdTest 1061 25 22
+    thirdTailChunk43 thirdTailChunk44))) (@rangeCheck_append thirdTest 1108 75 94
+    (@rangeCheck_append thirdTest 1108 25 50
+    thirdTailChunk45 (@rangeCheck_append thirdTest 1133 25 25
+    thirdTailChunk46 thirdTailChunk47)) (@rangeCheck_append thirdTest 1183 50 44
+    (@rangeCheck_append thirdTest 1183 25 25
+    thirdTailChunk48 thirdTailChunk49) (@rangeCheck_append thirdTest 1233 25 19
+    thirdTailChunk50 thirdTailChunk51))))))
+
+def initialIndices (kind : Bool) : List ℕ := if kind then [0, 1, 3, 5, 7, 9, 10, 11, 12, 13, 14, 15, 17, 19, 21, 22, 24, 26, 27, 29, 30, 31] else [2, 4, 6, 8, 16, 18, 20, 23, 25, 28]
+
+noncomputable def initialStates (kind : Bool) : List SearchState := (initialIndices kind).map firstAt
+
+lemma allInitialIndices (kind : Bool) : (initialIndices kind).all (fun i => decide (i < firstCount)) = true := by
+  cases kind <;> decide +kernel
+
+lemma initialCoverage (kind : Bool) : initialBinary FF kind (frontierMissing (initialStates kind)) = false := by
+  cases kind <;> decide +kernel
+
+lemma binaryCertificate (kind : Bool) : chkPairPicked [] e8Q 1 12 0 FF 0 kind = false := by
+  apply initialBinary_from_frontier FF kind (initialStates kind) (initialCoverage kind)
+  intro state membership
+  obtain ⟨i, hi, rfl⟩ := List.mem_map.mp membership
+  have hi' : i < firstCount := of_decide_eq_true (List.all_eq_true.mp (allInitialIndices kind) i hi)
+  exact checkedAfterFirst i hi' firstCoverage_all firstMixed_all
+    (fun j hj => checkedAfterSecond j hj secondCoverage_all secondMixed_all thirdTail_all)
+
+lemma binaryChecked : chk [] e8Q 1 12 0 FF 0 = false :=
+  chkPair_picked [] e8Q 1 12 0 FF 0 binaryCertificate
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked0 : chkPicked [] e8Q 1 12 0 0 1 0 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked1 : chkPicked [] e8Q 1 12 0 0 1 1 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked2 : chkPicked [] e8Q 1 12 0 0 1 2 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked3 : chkPicked [] e8Q 1 12 0 0 1 3 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked4 : chkPicked [] e8Q 1 12 0 0 1 4 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked5 : chkPicked [] e8Q 1 12 0 0 1 5 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked6 : chkPicked [] e8Q 1 12 0 0 1 6 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma unaryChecked7 : chkPicked [] e8Q 1 12 0 0 1 7 = false := by decide +kernel
+
+lemma unaryChecked : chk [] e8Q 1 12 0 0 1 = false := by
+  apply chk_picked
+  intro b
+  fin_cases b
+  · exact unaryChecked0
+  · exact unaryChecked1
+  · exact unaryChecked2
+  · exact unaryChecked3
+  · exact unaryChecked4
+  · exact unaryChecked5
+  · exact unaryChecked6
+  · exact unaryChecked7
+
+
+def rootCases : List (ℕ × ℕ) := [(FF, 0), (0, 1)]
+
+lemma rootCases_full : mFull rootCases = true := by decide +kernel
+
+lemma certify_1 : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] e8Q 1 12 0 p.1 p.2 = false := by
+  refine ⟨rootCases, rootCases_full, ?_⟩
+  intro p hp
+  simp only [rootCases, List.mem_cons, List.not_mem_nil, or_false] at hp
+  rcases hp with rfl | rfl
+  · exact binaryChecked
+  · exact unaryChecked
+
+
+
+
+end CofactorZero
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8RegionValid : pOk 1 e8Q = true := by decide +kernel
+
+lemma e8Any {t : ℕ} (h : chk [] e8Q 1 12 t FF 1 = false) :
+    ∃ M : List (ℕ × ℕ), mFull M = true ∧
+      ∀ p ∈ M, chk [] e8Q 1 12 t p.1 p.2 = false :=
+  ⟨[(FF,1)], ffull, fun p hp => by simpa only [List.mem_singleton.mp hp] using h⟩
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_1 : chk [] e8Q 1 12 1 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_2 : chk [] e8Q 1 12 2 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_3 : chk [] e8Q 1 12 3 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_4 : chk [] e8Q 1 12 4 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_5 : chk [] e8Q 1 12 5 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_6 : chk [] e8Q 1 12 6 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_7 : chk [] e8Q 1 12 7 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_8 : chk [] e8Q 1 12 8 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_9 : chk [] e8Q 1 12 9 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_10 : chk [] e8Q 1 12 10 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_11 : chk [] e8Q 1 12 11 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma e8Other_12 : chk [] e8Q 1 12 12 FF 1 = false := by
+  rw [← chkFast_eq, chkFast, searchInputs_e8]
+  decide +kernel
+
+
+lemma lowerZero : Imp [] 1 13 := by
+  refine imp_of (Or.inl rfl) e8RegionValid (by norm_num) ?_ (Or.inr ?_)
+  · intro e he
+    have hp := List.mem_of_mem_filter (List.mem_of_mem_filter he)
+    exact is2 e hp
+  · intro t ht
+    interval_cases t
+    · exact CofactorZero.certify_1
+    · exact e8Any e8Other_1
+    · exact e8Any e8Other_2
+    · exact e8Any e8Other_3
+    · exact e8Any e8Other_4
+    · exact e8Any e8Other_5
+    · exact e8Any e8Other_6
+    · exact e8Any e8Other_7
+    · exact e8Any e8Other_8
+    · exact e8Any e8Other_9
+    · exact e8Any e8Other_10
+    · exact e8Any e8Other_11
+    · exact e8Any e8Other_12
+
+def r1Rest : List (ℕ × ℕ) := [(2, 11), (4, 12), (8, 12), (16, 11), (32, 10), (64, 10), (128, 11)]
+
+def r1 : List (ℕ × ℕ) := (1,13) :: r1Rest
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma checkRest : r1Rest.all (fun e => okE [] (pr rs2 e.1) e) = true := by decide +kernel
+
+lemma i1 : ∀ e ∈ r1, Imp [] e.1 e.2 := by
+  intro e he
+  rcases List.mem_cons.mp he with rfl | hr
+  · exact lowerZero
+  · exact okAll (T := rs2) checkRest is2 e hr
+
 def rs1 : List (ℕ × ℕ) := r1 ++ rs2
 lemma is1 : ∀ e ∈ rs1, Imp [] e.1 e.2 := apI i1 is2
 def pin4 : List (ℕ × ℕ) := [(270, 3), (278, 2), (282, 2), (284, 2), (294, 2), (298, 2), (300, 2), (306, 1), (308, 1), (312, 1), (326, 2), (330, 2), (332, 2), (338, 1), (340, 1), (344, 1), (354, 1), (356, 1), (360, 1), (390, 2), (394, 2), (396, 2), (402, 1), (404, 1), (408, 1), (418, 1), (420, 1), (424, 1), (450, 1), (452, 1), (456, 1), (525, 2), (533, 3), (537, 3), (540, 3), (549, 3), (553, 3), (556, 3), (561, 3), (564, 3), (568, 3), (581, 2), (585, 2), (588, 2), (593, 1), (596, 1), (600, 1), (609, 1), (612, 1), (616, 1), (645, 3), (649, 3), (652, 3), (657, 3), (660, 3), (664, 3), (673, 3), (676, 3), (680, 3), (688, 3), (705, 1), (708, 1), (712, 1), (1035, 2), (1043, 3), (1049, 3), (1050, 3), (1059, 2), (1065, 2), (1066, 2), (1073, 1), (1074, 1), (1080, 1), (1091, 3), (1097, 3), (1098, 3), (1105, 3), (1106, 3), (1112, 3), (1121, 1), (1122, 1), (1128, 1), (1155, 3), (1161, 3), (1162, 3), (1169, 3), (1170, 3), (1176, 3), (1185, 1), (1186, 1), (1192, 1), (1217, 3), (1218, 3), (1224, 3), (1232, 3), (2055, 3), (2067, 3), (2069, 3), (2070, 3), (2083, 5), (2085, 5), (2086, 5), (2097, 3), (2098, 3), (2100, 3), (2115, 5), (2117, 5), (2118, 5), (2129, 3), (2130, 3), (2132, 3), (2145, 5), (2146, 5), (2148, 5), (2160, 3), (2179, 3), (2181, 3), (2182, 3), (2193, 1), (2194, 1), (2196, 1), (2209, 3), (2210, 3), (2212, 3), (2241, 3), (2242, 3), (2244, 3), (2272, 3), (4103, 3), (4107, 2), (4109, 2), (4110, 2), (4131, 2), (4133, 2), (4134, 2), (4137, 3), (4138, 3), (4140, 3), (4163, 3), (4165, 3), (4166, 3), (4169, 2), (4170, 2), (4172, 2), (4193, 2), (4194, 2), (4196, 2), (4200, 3), (4227, 3), (4229, 3), (4230, 3), (4233, 2), (4234, 2), (4236, 2), (4257, 2), (4258, 2), (4260, 2), (4264, 3), (4289, 3), (4290, 3), (4292, 3), (4296, 2), (4320, 2), (8199, 3), (8203, 5), (8205, 3), (8206, 3), (8211, 3), (8213, 2), (8214, 2), (8217, 3), (8218, 3), (8220, 2), (8259, 3), (8261, 2), (8262, 2), (8265, 3), (8266, 3), (8268, 2), (8273, 2), (8274, 2), (8276, 3), (8280, 2), (8323, 5), (8325, 3), (8326, 3), (8329, 5), (8330, 5), (8332, 3), (8337, 3), (8338, 3), (8340, 2), (8344, 3), (8385, 3), (8386, 3), (8388, 2), (8392, 3), (8400, 2), (16391, 2), (16395, 2), (16397, 3), (16398, 2), (16403, 2), (16405, 3), (16406, 2), (16409, 3), (16410, 2), (16412, 3), (16419, 3), (16421, 2), (16422, 3), (16425, 2), (16426, 3), (16428, 2), (16433, 2), (16434, 3), (16436, 2), (16440, 2), (16515, 2), (16517, 3), (16518, 2), (16521, 3), (16522, 2), (16524, 3), (16529, 3), (16530, 2), (16532, 3), (16536, 3), (16545, 2), (16546, 3), (16548, 2), (16552, 2), (16560, 2), (32775, 2), (32779, 3), (32781, 3), (32782, 3), (32787, 2), (32789, 2), (32790, 2), (32793, 3), (32794, 3), (32796, 3), (32803, 2), (32805, 2), (32806, 2), (32809, 3), (32810, 3), (32812, 3), (32817, 2), (32818, 2), (32820, 2), (32824, 3), (32835, 2), (32837, 2), (32838, 2), (32841, 3), (32842, 3), (32844, 3), (32849, 2), (32850, 2), (32852, 2), (32856, 3), (32865, 2), (32866, 2), (32868, 2), (32872, 3), (32880, 2)]
@@ -5219,30 +6638,6 @@ theorem bridge_not (gates : List Gate) (o : ℕ) (hD : FanInTwo ⟨gates, o⟩) 
       change (gates.foldl (fun w g => w ++ [g.op.eval (g.inputs.map fun i => w.getD i false)]) (List.ofFn (row k))).getD o false = f (row k) at h
       rw [h]; exact (f_bit k).symm
   exact ex_sol_not (mz 0) gates init (C (mz 0) (WZ [] 0)) hinit_mem (Or.inr (Set.mem_insert _ _)) (Or.inr (Set.mem_insert_of_mem _ rfl)) hD hu hnot ⟨o, hout⟩
-
-def allInputsNeeded (nn : ℕ) (d : Bool) (l : ℕ) (v : List W) : ℕ → Bool :=
-  List.rec (motive := fun _ => ℕ → Bool) (fun _ => true)
-    (fun w ws rest bits =>
-      !Nat.beq (Nat.lor bits (covC nn d l ws)) l &&
-        rest (Nat.lor bits (spC nn d l w.s))) v
-
-lemma anySub_allInputs {nn : ℕ} {d : Bool} {l : ℕ} {v : List W} {bits : ℕ}
-    (needed : allInputsNeeded nn d l v bits = true) (test : List W → Bool) :
-    anySubC nn d l v bits test = test v := by
-  induction v generalizing bits test with
-  | nil => rfl
-  | cons w ws ih =>
-    let included := Nat.lor bits (spC nn d l w.s)
-    let skip := Nat.beq (Nat.lor bits (covC nn d l ws)) l
-    change (!skip && allInputsNeeded nn d l ws included) = true at needed
-    simp only [Bool.and_eq_true] at needed
-    have mustKeep : skip = false := Bool.eq_false_iff.mpr (fun h => by rw [h] at needed; simp at needed)
-    change Bool.rec (motive := fun _ => Bool)
-      (Bool.rec (motive := fun _ => Bool) false (anySubC nn d l ws bits test) skip)
-      true (st included (fun c => anySubC nn d l ws c (fun r => test (w :: r)))) = _
-    rw [st_eq, ih needed.2, mustKeep]
-    cases test (w :: ws) <;> rfl
-
 
 def rootPreparedWords : List W := [
   ⟨0x7ffffefc00000000000000000000000000000000000000000000000000000000000460023004c00042403001803000000200000080002000800000000800004008000000020010020000000000000000007ff800fdfc0003f800041fc0003f800043f800041fc00084210840421088443f00157feabff6ffd56b6abff5ffbff000000000000000000000000000000000000000000000000000009a18fe0e639372c7, 0x2108400000000000000000000000800000000, 0x0, 0x2108400000000000000000000000800000000, 3⟩,
