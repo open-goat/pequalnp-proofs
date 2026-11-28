@@ -5452,79 +5452,6 @@ lemma imp_by_cofactor_symmetry {known other L table : ℕ} {a : Fin 4}
   intro q hq sol
   exact lower q hq ((sol.mapSignals _ target neg bin).mono le_rfl initial)
 
-def q1 : List (ℕ × ℕ) := pr rt 1
-lemma co1_p : pOk 1 q1 = true := by decide +kernel
-lemma co1_id : ∀ a ∈ q1, Imp [] a.1 a.2 := by
-  intro a ha
-  unfold q1 pr at ha
-  exact ir a (List.mem_of_mem_filter ha)
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem co1t0_res : chk [] q1 1 10 0 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem co1t1_res : chk [] q1 1 10 1 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t2_res : chk [] q1 1 10 2 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t3_res : chk [] q1 1 10 3 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t4_res : chk [] q1 1 10 4 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t5_res : chk [] q1 1 10 5 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t6_res : chk [] q1 1 10 6 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t7_res : chk [] q1 1 10 7 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t8_res : chk [] q1 1 10 8 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t9_res : chk [] q1 1 10 9 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co1t10_res : chk [] q1 1 10 10 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-lemma co1 : Imp [] 1 11 := imp_of (Or.inl rfl) co1_p (by norm_num) co1_id
-    (Or.inr fun t ht => by
-  interval_cases t
-  · exact singletonCheck co1t0_res
-  · exact singletonCheck co1t1_res
-  · exact singletonCheck co1t2_res
-  · exact singletonCheck co1t3_res
-  · exact singletonCheck co1t4_res
-  · exact singletonCheck co1t5_res
-  · exact singletonCheck co1t6_res
-  · exact singletonCheck co1t7_res
-  · exact singletonCheck co1t8_res
-  · exact singletonCheck co1t9_res
-  · exact singletonCheck co1t10_res)
-
-def q2 : List (ℕ × ℕ) := pr rt 2
-lemma co2_p : pOk 2 q2 = true := by decide +kernel
-lemma co2_id : ∀ a ∈ q2, Imp [] a.1 a.2 := by
-  intro a ha
-  unfold q2 pr at ha
-  exact ir a (List.mem_of_mem_filter ha)
 def rangeCheck (test : ℕ → Bool) (start count : ℕ) : Bool :=
   (List.range' start count).all test
 
@@ -5541,6 +5468,37 @@ lemma rangeCheck_at {test : ℕ → Bool} {n i : ℕ} (checked : rangeCheck test
 
 lemma boolOfNeg {b : Bool} (h : (!b) = true) : b = false := by cases b <;> simp_all
 
+noncomputable def singletonTest (Q : List (ℕ × ℕ)) (Z K t : ℕ) : Bool :=
+  !chkFast [] Q Z K t FF 1
+
+lemma singletonCertified {Q : List (ℕ × ℕ)} {Z K start count t : ℕ}
+    (checked : rangeCheck (singletonTest Q Z K) start count = true)
+    (low : start ≤ t) (high : t < start + count) :
+    ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ a ∈ M, chk [] Q Z K t a.1 a.2 = false := by
+  have h := List.all_eq_true.mp checked t (List.mem_range'_1.mpr ⟨low,high⟩)
+  rw [singletonTest, chkFast_eq] at h
+  exact singletonCheck (boolOfNeg h)
+
+def q1 : List (ℕ × ℕ) := pr rt 1
+lemma co1_p : pOk 1 q1 = true := by decide +kernel
+lemma co1_id : ∀ a ∈ q1, Imp [] a.1 a.2 := by
+  intro a ha
+  unfold q1 pr at ha
+  exact ir a (List.mem_of_mem_filter ha)
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem co1Singletons : rangeCheck (singletonTest q1 1 10) 0 11 = true := by decide +kernel
+
+lemma co1 : Imp [] 1 11 := imp_of (Or.inl rfl) co1_p (by norm_num) co1_id
+    (Or.inr fun t ht => singletonCertified co1Singletons (by omega) (by omega))
+
+def q2 : List (ℕ × ℕ) := pr rt 2
+lemma co2_p : pOk 2 q2 = true := by decide +kernel
+lemma co2_id : ∀ a ∈ q2, Imp [] a.1 a.2 := by
+  intro a ha
+  unfold q2 pr at ha
+  exact ir a (List.mem_of_mem_filter ha)
 noncomputable def restrictedTest (Q : List (ℕ × ℕ)) (Z t : ℕ)
     (cases : List (ℕ × ℕ)) (i : ℕ) : Bool :=
   let a := cases.getD i (0,0)
@@ -5663,61 +5621,18 @@ lemma co2t1 : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ a ∈ M, chk [] 
         co2t1batch4
         co2t1batch5)))
 
+
 set_option maxRecDepth 100000 in
-theorem co2t2_res : chk [] q2 2 11 2 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t3_res : chk [] q2 2 11 3 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t4_res : chk [] q2 2 11 4 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t5_res : chk [] q2 2 11 5 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t6_res : chk [] q2 2 11 6 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t7_res : chk [] q2 2 11 7 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t8_res : chk [] q2 2 11 8 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t9_res : chk [] q2 2 11 9 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t10_res : chk [] q2 2 11 10 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co2t11_res : chk [] q2 2 11 11 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
+set_option maxHeartbeats 0 in
+theorem co2Singletons : rangeCheck (singletonTest q2 2 11) 2 10 = true := by decide +kernel
+
 lemma co2 : Imp [] 2 12 := imp_of (Or.inl rfl) co2_p (by norm_num) co2_id
     (Or.inr fun t ht => by
-  interval_cases t
-  · exact co2t0
-  · exact co2t1
-  · exact singletonCheck co2t2_res
-  · exact singletonCheck co2t3_res
-  · exact singletonCheck co2t4_res
-  · exact singletonCheck co2t5_res
-  · exact singletonCheck co2t6_res
-  · exact singletonCheck co2t7_res
-  · exact singletonCheck co2t8_res
-  · exact singletonCheck co2t9_res
-  · exact singletonCheck co2t10_res
-  · exact singletonCheck co2t11_res)
+  by_cases small : t < 2
+  · interval_cases t
+    · exact co2t0
+    · exact co2t1
+  · exact singletonCertified co2Singletons (by omega) (by omega))
 
 def q4 : List (ℕ × ℕ) := pr rt 4
 lemma co4_p : pOk 4 q4 = true := by decide +kernel
@@ -5725,66 +5640,13 @@ lemma co4_id : ∀ a ∈ q4, Imp [] a.1 a.2 := by
   intro a ha
   unfold q4 pr at ha
   exact ir a (List.mem_of_mem_filter ha)
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem co4t0_res : chk [] q4 4 10 0 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem co4t1_res : chk [] q4 4 10 1 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t2_res : chk [] q4 4 10 2 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t3_res : chk [] q4 4 10 3 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t4_res : chk [] q4 4 10 4 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t5_res : chk [] q4 4 10 5 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t6_res : chk [] q4 4 10 6 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t7_res : chk [] q4 4 10 7 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t8_res : chk [] q4 4 10 8 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t9_res : chk [] q4 4 10 9 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co4t10_res : chk [] q4 4 10 10 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
+theorem co4Singletons : rangeCheck (singletonTest q4 4 10) 0 11 = true := by decide +kernel
+
 lemma co4 : Imp [] 4 11 := imp_of (Or.inl rfl) co4_p (by norm_num) co4_id
-    (Or.inr fun t ht => by
-  interval_cases t
-  · exact singletonCheck co4t0_res
-  · exact singletonCheck co4t1_res
-  · exact singletonCheck co4t2_res
-  · exact singletonCheck co4t3_res
-  · exact singletonCheck co4t4_res
-  · exact singletonCheck co4t5_res
-  · exact singletonCheck co4t6_res
-  · exact singletonCheck co4t7_res
-  · exact singletonCheck co4t8_res
-  · exact singletonCheck co4t9_res
-  · exact singletonCheck co4t10_res)
+    (Or.inr fun t ht => singletonCertified co4Singletons (by omega) (by omega))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
@@ -5897,61 +5759,18 @@ lemma co64t1 : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ a ∈ M, chk []
         co64t1batch4
         co64t1batch5)))
 
+
 set_option maxRecDepth 100000 in
-theorem co64t2_res : chk [] q64 64 11 2 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t3_res : chk [] q64 64 11 3 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t4_res : chk [] q64 64 11 4 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t5_res : chk [] q64 64 11 5 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t6_res : chk [] q64 64 11 6 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t7_res : chk [] q64 64 11 7 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t8_res : chk [] q64 64 11 8 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t9_res : chk [] q64 64 11 9 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t10_res : chk [] q64 64 11 10 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co64t11_res : chk [] q64 64 11 11 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
+set_option maxHeartbeats 0 in
+theorem co64Singletons : rangeCheck (singletonTest q64 64 11) 2 10 = true := by decide +kernel
+
 lemma co64 : Imp [] 64 12 := imp_of (Or.inl rfl) co64_p (by norm_num) co64_id
     (Or.inr fun t ht => by
-  interval_cases t
-  · exact co64t0
-  · exact co64t1
-  · exact singletonCheck co64t2_res
-  · exact singletonCheck co64t3_res
-  · exact singletonCheck co64t4_res
-  · exact singletonCheck co64t5_res
-  · exact singletonCheck co64t6_res
-  · exact singletonCheck co64t7_res
-  · exact singletonCheck co64t8_res
-  · exact singletonCheck co64t9_res
-  · exact singletonCheck co64t10_res
-  · exact singletonCheck co64t11_res)
+  by_cases small : t < 2
+  · interval_cases t
+    · exact co64t0
+    · exact co64t1
+  · exact singletonCertified co64Singletons (by omega) (by omega))
 
 def q128 : List (ℕ × ℕ) := pr rt 128
 lemma co128_p : pOk 128 q128 = true := by decide +kernel
@@ -5959,56 +5778,13 @@ lemma co128_id : ∀ a ∈ q128, Imp [] a.1 a.2 := by
   intro a ha
   unfold q128 pr at ha
   exact ir a (List.mem_of_mem_filter ha)
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem co128t0_res : chk [] q128 128 8 0 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem co128t1_res : chk [] q128 128 8 1 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co128t2_res : chk [] q128 128 8 2 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co128t3_res : chk [] q128 128 8 3 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co128t4_res : chk [] q128 128 8 4 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co128t5_res : chk [] q128 128 8 5 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co128t6_res : chk [] q128 128 8 6 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co128t7_res : chk [] q128 128 8 7 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem co128t8_res : chk [] q128 128 8 8 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
+theorem co128Singletons : rangeCheck (singletonTest q128 128 8) 0 9 = true := by decide +kernel
+
 lemma co128 : Imp [] 128 9 := imp_of (Or.inl rfl) co128_p (by norm_num) co128_id
-    (Or.inr fun t ht => by
-  interval_cases t
-  · exact singletonCheck co128t0_res
-  · exact singletonCheck co128t1_res
-  · exact singletonCheck co128t2_res
-  · exact singletonCheck co128t3_res
-  · exact singletonCheck co128t4_res
-  · exact singletonCheck co128t5_res
-  · exact singletonCheck co128t6_res
-  · exact singletonCheck co128t7_res
-  · exact singletonCheck co128t8_res)
+    (Or.inr fun t ht => singletonCertified co128Singletons (by omega) (by omega))
 
 def rt1 : List (ℕ × ℕ) := [(1, 11), (2, 12), (4, 11), (8, 11), (16, 12), (32, 11), (64, 12), (128, 9)]
 lemma i1 : ∀ a ∈ rt1, Imp [] a.1 a.2 := by
@@ -6082,62 +5858,19 @@ set_option maxHeartbeats 0 in
 theorem root3_res : chk [] rootBounds 0 13 3 FF 1 = false := by
   rw [← chkFast_eq]
   decide +kernel
+
 set_option maxRecDepth 100000 in
-theorem root4_res : chk [] rootBounds 0 13 4 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root5_res : chk [] rootBounds 0 13 5 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root6_res : chk [] rootBounds 0 13 6 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root7_res : chk [] rootBounds 0 13 7 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root8_res : chk [] rootBounds 0 13 8 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root9_res : chk [] rootBounds 0 13 9 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root10_res : chk [] rootBounds 0 13 10 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root11_res : chk [] rootBounds 0 13 11 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root12_res : chk [] rootBounds 0 13 12 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
-set_option maxRecDepth 100000 in
-theorem root13_res : chk [] rootBounds 0 13 13 FF 1 = false := by
-  rw [← chkFast_eq]
-  decide +kernel
+set_option maxHeartbeats 0 in
+theorem irootSingletons : rangeCheck (singletonTest rootBounds 0 13) 4 10 = true := by decide +kernel
+
 lemma iroot : Imp [] 0 14 := imp_ts (Or.inl rfl) rootBounds_p (by norm_num) rootBounds_I (fun t ht => by
-  interval_cases t
-  · exact singletonCheck root0_res
-  · exact singletonCheck root1_res
-  · exact singletonCheck root2_res
-  · exact singletonCheck root3_res
-  · exact singletonCheck root4_res
-  · exact singletonCheck root5_res
-  · exact singletonCheck root6_res
-  · exact singletonCheck root7_res
-  · exact singletonCheck root8_res
-  · exact singletonCheck root9_res
-  · exact singletonCheck root10_res
-  · exact singletonCheck root11_res
-  · exact singletonCheck root12_res
-  · exact singletonCheck root13_res)
+  by_cases small : t < 4
+  · interval_cases t
+    · exact singletonCheck root0_res
+    · exact singletonCheck root1_res
+    · exact singletonCheck root2_res
+    · exact singletonCheck root3_res
+  · exact singletonCertified irootSingletons (by omega) (by omega))
 
 def sampleWire (i : ℕ) : ℕ := rawP0.getD i 0 &&& mz 0
 
@@ -7134,6 +6867,115 @@ lemma rootCanonicalState {v : List W} {S : Finset ℕ} (rep : Rep v S)
     intro j _
     exact (cnt_length_le v j).trans (by omega)
 
+lemma pk_slot_top {n j : ℕ} {digits : ℕ → ℕ}
+    (bound : ∀ i < n, digits i < 32) (slot : j < n) :
+    (pk n digits).testBit (5*j+4) = (digits j).testBit 4 := by
+  induction n generalizing j with
+  | zero => omega
+  | succ n ih =>
+    have below : ∀ i < n, digits i < 32 := fun i hi => bound i (by omega)
+    rw [pk_succ, Nat.testBit_two_pow_mul_add _ (pk_lt below)]
+    by_cases hj : j < n
+    · rw [if_pos (by omega : 5*j+4 < 5*n)]
+      exact ih below hj
+    · have same : j = n := by omega
+      subst j
+      rw [if_neg (by omega : ¬ 5*n+4 < 5*n)]
+      congr 1
+      omega
+
+def packedEliminations (gates : List InputGate) : ℕ :=
+  (gates.map fun g => g.left.c ||| g.right.c).sum
+
+def eliminatedCount (gates : List InputGate) (j : ℕ) : ℕ :=
+  (gates.filter fun g => g.eliminated j).length
+
+lemma splitGateCount (gates : List InputGate) (j : ℕ) :
+    projectedCost gates j + eliminatedCount gates j = gates.length := by
+  induction gates with
+  | nil => rfl
+  | cons g rest ih =>
+    unfold projectedCost eliminatedCount at *
+    cases value : g.eliminated j
+    · simp [List.filter_cons,value]; omega
+    · simp [List.filter_cons,value]; omega
+
+lemma packedEliminations_eq (gates : List InputGate)
+    (valid : ∀ g ∈ gates, WOk (PZ rootBounds) g.left ∧ WOk (PZ rootBounds) g.right) :
+    packedEliminations gates = pk (PZ rootBounds).length (eliminatedCount gates) := by
+  induction gates with
+  | nil => simp [packedEliminations,pk,eliminatedCount]
+  | cons g rest ih =>
+    have head := valid g (by simp)
+    have tail : ∀ w ∈ rest, WOk (PZ rootBounds) w.left ∧ WOk (PZ rootBounds) w.right :=
+      fun w hw => valid w (by simp [hw])
+    have one := pk_of (isPk_or head.1.pc head.2.pc)
+    change (g.left.c ||| g.right.c) + packedEliminations rest = _
+    rw [one, ih tail, pk_add]
+    refine pk_congr fun j _ => ?_
+    unfold eliminatedCount InputGate.eliminated
+    rw [List.filter_cons]
+    cases h : (g.left.c ||| g.right.c).testBit (5*j) <;> simp [Nat.add_comm]
+
+def rapidBudget (k : ℕ) (gates : List InputGate) (v : List W) : ℕ :=
+  let packed := rootPreparedBudget - (packedEliminations gates + sumc v)
+  if packed &&& rootPreparedSlots == rootPreparedSlots then packed else canonicalBudget k gates v
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rapidBudget_eq (k : ℕ) (gates : List InputGate) (v : List W)
+    (cap : k + gates.length = 14) (stock : gates.length + v.length ≤ 16)
+    (gateFacts : ∀ g ∈ gates, WOk (PZ rootBounds) g.left ∧ WOk (PZ rootBounds) g.right)
+    (facts : ∀ w ∈ v, WOk (PZ rootBounds) w) :
+    rapidBudget k gates v = canonicalBudget k gates v := by
+  unfold rapidBudget
+  dsimp only
+  split
+  case isFalse => rfl
+  case isTrue tagged =>
+    let limit := (PZ rootBounds).length
+    let lower := fun j => (rootBounds.getD j (0,14)).2
+    let digits := fun j => 16+(14-lower j)-(eliminatedCount gates j + cnt v j)
+    have base : rootPreparedBudget = pk limit (fun j => 16+(14-lower j)) := by
+      rw [← rootPreparedBudget_eq, pk16]
+    have entry : rootPreparedBudget - (packedEliminations gates + sumc v) = pk limit digits := by
+      rw [base, packedEliminations_eq gates gateFacts, sumc_eq facts, pk_add, pk_sub]
+      intro j _
+      have count := cnt_length_le v j
+      have elim : eliminatedCount gates j ≤ gates.length := List.length_filter_le _ _
+      omega
+    have bitBound : ∀ j < limit, digits j < 32 := by intro j _; dsimp [digits]; omega
+    have high : ∀ j < limit, 16 ≤ digits j := by
+      intro j hj
+      have eq := congrArg (fun a : ℕ => a.testBit (5*j+4)) (beq_iff_eq.mp tagged)
+      rw [entry, rootStockContext.hg, Nat.testBit_and, pk_slot_top bitBound hj,
+        pk_slot_top (digits := fun _ => 16) (fun _ _ => by decide) hj] at eq
+      simp only [show (16:ℕ).testBit 4 = true by rfl, Bool.and_true] at eq
+      have small := bitBound j hj
+      generalize digits j = x at eq small ⊢
+      interval_cases x <;> first | decide | exact Bool.noConfusion (show false = true from eq)
+    have canonical : canonicalBudget k gates v =
+        pk limit (fun j => 16 + canonicalSlot k gates j - cnt v j) := by
+      have base' : pL ((List.range rootBounds.length).map fun j => 16 + canonicalSlot k gates j) =
+          pk limit (fun j => 16 + canonicalSlot k gates j) := by
+        rw [pL_pk]
+        simp only [List.length_map,List.length_range,limit,PZ]
+        refine pk_congr fun j hj => ?_
+        have inside : j < (List.range rootBounds.length).length := by simpa using hj
+        simp [List.getD_eq_getElem?_getD,List.getElem?_map,List.getElem?_eq_getElem inside]
+      rw [canonicalBudget,base',sumc_eq facts,pk_sub]
+      intro j _
+      have count := cnt_length_le v j
+      omega
+    rw [entry,canonical]
+    refine pk_congr fun j hj => ?_
+    have room := high j hj
+    have count := splitGateCount gates j
+    dsimp [digits,lower]
+    unfold canonicalSlot
+    dsimp [digits,lower] at room
+    omega
+
 def wordModulus : ℕ := 371
 def recipeTable : ℕ := 0xfcfbebdead7e3ce8d362cf6ef9b3d6af1a3f4eb932d4ab122b46bcb9e2c74a9c286c99a247c38e0c3428c082c18a042408
 def rotationTable : List ℕ := [0xffef7cefae78df6d74cf2c70beeb6caeaa689e69648e28607de75c6da6585d65544d24503ce34c2ca2481c61440c2040, 0xffe5544d2e78df63ceaeaa682ca964cf2c7034cb6c8e28607de2486da5d6658f7cefa450d749e6bee75c1c6004083045, 0xffef7cefa8607de75ccf2c70bee658aeaa689e65d68e2e78df6d746dab6c9645544d245024834c2ca3ce1c61410c2100, 0xffe5544d28607de248aeaa682ca5d6cf2c7034c6588e2e78df63ce6da964b6cf7cefa45075c9e6beed741c6001083105]
@@ -7366,7 +7208,7 @@ noncomputable def OrbitRecord.stock (record : OrbitRecord) : List W :=
 
 noncomputable def OrbitRecord.state (k : ℕ) (record : OrbitRecord) : SearchState :=
   let ws := record.stock
-  (canonicalBudget k (record.gates.map inputGate) ws, ws)
+  (rapidBudget k (record.gates.map inputGate) ws, ws)
 
 lemma stockFold (words start : List W) (ordered : Srt start) :
     Srt (words.foldr addS start) ∧
@@ -7436,12 +7278,24 @@ lemma OrbitRecord.stock_support (o : OrbitRecord) :
   obtain ⟨_,covers⟩ := canonicalStock_support (stockFold _ [] (by simp [Srt])).1 (o.gates.map inputGate)
   exact (covers w hw).elim (fun raw => Or.inl (orbitRawFacts _ raw)) Or.inr
 
-lemma OrbitRecord.budget_sound (o : OrbitRecord) {k : ℕ} (gates : k + o.gates.length ≤ 14) (len : o.stock.length ≤ 15) :
+lemma OrbitRecord.budget_sound (o : OrbitRecord) {k : ℕ}
+    (gates : k + o.gates.length = 14) (len : o.stock.length ≤ 15)
+    (total : o.gates.length + o.stock.length ≤ 16) :
     StOk (PZ rootBounds) (tz 0) I.AA k (o.state k).1 o.stock (labelStock o.labels) := by
-  apply rootCanonicalState o.stock_rep k (o.gates.map inputGate) (by simpa using gates) len _ o.stock_support
-  intro g hg
-  obtain ⟨i,_,rfl⟩ := List.mem_map.mp hg
-  exact gate_inBank i
+  have sources : ∀ g ∈ o.gates.map inputGate, g.left ∈ rootPreparedWords ∧ g.right ∈ rootPreparedWords := by
+    intro g hg
+    obtain ⟨i,_,rfl⟩ := List.mem_map.mp hg
+    exact gate_inBank i
+  have slotBound : k + (o.gates.map inputGate).length = 14 := by simpa using gates
+  have wireBound : (o.gates.map inputGate).length + o.stock.length ≤ 16 := by simpa using total
+  have exactState := rootCanonicalState o.stock_rep k (o.gates.map inputGate)
+    (Nat.le_of_eq slotBound) len sources o.stock_support
+  have gateFacts (g : InputGate) (hg : g ∈ o.gates.map inputGate) :
+      WOk (PZ rootBounds) g.left ∧ WOk (PZ rootBounds) g.right :=
+    ⟨(rootWordFacts _ (sources g hg).1).1,(rootWordFacts _ (sources g hg).2).1⟩
+  change StOk (PZ rootBounds) (tz 0) I.AA k (rapidBudget k (o.gates.map inputGate) o.stock) o.stock _
+  rw [rapidBudget_eq k (o.gates.map inputGate) o.stock slotBound wireBound gateFacts exactState.wok]
+  exact exactState
 
 lemma codeStock_generated (labels : List (Fin 64)) : ∀ x ∈ labelStock labels, SampleSignal x := by
   intro x hx
@@ -7573,7 +7427,7 @@ set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma rejectOrbit_sound {inner : ℕ → ℕ → ℕ → List W → Bool}
     (valid : RejectSound true (RZ [] 0) (mz 0) (tz 0) inner)
-    {width fuel k₀ : ℕ} (cap : k₀ + width ≤ 14) (widthBound : width ≤ 7)
+    {width fuel k₀ : ℕ} (cap : k₀ + width = 14) (widthBound : width ≤ 4)
     (checked : rangeCheck (orbitCheck inner width fuel k₀) 0 (orbitCount width) = true) :
     RejectSound true (RZ [] 0) (mz 0) (tz 0) (rejectOrbit k₀ width) := by
   intro k t z ws S k' rep size live short ready reject
@@ -7590,7 +7444,10 @@ lemma rejectOrbit_sound {inner : ℕ → ℕ → ℕ → List W → Bool}
     change entry.retained.length ≤ 8 at inputs
     change entry.gates.length = width at gates
     have len : entry.stock.length ≤ 15 := entry.card_stock_le.trans (by omega)
-    have witness := entry.budget_sound (by omega : k₀ + entry.gates.length ≤ 14) len
+    have total : entry.gates.length + entry.stock.length ≤ 16 := by
+      have size := entry.card_stock_le
+      omega
+    have witness := entry.budget_sound (by omega : k₀ + entry.gates.length = 14) len total
     have hd := boolOfNeg (rangeCheck_at checked (lookupOrbit_bound record))
     simp only [orbitCheck, frc_eq, st_eq, ← rootPreparedMask_eq] at hd
     exact look1Raw_sound rootStockContext inner true valid (RZ_R [] 0) (RZ_R2 [] 0)
@@ -8144,257 +8001,213 @@ lemma finishOpeningByOrbit (i : ℕ)
   simp only [afterSecond, frc_eq, st_eq, show (13 : ℕ) = Nat.succ 12 from rfl,
     look1RawC_step, rejected, Bool.cond_true]
 
+noncomputable def openingOrbitTest (i : ℕ) : Bool := !openingOrbitCoverage i
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem openingOrbitBatch0 : rangeCheck openingOrbitTest 0 3 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem openingOrbitBatch1 : rangeCheck openingOrbitTest 3 3 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem openingOrbitBatch2 : rangeCheck openingOrbitTest 6 3 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem openingOrbitBatch3 : rangeCheck openingOrbitTest 9 3 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem openingOrbitBatch4 : rangeCheck openingOrbitTest 12 3 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem openingOrbitBatch5 : rangeCheck openingOrbitTest 15 3 = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem openingOrbitBatch6 : rangeCheck openingOrbitTest 18 3 = true := by decide +kernel
+
+abbrev openingOrbitAppend := @rangeAppend openingOrbitTest
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem openingOrbitAll : rangeCheck openingOrbitTest 0 21 = true :=
+  (@openingOrbitAppend 0 9 12 (@openingOrbitAppend 0 3 6 openingOrbitBatch0 (@openingOrbitAppend 3 3 3 openingOrbitBatch1 openingOrbitBatch2)) (@openingOrbitAppend 9 6 6 (@openingOrbitAppend 9 3 3 openingOrbitBatch3 openingOrbitBatch4) (@openingOrbitAppend 15 3 3 openingOrbitBatch5 openingOrbitBatch6)))
+
+lemma openingOrbit_complete {i : ℕ} (inside : i < 21) : openingOrbitCoverage i = false :=
+  boolOfNeg (rangeCheck_at openingOrbitAll inside)
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first0_mixed : mixedSecond (firstAt 0) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first0_covered : openingOrbitCoverage 0 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first0_checked : openingContinuation (firstAt 0) = false :=
-  finishOpeningByOrbit 0 (by decide +kernel) (by decide +kernel) first0_mixed first0_covered
+  finishOpeningByOrbit 0 (by decide +kernel) (by decide +kernel) first0_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first1_mixed : mixedSecond (firstAt 1) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first1_covered : openingOrbitCoverage 1 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first1_checked : openingContinuation (firstAt 1) = false :=
-  finishOpeningByOrbit 1 (by decide +kernel) (by decide +kernel) first1_mixed first1_covered
+  finishOpeningByOrbit 1 (by decide +kernel) (by decide +kernel) first1_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first2_mixed : mixedSecond (firstAt 2) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first2_covered : openingOrbitCoverage 2 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first2_checked : openingContinuation (firstAt 2) = false :=
-  finishOpeningByOrbit 2 (by decide +kernel) (by decide +kernel) first2_mixed first2_covered
+  finishOpeningByOrbit 2 (by decide +kernel) (by decide +kernel) first2_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first3_mixed : mixedSecond (firstAt 3) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first3_covered : openingOrbitCoverage 3 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first3_checked : openingContinuation (firstAt 3) = false :=
-  finishOpeningByOrbit 3 (by decide +kernel) (by decide +kernel) first3_mixed first3_covered
+  finishOpeningByOrbit 3 (by decide +kernel) (by decide +kernel) first3_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first4_mixed : mixedSecond (firstAt 4) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first4_covered : openingOrbitCoverage 4 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first4_checked : openingContinuation (firstAt 4) = false :=
-  finishOpeningByOrbit 4 (by decide +kernel) (by decide +kernel) first4_mixed first4_covered
+  finishOpeningByOrbit 4 (by decide +kernel) (by decide +kernel) first4_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first5_mixed : mixedSecond (firstAt 5) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first5_covered : openingOrbitCoverage 5 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first5_checked : openingContinuation (firstAt 5) = false :=
-  finishOpeningByOrbit 5 (by decide +kernel) (by decide +kernel) first5_mixed first5_covered
+  finishOpeningByOrbit 5 (by decide +kernel) (by decide +kernel) first5_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first6_mixed : mixedSecond (firstAt 6) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first6_covered : openingOrbitCoverage 6 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first6_checked : openingContinuation (firstAt 6) = false :=
-  finishOpeningByOrbit 6 (by decide +kernel) (by decide +kernel) first6_mixed first6_covered
+  finishOpeningByOrbit 6 (by decide +kernel) (by decide +kernel) first6_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first7_mixed : mixedSecond (firstAt 7) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first7_covered : openingOrbitCoverage 7 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first7_checked : openingContinuation (firstAt 7) = false :=
-  finishOpeningByOrbit 7 (by decide +kernel) (by decide +kernel) first7_mixed first7_covered
+  finishOpeningByOrbit 7 (by decide +kernel) (by decide +kernel) first7_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first8_mixed : mixedSecond (firstAt 8) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first8_covered : openingOrbitCoverage 8 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first8_checked : openingContinuation (firstAt 8) = false :=
-  finishOpeningByOrbit 8 (by decide +kernel) (by decide +kernel) first8_mixed first8_covered
+  finishOpeningByOrbit 8 (by decide +kernel) (by decide +kernel) first8_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first9_mixed : mixedSecond (firstAt 9) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first9_covered : openingOrbitCoverage 9 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first9_checked : openingContinuation (firstAt 9) = false :=
-  finishOpeningByOrbit 9 (by decide +kernel) (by decide +kernel) first9_mixed first9_covered
+  finishOpeningByOrbit 9 (by decide +kernel) (by decide +kernel) first9_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first10_mixed : mixedSecond (firstAt 10) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first10_covered : openingOrbitCoverage 10 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first10_checked : openingContinuation (firstAt 10) = false :=
-  finishOpeningByOrbit 10 (by decide +kernel) (by decide +kernel) first10_mixed first10_covered
+  finishOpeningByOrbit 10 (by decide +kernel) (by decide +kernel) first10_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first11_mixed : mixedSecond (firstAt 11) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first11_covered : openingOrbitCoverage 11 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first11_checked : openingContinuation (firstAt 11) = false :=
-  finishOpeningByOrbit 11 (by decide +kernel) (by decide +kernel) first11_mixed first11_covered
+  finishOpeningByOrbit 11 (by decide +kernel) (by decide +kernel) first11_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first12_mixed : mixedSecond (firstAt 12) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first12_covered : openingOrbitCoverage 12 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first12_checked : openingContinuation (firstAt 12) = false :=
-  finishOpeningByOrbit 12 (by decide +kernel) (by decide +kernel) first12_mixed first12_covered
+  finishOpeningByOrbit 12 (by decide +kernel) (by decide +kernel) first12_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first13_mixed : mixedSecond (firstAt 13) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first13_covered : openingOrbitCoverage 13 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first13_checked : openingContinuation (firstAt 13) = false :=
-  finishOpeningByOrbit 13 (by decide +kernel) (by decide +kernel) first13_mixed first13_covered
+  finishOpeningByOrbit 13 (by decide +kernel) (by decide +kernel) first13_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first14_mixed : mixedSecond (firstAt 14) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first14_covered : openingOrbitCoverage 14 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first14_checked : openingContinuation (firstAt 14) = false :=
-  finishOpeningByOrbit 14 (by decide +kernel) (by decide +kernel) first14_mixed first14_covered
+  finishOpeningByOrbit 14 (by decide +kernel) (by decide +kernel) first14_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first15_mixed : mixedSecond (firstAt 15) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first15_covered : openingOrbitCoverage 15 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first15_checked : openingContinuation (firstAt 15) = false :=
-  finishOpeningByOrbit 15 (by decide +kernel) (by decide +kernel) first15_mixed first15_covered
+  finishOpeningByOrbit 15 (by decide +kernel) (by decide +kernel) first15_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first16_mixed : mixedSecond (firstAt 16) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first16_covered : openingOrbitCoverage 16 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first16_checked : openingContinuation (firstAt 16) = false :=
-  finishOpeningByOrbit 16 (by decide +kernel) (by decide +kernel) first16_mixed first16_covered
+  finishOpeningByOrbit 16 (by decide +kernel) (by decide +kernel) first16_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first17_mixed : mixedSecond (firstAt 17) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first17_covered : openingOrbitCoverage 17 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first17_checked : openingContinuation (firstAt 17) = false :=
-  finishOpeningByOrbit 17 (by decide +kernel) (by decide +kernel) first17_mixed first17_covered
+  finishOpeningByOrbit 17 (by decide +kernel) (by decide +kernel) first17_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first18_mixed : mixedSecond (firstAt 18) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first18_covered : openingOrbitCoverage 18 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first18_checked : openingContinuation (firstAt 18) = false :=
-  finishOpeningByOrbit 18 (by decide +kernel) (by decide +kernel) first18_mixed first18_covered
+  finishOpeningByOrbit 18 (by decide +kernel) (by decide +kernel) first18_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first19_mixed : mixedSecond (firstAt 19) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first19_covered : openingOrbitCoverage 19 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first19_checked : openingContinuation (firstAt 19) = false :=
-  finishOpeningByOrbit 19 (by decide +kernel) (by decide +kernel) first19_mixed first19_covered
+  finishOpeningByOrbit 19 (by decide +kernel) (by decide +kernel) first19_mixed (openingOrbit_complete (by decide))
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem first20_mixed : mixedSecond (firstAt 20) = false := by decide +kernel
 
 set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem first20_covered : openingOrbitCoverage 20 = false := by decide +kernel
-
-set_option maxRecDepth 100000 in
 theorem first20_checked : openingContinuation (firstAt 20) = false :=
-  finishOpeningByOrbit 20 (by decide +kernel) (by decide +kernel) first20_mixed first20_covered
+  finishOpeningByOrbit 20 (by decide +kernel) (by decide +kernel) first20_mixed (openingOrbit_complete (by decide))
 
 noncomputable abbrev rootPairCheck (hash : ℕ) (kind : Bool) := chkPairPicked rootReject [] rootBounds 0 14 1 hash 0 kind
 noncomputable abbrev rootCircuitCheck (hash : ℕ) := chkRaw rootReject [] rootBounds 0 14 1 hash 0
@@ -8924,18 +8737,10 @@ def rawNegFirstCodes : List ℕ := [
 0x10860c8604861202020211c201c2118201821142110210c200c21842104211d911d5119511d11191115111cd118d114d110d11c5118501851145110510c5188505c1058104c10441121c121411d4121011d01150120c020c11cc114c110c12081148110810c81204020411c41144110410c400c418841084060005c004c00440, 0x121e021e121a021a11da01da121611d61196121211d211921152120e020e11ce01ce118e018e114e110e160a120a060a020a15ca11ca05ca01ca158a118a058a018a154a114a150a110a14ca10ca04ca00ca120611c611861146110610c61886,
 ]
 
-def rawNegSecondCodes : List ℕ := [
-0x470c50c40e20e10c10c87485475484474454483083473453443482452442432480080570470450440530430030620420080, 0x462a2150cace1460a2050c2841610a42320d886c827313109864c807303101860c20708321c90a47524211d08a85722289104900101, 0x453a21d60a905082ab951ca8a5442a1940ca92cc95632b2518c8c546c9b58daa6d436c932498c4c526212109cec464231910cce4103, 0x485a32d652b09564a3255528a9493a31d14e887592a49520a8c5452a2a3149884c51620b8c590e48523a92108e8454241820c8e6105,
-0x484b325152927453a21d24a125482a4c325990cd956c2b5959288946423191ca8c93631b10d92489264135898c4c9824b121892a107, 0x465f4a72138c9c54e49f18f8a7c43e3ad1d28a959864b3a1992ae85632b251d08c6462a3249124c982cb161892a4853329250128109, 0x595b592c64b25a495919646491525967255c947151c96565549451915635258c953194d943190c54364ce98126069612584861a54495121418c, 0x470b8c16182e285c40ba6170c2f905e20b9313261f4b3c96790cf259b433498590c9215232a4543b305258a4a94652930365864a8c85193012582430211,
-0x472b29510a865470b285102861420b0851d98eac6563a31918a8c706303141880e2070831d88ea46523a11908a8473231914c88611c, 0x554e4175cb8e5c62e2971968c9454a31d14e887462831514a885432a2a314d886e626293109864e606283101860c2063a11cc88611e, 0x665a4251d2cc9454a4151ca0e548764331d9b0ad756b2b2118e8c6472a32098e48726b1318990e48623b12148ea4652c215d0ac8121, 0x685e3af197d09c74e327153b0f487a4359da8ed485b3ad1d68cb484b3a51928a9582a4151d58e8c54638b98590e5862bb12148ea123,
-0x471b883721e2c3468678ecf21da43367668ecd615a43ae8748ec91d5232a486390a7194ec21c872aec5214a3a9487190c31d86ba8d641d0e1a1823b0226, 0x32d81c81d71c71c61c31c974874944844740745935835731730735635535431430435925825725427325914915814810b1, 0x476876972962c71c61b21c870874860864760764830834730734630635821820825721720725621620625525425321320b2, 0x494d84c84d74c74d93993893d83983883d73973873d63d53f43d43c92c82c72c42e32b32932d91c91c81d71c71c874860b3,
-0x472a214cca93089864ba25d90e88764a225190888463a21d13269834b9bd4d286c9264131c9884b3264c026092e097243821cb28134, 0x132a48d606903487641a20d8e69824993205862b2164c026092e097243821c92809424202108e80740c9860c2e67630a19248904136, 0x321c980985974975874874940944840846744745931930935831830837735735635535431430434924824724426323320b8, 0x487c94894e84c84c74874d93993893f83d83d73973873d63d53d43943843c92c82c72c42e32b32932c91c864834631320b9,
-0x47483a5e4eb275838c1c20eae7173839d58eaa75438a1c10e925482a39510ac6533289951d98e6c634b12c85b3049824b825cd0e13a, 0x476876c83883c73873c63863d81981881d71971871d61961861d51d41d31931831e984986974974870876944944840840bc, 0x487a4a52128e90748b9c50e8ec87663aa1d58ca86563a31918a8c73631b14d886c7243931890c4c524293109864c87043921810c13d, 0x485a3ad196b29584a4251d28c9454ac9d24eb07483ab9d1ce2e7073ab1d18eaa7453aa1d10eb25572a4331d9906c73631a18d92e13f,
-0x473eb1f18faa7c53ea1f10f287843ec1725e90f494a4251d20e91738a1d25d90ec9464231d10e89734a1b25c90e49624311d892a141, 0x583c83d73c73d63c63d53c53d43c43943843d974975874964864764954854754654944844744644545934935834835730c4, 0x464c54d93c93d83c83d73c73973873d63c63d53c53d43c43d984974964864764954854754654944844744644545934930c5, 0x562aa9550a930c97643a21db26d836b9b649b0498244135c92e48726b13549e64e9824b921c92c48623b125490a47523292108e8146,
-0x48684351da0ed483a39d18e93089864ba25d90e88764a32118e89934c1a5cd90e48623b01d890a47523292108e846422a1608ae4148, 0x193cc1e5cf90f087a43421a8ed076a41c20e8e7073a31c18e93089864ba25d90e88764a225190888463a21d13269834b9b21c10e14a, 0x93a41d98eb25192849560aec5487443b21910cc7643b320d106c73439b18d0c6c9804c125c12e487043925012848404211d00e814d, 0x463e4c426292f487a4a4252909084a3a464e3074876c2b5d5908c7472a320d8e6e53621b209104c727293109864c982cb161892614f,
-0x193ec35216ccb484b325152907663a29d10e905662a29510a86559764b39d9926e73631b649ee4c8704392188ec48304191cc0e6152, 0x453e21f9cb8c5c52e2170cbd0f686a3b5a0e8e7463bc1521d90c88663b320d106c73631a18d93049704b921c92809424211d00e8155, 0x97e43e21f929c84e3a721e90d47683b520e8e7073a31c18e930c97643a21d928c8444231d10e8e7633a9194ce846422a19cc8c6158, 0x98ecbf25f90fc96e4371db92bc85e3af197929d84e42721e90b475a4251d28a949844c325d12ec87443b251908c7464c026092e15b,
-0x48591d64659a1dc7671d5c6571d1c647151d985261497425d687521d4965219476525548551d546552511945258c953194c943190c5432601de, 0x487d262898b25ec87b262497921e0879261c97625dc877261098525d4875260898325c897321c8873260697125c487021c496121847612541e2, 0x1a62c98b261c97761d5865260c97321c8873260497025c1e8,
-]
+-- Decode the retained inputs and the two primitive gates without replaying their path.
+def rawNegInputMasks : List ℕ := [0x3feffdff7fdff3fbfeffdfd7efb7f3f5fe, 0x5ff7fdff7fdffbfffddfb7df6fe7fbf1fa, 0x7fbeeff7bdfeefb7ebfbfcff9fbfefe7fdff]
+def rawNegPrimitiveCodes : List ℕ := [0x200e030c3e16eb84ba5530683b9d4e8782a950a658140dc6a341988c42121, 0x70300c2ed75b2dd2c954b9d8ea743b8d84c351a0cc42121, 0x2a341c2dd6cb84ba592a953a1a00e060a85006021c3a1d0c76419cd0472c35db0773b198f0572b118aa542990cb0371b0cc64380b85826110]
+def rawNegFlatCodes : List (List ℕ) := [[0xc183050c103033c007000b842c10a842810984241088420107841c1068418105841410484028038402620980250090023208c04100804200, 0xd3c34e0d343485d183450d103430d007360cd03320cc432f4cb832d0ca03264c943240c8c3201be02d80ae029809e02580c3cf0b0c283080, 0x7021a0840250083820c093020a0820206081022c06a01a4068819c066819808582140848210074018a062018606101b575d543530d483515, 0x98da43688e9e3a70e9c3668e9a3660d963650d923640dd03630d8a3620d852612d84a6115844610eae08b022a08a02260890222088021e08, 0x7959c5c695985651592564158e56315ae46b11aa46a12e64b912e2468119e467119a4b611964649190463918c46291ca46b8dac36a8da836, 0x921a28e7a19c866a198865a194864a18f563cd8f26b9b6c66a9b686699b64668999e6d7199a664198e66b95ac5ca972856995a45c895a056, 0xa36dcda735acc6a31a4c67319ac6b2f28b68ad9ab6b29a8ab8a99ca65aa2c96a25a4968a69c966a59898ba3ae86b23ac86aa1a88ea21a686, 0x2f66bd1ad4eb51ab46b4dab3dbc9ab169c5a516849aefdb3da8f693daee6b3b28e69b9aed6b35aad6], [0x98023228489f227489b22648a472918a44290ca42490022128049e127049a126049612504921240482720988a120908232088c2220804200, 0x501d207401cc07281c807181c407a3ca8d2a30a8b6a28a892a20a876a18a842a0ca8229c0a6e29b0a6b29a966929a0a672999664298ca622, 0x80e1e3870eda3b60ed63850e123840ece3830e0a3820e483888a202878a1c2868a182858a942a48a902a38a0c2930a082818a1e07681d807, 0x81a1e6d79a1c6869b5a6861a166851b526841a0e6939a0b082ba0ac829e0a6d892204c7931c48692184c592144849310483920c482922238, 0x7b61cdb8b222be7ae1ab862e20a872a18a85aaa2987a71c986a622888221e886a2d28a89fa07e79e1c7e69e187859f947849e107889b6268, 0x22f883f20ee7ba22d88361edd], [0x10030c050c03080304035c005800540050004c004800440440043c0438043800340430042c0428042800240320031c0318031402100110000c010c0008000400, 0x858484e48480847086027c0378035c0374035803700354036c03500368034c0348034402640264034002600260033c0238023803340230022c02280228031005, 0x50104c174c104414641464104014601460103c1438143810341430142c162c14241020101c101810141480128013101110100c100811081085f0857085607210, 0x82327e207a205e2076205a20722056206e2052206a204e204a20662462243a2432282a24262022201e201a2082227c1078105c10741058107010541754105017, 0xc210c2091f091506e409140919490a49090906092027e307a305e3076305a30723056306e3052306a304e304a30663462343a3436392a34263022301e301a30, 0x78205c2b5c20582b582054206c20502068204c2b4c204424642464204024602460203c2a3c24342430242c2428242820242020201c2018201424802280231020, 0x6c30503d50304c304830443464346430403c40343c3438343830343430342c3428342830243020301c301830143480328033103095709550953094a496027c20, 0x444e44444044604460403c4438443840344430442c4428442840244020401c40184014448042804399609940993098e49a027c3d7c305c307430583d58305430, 0x56036e0352036a034e034a0381126602660381026202620380f23a023a0380d280c280b22a022a037c4f7c405c4f5c4058407040544f5440504068404c404840, 0x50504c504850385428547e027a025e0276025a027202be02ba02b602b202ae02aa02a60256026e0252026a024e024a02a2029e027e037a035e0376035a037203, 0xa4605467506750604c60a0609c6044644460406440603c643c603864386034643460306430602c642c6024631c635c545854545450544c5448545c5058505450, 0x3470307430702c742c70287428701c835f105b10571053104f104b103b142b145f005b00570053004f004b003b042b045c605860bc60b860b460b060ac60a860, 0x3c843c8034843480308430802c842c80288428805c7b5c70587bbc70b870b470b070ac70a870a470547050704c70a0709c7044744470407440703c743c703474, 0x44944490409440903c943c903894389034943490309430902c942c907c8d5c80bc80b880b480b080ac80a880a480548050804c80a0809c804484448040844080, 0x2a767ca05ca058a070a02957294729372914290460a460a028f438a438a028d428c428b67c9f5c905890bc90b890b490b090ac90a890a49050904c90a0909c90, 0x58b470b454b450b44cb47cb078b05cb074b058b070b054b050b04cb064b460b438b47ca45ca458a470a4bca4b8a4b4a4b0a4aca4a8a4a4a42956294629362a86, 0x38d47cc478c45cc474c458c470c454c46cc450c468c44cc448c47cc078c05cc074c058c070c054c06cc050c068c04cc048c064c460c438c47cb478b45cb474b4, 0x393b391464e464e0390438fa7cd478d45cd474d458d470d454d46cd450d468d44cd448d47cd078d05cd074d058d070d054d06cd050d068d04cd048d064d460d4, 0x78f05cf058f054f06cf050f068f04cf064f460f47ce4397a396a3af43ae43ada3ac43ab43aaa3a9439546ce43944393a3a843a747ce0397b396b39506ce03940, 0x6174616c62f462ec62d462c462bc62a462946154614c61346284627461fd6170616d6150614d61306114610c7cf478f45cf458f454f46cf450f468f44cf47cf0, 0x655e654465346684667465ff657f6560655f65406530651e7d045d047504590455046d0451044d0449047d005d007500590055006d0051004d004900650461fc, 0x7270567052704e707d145d14591471145514511469144d1449147d105d10591071105510511069104d10491065fe657e656466fe66e466d466ce66b466a46694, 0x5d305930bd30b930b530b130ad30a930a53055305137513049f04af04ae04ac04ab04a907e807a805e8076805a80728056805280a1307e707a705e7076705a70, 0xa5506dff6d606ee06ed06eb06ea06e907d4d7d405d407540594d5940bd40b940b540b140ad40a940a54055406d4769706af06ad06ac06aa06a907d3079305d3b, 0x7ad05ed05ad07ec05ec05ac072c07eb05eb076b05ab07ea07aa05ea05aa07e907a905e9076905a9072907d505d5f5d5059507150bd50b950b550b150ad50a950, 0x7d7f7d707d605d6071fd717b7ef05ef05af072f07ee05ee076e05ae07ed0]]
 
 def rawNegSecondRows : List ℕ := [
 0x1aff, 0xfff1b, 0xcff2b, 0xdff38,
@@ -8974,9 +8779,31 @@ noncomputable def rawNegFirst (i : ℕ) : SearchState :=
   let block := rawNegFirstCodes.getD (i / 64) 0
   transitionFromCode 2 rawNegStart ((block >>> (16 * (i % 64))) % 65536)
 
+def selectRawNegInputs (inputs : List W) : ℕ → List W :=
+  List.rec (motive := fun _ => ℕ → List W) (fun _ => [])
+    (fun wire _ rest mask =>
+      let tail := rest (mask >>> 1)
+      if mask.testBit 0 then wire :: tail else tail) inputs
+
+noncomputable def rawNegPrimitive (root : List W) (data id : ℕ) : W × ℕ :=
+  let code := (data >>> (9*id)) % 512
+  let zero : W := ⟨0,0,0,0,3⟩
+  let a := root.getD (code % 16) zero
+  let b := root.getD ((code >>> 4) % 16) zero
+  (opW (code.testBit 8) a b, Nat.lor a.c b.c)
+
 noncomputable def rawNegSecond (i : ℕ) : SearchState :=
-  let block := rawNegSecondCodes.getD (i / 32) 0
-  transitionFromCode 7 rawNegFirst (relativeTransitionCode 7 block (i % 32))
+  let (axis, index) := if i < 247 then (0,i) else if i < 414 then (1,i-247) else (2,i-414)
+  let width := if axis = 2 then 6 else 5
+  let base := rawNegStart axis
+  let packed := ((rawNegFlatCodes.getD axis []).getD (index / 32) 0) >>> ((4+2*width) * (index % 32))
+  let mask := (rawNegInputMasks.getD axis 0) >>> (9 * (packed % 16))
+  let raw := selectRawNegInputs base.2 mask
+  let records := rawNegPrimitiveCodes.getD axis 0
+  let a := rawNegPrimitive base.2 records ((packed >>> 4) % 2^width)
+  let b := rawNegPrimitive base.2 records ((packed >>> (4+width)) % 2^width)
+  let stock := addS a.1 (addS b.1 raw)
+  (base.1 + sumc base.2 - (a.2 + b.2 + sumc (a.1 :: b.1 :: raw)), stock)
 
 def rawNegSuccessors (i : ℕ) : List ℕ := decodeDeltas 64 0 (rawNegSecondRows.getD i 0)
 
@@ -9309,7 +9136,13 @@ theorem unaryCertificates : UnaryCertificates :=
       · exact rawNegCase7
     )
 
-theorem onFinal : (∀ (gates : List PEqualNP.CircuitLowerBounds.Gate) (o : ℕ), (∀ g ∈ gates, (g.op = PEqualNP.CircuitLowerBounds.GateOp.and ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.or ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.not) ∧ g.inputs.length ≤ 2) → (∀ i j : Fin gates.length, (gates.get i).op = PEqualNP.CircuitLowerBounds.GateOp.not → (gates.get j).op = PEqualNP.CircuitLowerBounds.GateOp.not → i = j) → (∀ x : Fin 8 → Bool, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨gates, o⟩ (List.ofFn x) = decide (∃ i < ([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).length / 2, (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i) 0) false = true ∧ (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i + 1) 0) false = true)) → ∃ (gates' : List PEqualNP.CircuitLowerBounds.Gate) (o' : ℕ), (∀ g ∈ gates', (g.op = PEqualNP.CircuitLowerBounds.GateOp.and ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.or) ∧ g.inputs.length ≤ 2) ∧ gates'.length ≤ gates.length ∧ ∀ x : Fin 8 → Bool, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨gates', o'⟩ (List.ofFn x) = decide (∃ i < ([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).length / 2, (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i) 0) false = true ∧ (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i + 1) 0) false = true)) := by
+
+end inst_data
+end PEqualNP.Outside.L_meta_35240_aux
+
+open PEqualNP.Outside.L_meta_35240_aux PEqualNP.CircuitLowerBounds
+
+theorem PEqualNP.Outside.L_meta_35240 : (∀ (gates : List PEqualNP.CircuitLowerBounds.Gate) (o : ℕ), (∀ g ∈ gates, (g.op = PEqualNP.CircuitLowerBounds.GateOp.and ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.or ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.not) ∧ g.inputs.length ≤ 2) → (∀ i j : Fin gates.length, (gates.get i).op = PEqualNP.CircuitLowerBounds.GateOp.not → (gates.get j).op = PEqualNP.CircuitLowerBounds.GateOp.not → i = j) → (∀ x : Fin 8 → Bool, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨gates, o⟩ (List.ofFn x) = decide (∃ i < ([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).length / 2, (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i) 0) false = true ∧ (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i + 1) 0) false = true)) → ∃ (gates' : List PEqualNP.CircuitLowerBounds.Gate) (o' : ℕ), (∀ g ∈ gates', (g.op = PEqualNP.CircuitLowerBounds.GateOp.and ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.or) ∧ g.inputs.length ≤ 2) ∧ gates'.length ≤ gates.length ∧ ∀ x : Fin 8 → Bool, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨gates', o'⟩ (List.ofFn x) = decide (∃ i < ([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).length / 2, (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i) 0) false = true ∧ (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i + 1) 0) false = true)) := by
   intro gates o hfit hone hev
   have hf : ∀ x : Fin 8 → Bool, Circuit.eval ⟨gates, o⟩ (List.ofFn x) = f x :=
     fun x => (hev x).trans (f_graph x).symm
@@ -9335,9 +9168,3 @@ theorem onFinal : (∀ (gates : List PEqualNP.CircuitLowerBounds.Gate) (o : ℕ)
     · exact Or.inl h
     · exact Or.inr h
     · exact (hnot ⟨g, hg, h⟩).elim
-
-end inst_data
-end PEqualNP.Outside.L_meta_35240_aux
-
-theorem PEqualNP.Outside.L_meta_35240 : (∀ (gates : List PEqualNP.CircuitLowerBounds.Gate) (o : ℕ), (∀ g ∈ gates, (g.op = PEqualNP.CircuitLowerBounds.GateOp.and ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.or ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.not) ∧ g.inputs.length ≤ 2) → (∀ i j : Fin gates.length, (gates.get i).op = PEqualNP.CircuitLowerBounds.GateOp.not → (gates.get j).op = PEqualNP.CircuitLowerBounds.GateOp.not → i = j) → (∀ x : Fin 8 → Bool, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨gates, o⟩ (List.ofFn x) = decide (∃ i < ([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).length / 2, (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i) 0) false = true ∧ (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i + 1) 0) false = true)) → ∃ (gates' : List PEqualNP.CircuitLowerBounds.Gate) (o' : ℕ), (∀ g ∈ gates', (g.op = PEqualNP.CircuitLowerBounds.GateOp.and ∨ g.op = PEqualNP.CircuitLowerBounds.GateOp.or) ∧ g.inputs.length ≤ 2) ∧ gates'.length ≤ gates.length ∧ ∀ x : Fin 8 → Bool, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨gates', o'⟩ (List.ofFn x) = decide (∃ i < ([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).length / 2, (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i) 0) false = true ∧ (List.ofFn x).getD (([0, 3, 1, 4, 0, 5, 2, 5, 2, 6, 3, 6, 0, 7, 1, 7, 2, 7, 3, 7, 4, 7, 5, 7] : List ℕ).getD (2 * i + 1) 0) false = true)) :=
-  PEqualNP.Outside.L_meta_35240_aux.onFinal
