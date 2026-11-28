@@ -4837,249 +4837,136 @@ lemma look1C_step (nn aa hx hy l m g K fuel k t z : ℕ) (v : List W) :
             l m g (Nat.sub (Nat.sub k t) y) v.length z v pairsS))) true (Nat.ble v.length 1)) = _
   simp only [bR]
 
-def nextPairPred (b : ℕ) (p : XW → XW → Bool) (a c : XW) : Bool :=
-  Bool.rec (motive := fun _ => Bool) false (p a c) (Nat.beq (((a.s + c.s) % MM) % 8) b)
+noncomputable def demanded (Z : ℕ) : List W :=
+  let bank := avl [] (mz Z) (rawL [])
+  bank.filter (fun w => !Nat.beq (Nat.land (sp true (lz Z) w.s) (wst true (lz Z) bank)) 0)
 
-lemma nextPairPred_picked (p : XW → XW → Bool) (a : XW) :
-    picked (p a) (fun b => nextPairPred b p a) := by
-  intro c h
-  refine ⟨⟨((a.s + c.s) % MM) % 8, Nat.mod_lt _ (by decide)⟩, ?_⟩
-  simpa only [nextPairPred, bR, Nat.beq_refl, Bool.cond_true] using h
+lemma demanded_bound {Z L : ℕ} (enough : L < (demanded Z).length) : Imp [] Z L := by
+  classical
+  intro q hq solution
+  let existsSol : ∃ n, Sol Z0 (mz Z) (tz Z) n (C (mz Z) (WZ [] Z)) := ⟨q, solution⟩
+  obtain ⟨k, hk, t, S, hS, live⟩ := (Nat.find_spec existsSol).live
+  have leSize := le_trans hk (Nat.find_min' existsSol solution)
+  have ambient : C (mz Z) (S : Set ℕ) ⊆ C (mz Z) (WZ [] Z) := by
+    rintro x (hx | hx)
+    · exact hS hx
+    · exact Or.inr hx
+  have minimal : Min Z0 (mz Z) (tz Z) k t S :=
+    ⟨live, fun n hn smaller => Nat.find_min existsSol (lt_of_lt_of_le hn hk) (smaller.mono le_rfl ambient)⟩
+  let bank := avl [] (mz Z) (rawL [])
+  let all := (bank.map W.s).toFinset
+  obtain ⟨sorted, _, hasWire⟩ := avl_spec [] (mz Z) (rawL [])
+  have nodup : (bank.map W.s).Nodup := by
+    rw [List.Nodup, List.pairwise_map]
+    exact sorted.imp fun h => Nat.ne_of_gt h
+  have bankRep : Rep bank all := ⟨nodup, rfl⟩
+  have contained : (demanded Z |>.map W.s).toFinset ⊆ S := by
+    intro x hx
+    obtain ⟨w, hwLat, rfl⟩ := List.mem_map.mp (List.mem_toFinset.mp hx)
+    have hwMem : w ∈ bank ∧ (!Nat.beq (Nat.land (sp true (lz Z) w.s) (wst true (lz Z) bank)) 0) = true :=
+      List.mem_filter.mp hwLat
+    have nonzero : Nat.land (sp true (lz Z) w.s) (wst true (lz Z) bank) ≠ 0 := by
+      intro eq; rw [eq] at hwMem; simp at hwMem
+    obtain ⟨i,hi⟩ := Nat.exists_testBit_of_ne_zero nonzero
+    obtain ⟨hmask, hu⟩ := uq_of bankRep hwMem.1 hi
+    obtain ⟨⟨hm1,hm2,ht1,ht2⟩, _⟩ := lz_lg Z i hmask
+    obtain ⟨u, hU, sign⟩ := live.cov hm1 hm2 ht1 ht2
+    have sign := sepb_weak (pos' t) sign
+    have notZero : u ≠ 0 := by rintro rfl; simp [sepb] at sign
+    have notFull : u ≠ mz Z := by rintro rfl; simp [sepb, hm1, hm2] at sign
+    have hIn : u ∈ all := by
+      rcases hS hU with hu | hc
+      · obtain ⟨r,hr,rfl⟩ := hu
+        obtain ⟨w',hw',same⟩ := hasWire r hr notZero notFull
+        exact bankRep.mem.mpr ⟨w',hw',same⟩
+      · simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at hc
+        exact False.elim (hc.elim notZero notFull)
+    have equal : u = w.s := by
+      by_contra he
+      rw [hu.2 u hIn he] at sign
+      simp at sign
+    exact equal ▸ hU
+  have allNodup : ((demanded Z).map W.s).Nodup :=
+    nodup.sublist (List.filter_sublist.map W.s)
+  have card := Finset.card_le_card contained
+  rw [List.toFinset_card_of_nodup allNodup, List.length_map] at card
+  have sz := minimal.size.1
+  omega
 
-def nextPairS (b : ℕ) (p : XW → XW → Bool) (xs : List XW) : Bool :=
-  pairsS (nextPairPred b p) xs
+noncomputable def demandedRow (T : List (ℕ × ℕ)) (e : ℕ × ℕ) : Bool :=
+  (Nat.ble e.2 6 && Nat.ble (e.2 + 1) (demanded e.1).length) || okE [] (pr T e.1) e
 
-def nextPairN (b : ℕ) (p : XW → XW → Bool) (xs : List XW) : Bool :=
-  pairsN (nextPairPred b p) xs
-
-lemma nextPairS_picked (p : XW → XW → Bool) (xs : List XW) :
-    pairsS p xs = true → ∃ b : Fin 8, nextPairS b p xs = true :=
-  pairs_distribute _ _ (nextPairPred_picked p) _
-
-lemma nextPairN_picked (p : XW → XW → Bool) (xs : List XW) :
-    pairsN p xs = true → ∃ b : Fin 8, nextPairN b p xs = true := by
-  simp only [nextPairN, pairsN, bR]
-  cases hs : pairs p (fr xs)
-  · simp only [Bool.cond_false]
-    intro h
-    obtain ⟨b, hb⟩ := scan_picked _ _ _
-      (fun a => scan_picked _ _ _ (nextPairPred_picked p a)) h
-    refine ⟨b, ?_⟩
-    simp only [hb, Bool.cond_self]
-  · intro _
-    obtain ⟨b, hb⟩ := pairs_distribute _ _ (nextPairPred_picked p) _ hs
-    exact ⟨b, by simp only [hb, Bool.cond_true]⟩
-
-noncomputable def mvNext (NN AA HX HY bin : Nat) (F : Nat → Nat → Nat → List W → Bool) (l m g k t z : Nat) (v : List W) (y : Nat) : Bool :=
-  (fun n => Bool.rec (motive := fun _ => Bool) (prd t (fun s => nots (fun q z v => cvC NN (pos s) l v (tstC NN AA HX HY (pos s) l (Nat.sub k s) v (fun y =>
-      Bool.rec (motive := fun _ => Bool) (prd s (fun s => nots (fun q' z v => cvC NN (pos s) l v (tstC NN AA HX HY (pos s) l (Nat.sub (Nat.sub k 1) s) v (fun y =>
-          nodeC NN (F (Nat.sub k 3) s) (pos s) l m g (Nat.sub (Nat.sub (Nat.sub k 2) s) y) v.length z v (pairsQ q q'))))
-          m g (Nat.sub (Nat.sub (Nat.sub k 1) s) y) v.length z (Nat.succ q) v v)) true
-        (nodeC NN (F (Nat.sub k 2) s) (pos s) l m g (Nat.sub (Nat.sub (Nat.sub k 1) s) y) v.length z v (pairsP q)))))
-      m g (Nat.sub (Nat.sub k s) y) n z 0 v (v.filter fun a => a.s % 8 == bin))) true
-    (nodeC NN (F (Nat.sub k 1) t) (pos t) l m g (Nat.sub (Nat.sub k t) y) n z v (nextPairN bin))) v.length
-lemma prdNots_picked (t : ℕ) (f : ℕ → ℕ → ℕ → List W → Bool)
-    (m g n z q : ℕ) (e : ℕ → ℕ) (v : List W) :
-    prd t (fun s => nots (f s) m g (e s) n z q v v) = true →
-    ∃ b : Fin 8, prd t (fun s => nots (f s) m g (e s) n z q v
-      (v.filter fun a => a.s % 8 == (b : ℕ))) = true := by
-  cases t with
-  | zero => simp [prd]
-  | succ t => exact nots_some_bin (f t) m g (e t) n z q v v
-
-lemma mvNext_picked (nn aa hx hy l m g k t z : ℕ)
-    (F : ℕ → ℕ → ℕ → List W → Bool) (v : List W) (y : ℕ) :
-    mvC nn aa hx hy F l m g k t z v y = true →
-    ∃ b : Fin 8, mvNext nn aa hx hy b F l m g k t z v y = true := by
-  simp only [mvC, mvNext, bR]
-  cases hd : nodeC nn (F (Nat.sub k 1) t) (pos t) l m g
-      (Nat.sub (Nat.sub k t) y) v.length z v pairsN
-  · simp only [Bool.cond_false]
-    intro h
-    obtain ⟨b, hb⟩ := prdNots_picked t _ m g v.length z 0 _ v h
-    exact ⟨b, by simp only [hb, Bool.cond_self]⟩
-  · intro _
-    rw [nodeC_as_mode] at hd
-    obtain ⟨b, hb⟩ := nextPairN_picked _ _ hd
-    exact ⟨b, by simp only [nodeC_as_mode, hb, Bool.cond_true]⟩
-
-noncomputable def look1Next (nn aa hx hy l m g K : ℕ) (bin : ℕ) :
-    ℕ → ℕ → ℕ → ℕ → List W → Bool
-  | 0, _, _, _, _ => Nat.beq bin 0
-  | fuel + 1, k, t, z, v =>
-    cvC nn (pos t) l v (Bool.rec (motive := fun _ => Bool) (tstC nn aa hx hy (pos t) l (Nat.sub (Nat.succ k) t) v (fun y =>
-      Bool.rec (motive := fun _ => Bool)
-        (mvNext nn aa hx hy bin (lookC nn aa hx hy l m g K) l m g k t z v y) true
-        (nodeC nn (look1C nn aa hx hy l m g K fuel (Nat.sub k 1) t)
-          (pos t) l m g (Nat.sub (Nat.sub k t) y) v.length z v (nextPairS bin))))
-        (Nat.beq bin 0) (Nat.ble v.length 1))
-
-lemma look1Next_picked (nn aa hx hy l m g K fuel k t : ℕ) :
-    ∀ z, picked (look1C nn aa hx hy l m g K fuel k t z)
-      (fun b => look1Next nn aa hx hy l m g K b fuel k t z) := by
-  intro z v
-  cases fuel with
-  | zero =>
-    intro _
-    exact ⟨0, rfl⟩
-  | succ fuel =>
-    rw [look1C_step]
-    simp only [look1Next, cvC, bR]
-    cases hc : Nat.beq (covC nn (pos t) l v) l
-    · simp [hc]
-    · simp only [hc, Bool.cond_true]
-      cases hv : Nat.ble v.length 1
-      · simp only [Bool.cond_false]
-        apply tst_picked
-        intro y h
-        let f := look1C nn aa hx hy l m g K fuel (Nat.sub k 1) t
-        let e := Nat.sub (Nat.sub k t) y
-        cases hd : nodeC nn f (pos t) l m g e v.length z v pairsS
-        · have hm : mvC nn aa hx hy (lookC nn aa hx hy l m g K) l m g k t z v y = true := by
-            simpa only [f, e, hd, Bool.cond_false, Bool.or_false] using h
-          obtain ⟨b, hb⟩ := mvNext_picked nn aa hx hy l m g k t z _ v y hm
-          exact ⟨b, by simp only [hb, Bool.cond_self]⟩
-        · rw [nodeC_as_mode] at hd
-          obtain ⟨b, hb⟩ := nextPairS_picked _ _ hd
-          refine ⟨b, ?_⟩
-          simp only [nodeC_as_mode, hb, Bool.cond_true, f, e]
-      · exact fun _ => ⟨0, rfl⟩
-
-noncomputable def topPairNext (NN AA HX HY l m g K H ph k t z : ℕ)
-    (v : List W) (kind : Bool) (bin : ℕ) : Bool :=
-  Bool.rec (motive := fun _ => Bool) (tstC NN AA HX HY (pos t) l (Nat.sub (Nat.succ k) t) v (fun y =>
-    Bool.rec (motive := fun _ => Bool)
-      (Bool.rec (motive := fun _ => Bool) false
-        (mvC NN AA HX HY (lookC NN AA HX HY l m g K) l m g k t z v y) (Nat.beq ph 1)) true
-      (nodePicked NN (look1Next NN AA HX HY l m g K bin K (Nat.sub k 1) t) (pos t) l m g (Nat.sub (Nat.sub k t) y)
-        v.length z v H kind))) true (Nat.ble v.length 1)
-
-lemma topPairNext_picked (nn aa hx hy l m g K H ph k t z : ℕ) (v : List W) (kind : Bool) :
-    topPairPicked nn aa hx hy l m g K H ph k t z v kind = true →
-      ∃ b : Fin 8, topPairNext nn aa hx hy l m g K H ph k t z v kind b = true := by
-  simp only [topPairPicked, topPairNext, bR]
-  cases ht : Nat.ble v.length 1
-  · simp only [ht, Bool.cond_false]
-    apply tst_picked
-    intro y h
-    dsimp only at h ⊢
-    cases hx' : nodePicked nn (look1C nn aa hx hy l m g K K (Nat.sub k 1) t) (pos t) l m g
-        (Nat.sub (Nat.sub k t) y) v.length z v H kind
-    · simp only [hx', Bool.cond_false] at h
-      refine ⟨0, ?_⟩
-      simp only [h, Bool.cond_self]
-    · obtain ⟨b,hb⟩ := nodePicked_distribute nn (pos t) l m g (Nat.sub (Nat.sub k t) y) v.length z v H kind
-        (look1Next_picked nn aa hx hy l m g K K (Nat.sub k 1) t) hx'
-      exact ⟨b, by simp only [hb, Bool.cond_true]⟩
-  · simp only [ht, Bool.cond_true]
-    exact fun _ => ⟨0,by simp⟩
-
-noncomputable def startPairNext (NN AA HX HY l m g B K t p H ph : ℕ) (v : List W) (kind : Bool) (bin : ℕ) : Bool :=
-  Bool.rec (motive := fun _ => Bool) false (Bool.rec (motive := fun _ => Bool) false
-    (child (fun z r => topPairNext NN AA HX HY l m g K H ph K t z r kind bin) g (fun h => h v) (Nat.sub B (sumc v)))
-    (Nat.ble v.length (Nat.sub (Nat.succ K) t))) (hasP p v)
-
-lemma startPairNext_picked (nn aa hx hy l m g B K t p H ph : ℕ) (kind : Bool) :
-    picked (fun v => startPairPicked nn aa hx hy l m g B K t p H ph v kind)
-      (fun b v => startPairNext nn aa hx hy l m g B K t p H ph v kind b) := by
-  intro v
-  simp only [startPairPicked, startPairNext, child, st_eq, bR]
-  cases h : hasP p v
-  · simp [h]
-  · simp only [h, Bool.cond_true]
-    cases hb : Nat.ble v.length (Nat.sub K.succ t)
-    · simp [hb]
-    · simp only [hb, Bool.cond_true]
-      cases hz : Nat.beq (Nat.land (Nat.sub B (sumc v)) g) g
-      · simp [hz]
-      · simp only [hz, Bool.cond_true]
-        exact topPairNext_picked _ _ _ _ _ _ _ _ _ _ _ _ _ v kind
-
-noncomputable def chkPairNext (E Q : List (ℕ × ℕ)) (Z K t H ph : ℕ) (kind : Bool) (bin : ℕ) : Bool :=
-  searchInputs E Q Z K t H ph (fun nn aa hx hy l m g B p v =>
-    startPairNext nn aa hx hy l m g B K t p H ph v kind bin)
-
-lemma guardStart_picked (t H ph : ℕ) {f : List W → Bool} {g : Fin 8 → List W → Bool}
-    (pickedTest : picked f g) :
-    picked (guardStart t H ph f) (fun b => guardStart t H ph (g b)) := by
-  intro v
-  unfold guardStart
-  cases h : relevantStart t H ph v
-  · simp
-  · simpa [h] using pickedTest v
-
-lemma chkPair_next (E Q : List (ℕ × ℕ)) (Z K t H ph : ℕ) (kind : Bool)
-    (checked : ∀ b : Fin 8, chkPairNext E Q Z K t H ph kind b = false) :
-    chkPairPicked E Q Z K t H ph kind = false := by
-  rw [← chkPairFast_eq]
-  refine Bool.eq_false_iff.mpr fun h => ?_
-  simp only [chkPairFast, chkPairNext, searchInputs, frc_eq, st_eq] at h checked
-  obtain ⟨b, hb⟩ := anySub_picked _ _ _ _ _ _
-    (guardStart_picked t H ph (startPairNext_picked _ _ _ _ _ _ _ _ _ _ _ _ _ kind)) _ h
-  exact Bool.noConfusion ((checked b).symm.trans hb)
+lemma demandedAll {T U : List (ℕ × ℕ)} (h : U.all (demandedRow T) = true)
+    (hT : ∀ e ∈ T, Imp [] e.1 e.2) : ∀ e ∈ U, Imp [] e.1 e.2 := by
+  intro e he
+  have checked := List.all_eq_true.mp h e he
+  simp only [demandedRow, Bool.or_eq_true, Bool.and_eq_true] at checked
+  rcases checked with ⟨_, short⟩ | ordinary
+  · exact demanded_bound (Nat.le_of_ble_eq_true short)
+  · exact imp_okE (Or.inl rfl) ordinary (fun r hr => hT r (List.mem_of_mem_filter hr))
 
 section inst_data
 def r5 : List (ℕ × ℕ) := [(31, 1), (47, 2), (55, 1), (59, 2), (61, 1), (62, 1), (79, 2), (87, 2), (91, 4), (93, 4), (94, 1), (103, 2), (107, 2), (109, 4), (110, 2), (115, 2), (117, 2), (118, 2), (121, 2), (122, 1), (124, 1), (143, 1), (155, 2), (157, 1), (158, 1), (167, 1), (171, 2), (173, 2), (174, 4), (179, 1), (182, 2), (185, 1), (186, 2), (188, 1), (203, 1), (205, 2), (206, 1), (211, 1), (213, 1), (214, 1), (217, 2), (218, 1), (220, 1), (229, 1), (230, 2), (233, 1), (234, 1), (236, 2), (242, 1), (244, 1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma chk5 : r5.all (fun e => okE [] (pr [] e.1) e) = true := by decide +kernel
-lemma i5 : ∀ e ∈ r5, Imp [] e.1 e.2 := okAll (T := []) chk5 (by simp)
+lemma chk5 : r5.all (demandedRow []) = true := by decide +kernel
+lemma i5 : ∀ e ∈ r5, Imp [] e.1 e.2 := demandedAll (T := []) chk5 (by simp)
 def rs5 : List (ℕ × ℕ) := r5
 lemma is5 : ∀ e ∈ rs5, Imp [] e.1 e.2 := i5
 def r4 : List (ℕ × ℕ) := [(15, 4), (23, 2), (27, 5), (29, 4), (30, 3), (39, 4), (43, 3), (45, 5), (46, 5), (51, 4), (53, 2), (54, 4), (57, 4), (58, 4), (60, 3), (71, 3), (75, 5), (77, 5), (78, 4), (83, 5), (85, 5), (86, 4), (89, 5), (90, 4), (92, 4), (99, 3), (101, 5), (102, 3), (105, 5), (106, 4), (108, 5), (113, 3), (114, 4), (116, 4), (120, 2), (135, 1), (139, 4), (141, 4), (142, 4), (147, 2), (149, 1), (150, 2), (153, 4), (154, 4), (156, 3), (163, 2), (165, 2), (166, 5), (169, 4), (170, 5), (172, 5), (177, 1), (178, 4), (180, 2), (184, 2), (195, 1), (197, 2), (198, 2), (201, 4), (202, 3), (204, 4), (209, 2), (210, 3), (212, 3), (216, 2), (225, 1), (226, 2), (228, 4), (232, 2), (240, 1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma chk4 : r4.all (fun e => okE [] (pr rs5 e.1) e) = true := by decide +kernel
-lemma i4 : ∀ e ∈ r4, Imp [] e.1 e.2 := okAll (T := rs5) chk4 is5
+lemma chk4 : r4.all (demandedRow rs5) = true := by decide +kernel
+lemma i4 : ∀ e ∈ r4, Imp [] e.1 e.2 := demandedAll (T := rs5) chk4 is5
 def rs4 : List (ℕ × ℕ) := r4 ++ rs5
 lemma is4 : ∀ e ∈ rs4, Imp [] e.1 e.2 := apI i4 is5
 def r3 : List (ℕ × ℕ) := [(7, 5), (11, 6), (13, 7), (14, 7), (19, 6), (21, 5), (22, 5), (25, 7), (26, 7), (28, 6), (35, 5), (37, 6), (38, 6), (41, 6), (42, 6), (44, 8), (49, 5), (50, 7), (52, 5), (56, 5), (67, 6), (69, 6), (70, 5), (73, 7), (74, 7), (76, 7), (81, 6), (82, 7), (84, 7), (88, 5), (97, 6), (98, 5), (100, 6), (104, 6), (112, 5), (131, 4), (133, 4), (134, 5), (137, 7), (138, 7), (140, 7), (145, 4), (146, 5), (148, 4), (152, 5), (161, 4), (162, 6), (164, 6), (168, 6), (176, 4), (193, 4), (194, 4), (196, 5), (200, 5), (208, 4), (224, 4)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma chk3 : r3.all (fun e => okE [] (pr rs4 e.1) e) = true := by decide +kernel
-lemma i3 : ∀ e ∈ r3, Imp [] e.1 e.2 := okAll (T := rs4) chk3 is4
+lemma chk3 : r3.all (demandedRow rs4) = true := by decide +kernel
+lemma i3 : ∀ e ∈ r3, Imp [] e.1 e.2 := demandedAll (T := rs4) chk3 is4
 def rs3 : List (ℕ × ℕ) := r3 ++ rs4
 lemma is3 : ∀ e ∈ rs3, Imp [] e.1 e.2 := apI i3 is4
 def r2 : List (ℕ × ℕ) := [(3, 8), (5, 8), (6, 8), (9, 10), (10, 9), (12, 10), (17, 8), (18, 9), (20, 8), (24, 8), (33, 8), (34, 9), (36, 9), (40, 9), (48, 8), (65, 9), (66, 8), (68, 9), (72, 9), (80, 8), (96, 8), (129, 7), (130, 8), (132, 8), (136, 9), (144, 7), (160, 8), (192, 7)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma chk2 : r2.all (fun e => okE [] (pr rs3 e.1) e) = true := by decide +kernel
-lemma i2 : ∀ e ∈ r2, Imp [] e.1 e.2 := okAll (T := rs3) chk2 is3
+lemma chk2 : r2.all (demandedRow rs3) = true := by decide +kernel
+lemma i2 : ∀ e ∈ r2, Imp [] e.1 e.2 := demandedAll (T := rs3) chk2 is3
 def rs2 : List (ℕ × ℕ) := r2 ++ rs3
 lemma is2 : ∀ e ∈ rs2, Imp [] e.1 e.2 := apI i2 is3
 def r1 : List (ℕ × ℕ) := []
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma chk1 : r1.all (fun e => okE [] (pr rs2 e.1) e) = true := by decide +kernel
-lemma i1 : ∀ e ∈ r1, Imp [] e.1 e.2 := okAll (T := rs2) chk1 is2
+lemma chk1 : r1.all (demandedRow rs2) = true := by decide +kernel
+lemma i1 : ∀ e ∈ r1, Imp [] e.1 e.2 := demandedAll (T := rs2) chk1 is2
 def rs1 : List (ℕ × ℕ) := r1 ++ rs2
 lemma is1 : ∀ e ∈ rs1, Imp [] e.1 e.2 := apI i1 is2
 def pin4 : List (ℕ × ℕ) := [(270, 3), (278, 3), (282, 5), (284, 5), (294, 2), (298, 3), (300, 3), (306, 3), (308, 3), (312, 3), (326, 3), (330, 5), (332, 5), (338, 5), (340, 5), (344, 5), (354, 3), (356, 3), (360, 3), (368, 3), (390, 2), (394, 3), (396, 3), (402, 3), (404, 3), (408, 3), (418, 2), (420, 2), (424, 1), (432, 1), (450, 3), (452, 3), (456, 3), (464, 3), (480, 1), (525, 2), (533, 1), (537, 3), (540, 3), (549, 1), (553, 3), (556, 3), (561, 2), (564, 3), (568, 3), (581, 2), (585, 2), (588, 2), (593, 1), (596, 3), (600, 1), (609, 1), (612, 3), (616, 1), (624, 2), (645, 1), (649, 3), (652, 3), (657, 2), (660, 3), (664, 3), (673, 2), (676, 3), (680, 3), (688, 4), (705, 1), (708, 3), (712, 1), (720, 2), (736, 2), (1035, 2), (1043, 2), (1049, 2), (1050, 2), (1059, 1), (1065, 3), (1066, 3), (1073, 1), (1074, 3), (1080, 1), (1091, 1), (1097, 3), (1098, 3), (1105, 1), (1106, 3), (1112, 1), (1121, 2), (1122, 3), (1128, 3), (1136, 2), (1155, 1), (1161, 3), (1162, 3), (1169, 1), (1170, 3), (1176, 1), (1185, 2), (1186, 3), (1192, 3), (1200, 2), (1217, 2), (1218, 3), (1224, 3), (1232, 2), (1248, 4), (2055, 2), (2067, 3), (2069, 2), (2070, 1), (2083, 3), (2085, 3), (2086, 3), (2097, 2), (2098, 3), (2100, 1), (2115, 2), (2117, 3), (2118, 1), (2129, 3), (2130, 3), (2132, 3), (2145, 2), (2146, 1), (2148, 3), (2160, 1), (2179, 4), (2181, 4), (2182, 2), (2193, 4), (2194, 3), (2196, 2), (2209, 4), (2210, 3), (2212, 3), (2224, 2), (2241, 4), (2242, 2), (2244, 3), (2256, 3), (2272, 2), (4103, 1), (4107, 3), (4109, 2), (4110, 2), (4131, 1), (4133, 2), (4134, 2), (4137, 2), (4138, 2), (4140, 3), (4163, 2), (4165, 1), (4166, 1), (4169, 3), (4170, 3), (4172, 2), (4193, 1), (4194, 1), (4196, 2), (4200, 2), (4227, 2), (4229, 1), (4230, 1), (4233, 3), (4234, 3), (4236, 2), (4257, 1), (4258, 1), (4260, 2), (4264, 2), (4289, 2), (4290, 2), (4292, 1), (4296, 3), (4320, 1), (8199, 2), (8203, 3), (8205, 3), (8206, 5), (8211, 1), (8213, 1), (8214, 3), (8217, 2), (8218, 3), (8220, 3), (8259, 1), (8261, 1), (8262, 3), (8265, 2), (8266, 3), (8268, 3), (8273, 2), (8274, 3), (8276, 3), (8280, 2), (8323, 2), (8325, 2), (8326, 5), (8329, 3), (8330, 5), (8332, 5), (8337, 1), (8338, 3), (8340, 3), (8344, 3), (8385, 1), (8386, 3), (8388, 3), (8392, 3), (8400, 3), (16391, 3), (16395, 3), (16397, 5), (16398, 3), (16403, 3), (16405, 5), (16406, 3), (16409, 5), (16410, 3), (16412, 5), (16419, 3), (16421, 3), (16422, 3), (16425, 3), (16426, 2), (16428, 3), (16433, 3), (16434, 3), (16436, 3), (16440, 3), (16515, 1), (16517, 2), (16518, 1), (16521, 3), (16522, 2), (16524, 3), (16529, 2), (16530, 1), (16532, 2), (16536, 3), (16545, 1), (16546, 2), (16548, 1), (16552, 2), (16560, 1), (32775, 2), (32779, 2), (32781, 2), (32782, 3), (32787, 2), (32789, 2), (32790, 3), (32793, 2), (32794, 3), (32796, 3), (32803, 2), (32805, 2), (32806, 3), (32809, 2), (32810, 3), (32812, 3), (32817, 2), (32818, 3), (32820, 3), (32824, 3), (32835, 3), (32837, 3), (32838, 2), (32841, 3), (32842, 2), (32844, 2), (32849, 3), (32850, 2), (32852, 2), (32856, 2), (32865, 3), (32866, 2), (32868, 2), (32872, 2), (32880, 2)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma v4 : pin4.all (fun e => okE [] (pr rs1 e.1) e) = true := by decide +kernel
-lemma h4 : ∀ e ∈ pin4, Imp [] e.1 e.2 := okAll (T := rs1) v4 is1
+lemma v4 : pin4.all (demandedRow rs1) = true := by decide +kernel
+lemma h4 : ∀ e ∈ pin4, Imp [] e.1 e.2 := demandedAll (T := rs1) v4 is1
 def pv4 : List (ℕ × ℕ) := rs1 ++ pin4
 lemma hv4 : ∀ e ∈ pv4, Imp [] e.1 e.2 := apI is1 h4
 def pin3 : List (ℕ × ℕ) := [(262, 4), (266, 6), (268, 6), (274, 6), (276, 6), (280, 6), (290, 4), (292, 4), (296, 4), (304, 4), (322, 6), (324, 6), (328, 6), (336, 6), (352, 4), (386, 4), (388, 4), (392, 4), (400, 4), (416, 2), (448, 4), (517, 2), (521, 4), (524, 4), (529, 3), (532, 4), (536, 4), (545, 3), (548, 4), (552, 4), (560, 5), (577, 2), (580, 4), (584, 2), (592, 3), (608, 3), (641, 3), (644, 4), (648, 4), (656, 5), (672, 5), (704, 3), (1027, 2), (1033, 4), (1034, 4), (1041, 2), (1042, 4), (1048, 2), (1057, 3), (1058, 4), (1064, 4), (1072, 3), (1089, 3), (1090, 4), (1096, 4), (1104, 3), (1120, 5), (1153, 3), (1154, 4), (1160, 4), (1168, 3), (1184, 5), (1216, 5), (2051, 5), (2053, 5), (2054, 3), (2065, 5), (2066, 4), (2068, 3), (2081, 5), (2082, 4), (2084, 4), (2096, 3), (2113, 5), (2114, 3), (2116, 4), (2128, 4), (2144, 3), (2177, 7), (2178, 5), (2180, 5), (2192, 5), (2208, 5), (2240, 5), (4099, 3), (4101, 2), (4102, 2), (4105, 4), (4106, 4), (4108, 3), (4129, 2), (4130, 2), (4132, 3), (4136, 3), (4161, 3), (4162, 3), (4164, 2), (4168, 4), (4192, 2), (4225, 3), (4226, 3), (4228, 2), (4232, 4), (4256, 2), (4288, 3), (8195, 3), (8197, 3), (8198, 6), (8201, 4), (8202, 6), (8204, 6), (8209, 2), (8210, 4), (8212, 4), (8216, 4), (8257, 2), (8258, 4), (8260, 4), (8264, 4), (8272, 4), (8321, 3), (8322, 6), (8324, 6), (8328, 6), (8336, 4), (8384, 4), (16387, 4), (16389, 6), (16390, 4), (16393, 6), (16394, 4), (16396, 6), (16401, 6), (16402, 4), (16404, 6), (16408, 6), (16417, 4), (16418, 4), (16420, 4), (16424, 4), (16432, 4), (16513, 3), (16514, 2), (16516, 3), (16520, 4), (16528, 3), (16544, 2), (32771, 3), (32773, 3), (32774, 4), (32777, 3), (32778, 4), (32780, 4), (32785, 3), (32786, 4), (32788, 4), (32792, 4), (32801, 3), (32802, 4), (32804, 4), (32808, 4), (32816, 4), (32833, 4), (32834, 3), (32836, 3), (32840, 3), (32848, 3), (32864, 3)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma v3 : pin3.all (fun e => okE [] (pr pv4 e.1) e) = true := by decide +kernel
-lemma h3 : ∀ e ∈ pin3, Imp [] e.1 e.2 := okAll (T := pv4) v3 hv4
+lemma v3 : pin3.all (demandedRow pv4) = true := by decide +kernel
+lemma h3 : ∀ e ∈ pin3, Imp [] e.1 e.2 := demandedAll (T := pv4) v3 hv4
 def pv3 : List (ℕ × ℕ) := pv4 ++ pin3
 lemma hv3 : ∀ e ∈ pv3, Imp [] e.1 e.2 := apI hv4 h3
 def pin2 : List (ℕ × ℕ) := [(258, 7), (260, 7), (264, 7), (272, 7), (288, 5), (320, 7), (384, 5), (513, 4), (516, 5), (520, 5), (528, 6), (544, 6), (576, 4), (640, 6), (1025, 4), (1026, 5), (1032, 5), (1040, 4), (1056, 6), (1088, 6), (1152, 6), (2049, 8), (2050, 6), (2052, 6), (2064, 6), (2080, 6), (2112, 6), (2176, 8), (4097, 4), (4098, 4), (4100, 3), (4104, 5), (4128, 3), (4160, 4), (4224, 4), (8193, 4), (8194, 7), (8196, 7), (8200, 7), (8208, 5), (8256, 5), (8320, 7), (16385, 7), (16386, 5), (16388, 7), (16392, 7), (16400, 7), (16416, 5), (16512, 4), (32769, 4), (32770, 5), (32772, 5), (32776, 5), (32784, 5), (32800, 5), (32832, 4)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma v2 : pin2.all (fun e => okE [] (pr pv3 e.1) e) = true := by decide +kernel
-lemma h2 : ∀ e ∈ pin2, Imp [] e.1 e.2 := okAll (T := pv3) v2 hv3
+lemma v2 : pin2.all (demandedRow pv3) = true := by decide +kernel
+lemma h2 : ∀ e ∈ pin2, Imp [] e.1 e.2 := demandedAll (T := pv3) v2 hv3
 def pv2 : List (ℕ × ℕ) := pv3 ++ pin2
 lemma hv2 : ∀ e ∈ pv2, Imp [] e.1 e.2 := apI hv3 h2
 def pin1 : List (ℕ × ℕ) := [(256, 8), (512, 7), (1024, 7), (2048, 9), (4096, 5), (8192, 8), (16384, 8), (32768, 6)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma v1 : pin1.all (fun e => okE [] (pr pv2 e.1) e) = true := by decide +kernel
-lemma h1 : ∀ e ∈ pin1, Imp [] e.1 e.2 := okAll (T := pv2) v1 hv2
+lemma v1 : pin1.all (demandedRow pv2) = true := by decide +kernel
+lemma h1 : ∀ e ∈ pin1, Imp [] e.1 e.2 := demandedAll (T := pv2) v1 hv2
 def pv1 : List (ℕ × ℕ) := pv2 ++ pin1
 lemma hv1 : ∀ e ∈ pv1, Imp [] e.1 e.2 := apI hv2 h1
 def rStrong : List (ℕ × ℕ) := [(1, 12), (2, 12), (4, 12), (8, 13), (16, 11), (32, 11), (64, 11), (128, 11)]
@@ -6619,12 +6506,132 @@ lemma strongRow8 : Imp [] 8 13 := by
     · exact one_e8 e8_11
     · exact one_e8 e8_12
 
+def oneQ : List (ℕ × ℕ) := (pr pv1 1).filter (fun e => e.2 ≥ 4)
+
+def oneInp : List W := [
+  ⟨0x1f7f7000001f000000000000000000000000000000000000000000000000000000000000000000000000000004894000a000001400000280000a000050000000000010000000010000000000000000008000040000000010000000000000000000000000000000fbe0000000fbf0007c003f00043e0001f8003e0010000008fc0010f80043f000421000004000020000203e00b56b0a85fde2a8bfbc5517b8885fdcc2fee60000000000000000000000000000000000000000000000000000000000000000004841900118312c7, 0x2000000000000042108400004210840000000000000000008421084000000000000000000040000000, 0x10000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000, 0x10000000020000000002000000000000042108400004210840000000000000000008421084000000000000000000040000000, 3⟩,
+  ⟨0x1f7f700000007fdb8ff6e7feb8e7fe730000000000000000000000000000000000000000000000000000000016ad60009e000013c00002600009e0004f001258b02857c00240217c0000000000000000bc0005e000000017800000000000000000000000000000f818000000020ec043b020f40721f018070001c0000000000380080700200e00200000002000010000000180b56b00000000000000000000000000000000dac5856abfbc5b018bfb98000000000000000000000000000000000000000000004c4992011090681, 0x20000000000100000000000040000021084000002108421080000000008000000210842000000000000002000000, 0x800000001084210000000000000210800000000000000000000000000000000000000000000000000000000000000000000, 0x800000021084210000100000000210840000021084000002108421080000000008000000210842000000000000002000000, 3⟩,
+  ⟨0x7fdb8ff6e000000000003fedc7fb73800001c0000000000000000000000000000000000000001200015019a0000330000050000198000cc01b50a00006300000006300000001224090003340019a000000066000000000000000000000000000008203000000830e186386108180110301846c311b1c00000e80380080700200e0110000001000008000102030b0000a85fde2000000000000000000000000dac580000000000000000000000d1a16c085fbcc2fde60000000000000000000004a45018018b160e, 0x1000000000008000000000002000020000200002100000004210800000400000200000108420000000000100000, 0x40000000000000800000000000000000000000000000000000000000000000000000000000000000000000000000000000, 0x40000001000000800008000000000002000020000200002100000004210800000400000200000108420000000000100000, 3⟩,
+  ⟨0x7fdb800007feb8e000003fedc000038000001ff7a38000007fdf0e72000000000000000000001024011015141402a482a077000152800a94185800ac05248360005250000001a002d8002a280151418c00054900000000000000000000000000002080000000224e00000024d007000001246000001c00000052241c000000c490739000000000000000000800816008800000a000001517b8800000000000c2c0056000001b0000000000000d0016c000000000000c600000000000000000004204928028b044b, 0x4000840000000084200800000021084210842008001084010042100001000000800008001000210000000400, 0x100000000000002108421000000042108400000000000000000000000000000000000000000000000000000000000000, 0x100000004000842108421084200842108421084210842008001084010042100001000000800008001000210000000400, 3⟩,
+  ⟨0x7feb807fe7000000000000000000000000000007fdf007000000f000000000700000020200006040000c08220220100608003048008102041808300301810000000000208100c08006048840801812000000000000000000000000000082180000008120c048321d0c023a1800826020984000002040d04081a1094b803800000780000000038021801030000000000000011000008000002fee600c18102000018018000000000010210c08000002fde6c60c0bf79800000000000080d938120a1080, 0x10000000001000000000000400080000040000020080200802100000004000002000020004010800000001, 0x400000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000, 0x400000010000000001004000000000400080000040000020080200802100000004000002000020004010800000001, 3⟩,
+  ⟨0x3fedc7fb700000001ff7a39fef4e000000000000000000000000000000000140019815003700001400001b0000d80900008500370000000360000001a340000003300019810810006e00000000000000000000000000004110800000408884122108604208c091466229988000000063251c664a71081800800000080000000008110804000a000000a8bfbc400000000000000000d800056abfbc400000000000000d1a000000000000000c60c0bf798000000000000e4482002820685, 0x80000000000400000210000100001080010000008420004200042000020000010000100001084000000008000, 0x2000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000, 0x2000000080000040000400000210000100001080010000008420004200042000020000010000100001084000000008000, 3⟩,
+  ⟨0x1ff7a01fef407fdf0e0000000f0000700000000000000000001c11000682800601000390001c00000081000681201000720000008102401000390001c18018000d0000000000000000000000000000104a000000102450091402150104320811480452080000044ab400556800a6d07000000078000380000004a0000800000000880000140000085fdcc000000204040800001b018bfb9800000c18160085fbcc00000c00c00000000000000000020c90811010608, 0x200000000020000010800008021000000800100401000010840100000080000040000400080200800000020, 0x8000000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000, 0x8000000200000000020080010800008021000000800100401000010840100000080000040000400080200800000020, 3⟩]
+
+def oneM : ℕ := 0x1f7f7000001f7fdb8ff6e7feb8e7fe733fedc7fb73800001dff7a39fef4e7fdf0e7200000f000070000707f716ad6150bfbc5517f78aa2f7110bfb985fdcdb58b0ad57f78b60317f73000001a342d810bf7985fbcd8c1817ef3000000000000000000000000000fbfb800000fbfedc7fb73ff5c73ff399ff6e3fdb9c00000effbd1cff7a73fef8739000007800038000383fb8b56b0a85fde2a8bfbc5517b8885fdcc2fee6dac5856abfbc5b018bfb9800000d1a16c085fbcc2fde6c60c0bf798000000000004e4d938138b16cf
+
+def oneG : ℕ := 0x108421084210842108421084210842108421084210842108421084210842108421084210842108421084210842108421084210
+
+def oneB : ℕ := 0x17a5ef3bdef7ad6b7bde96b5ad6bded6b5ef7bdef7bdef7bded6b5ad6b5ef6bded7bdef4bdeb5a56b6ad6d4b5695b52539c673
+
+def oneL : ℕ := 0xfbfb800000fbfedc7fb73ff5c73ff399ff6e3fdb9c00000effbd1cff7a73fef8739000007800038000383fb8b56b0a85fde2a8bfbc5517b8885fdcc2fee6dac5856abfbc5b018bfb9800000d1a16c085fbcc2fde6c60c0bf79800000000000000000000000000
+
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma strongChecked1 : okE [] (pr pv1 1) (1,12) = true := by decide +kernel
+lemma oneInp_eq : avl (PZ oneQ) (mz 1) (rawL []) = oneInp := Eq.refl oneInp
 
-lemma strongRow1 : Imp [] 1 12 :=
-  imp_okE (Or.inl rfl) strongChecked1 (fun e he => hv1 e (List.mem_of_mem_filter he))
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneM_eq : mz 1 = oneM := Eq.refl oneM
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneG_eq : pL (oneQ.map fun _ => 16) = oneG := Eq.refl oneG
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneB_eq : pL (oneQ.map fun e => 16 + (11 - e.2)) = oneB := Eq.refl oneB
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneL_eq : lz 1 = oneL := Eq.refl oneL
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneInputs (d : Bool) : allInputsNeeded I.NN d oneL oneInp 0 = true := by
+  cases d <;> decide +kernel
+
+noncomputable def oneFast (t H ph : ℕ) : Bool :=
+  guardStart t H ph (startvC I.NN I.AA I.HX I.HY oneL oneM oneG oneB 11 t 0 H ph) oneInp
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneFast_eq (t H ph : ℕ) : chk [] oneQ 1 11 t H ph = oneFast t H ph := by
+  rw [← chkFast_eq]
+  simp only [chkFast, searchInputs, frc_eq, st_eq, oneInp_eq, oneM_eq, oneG_eq, oneB_eq, oneL_eq]
+  change anySubC I.NN (pos t) oneL oneInp 0 _ = _
+  rw [anySub_allInputs (oneInputs (pos t))]
+  rfl
+
+def oneCases : List (ℕ × ℕ) := [(0x2000000000000010000000000000400000000000, 0), (0x800000080000000000000000000000000000000000000000020, 0), (0x800000080000000000000000000000000000000400000, 0), (0x40004000000000000001000000000000000000, 0), (0x8800000000000000000000000000000000000000000008000, 0), (0x200000020400001000000100008000000000, 0), (0x3ff7f77ff77fffdf3fdfbffffdfbefffeffefffeffbf7fffbf7fdf, 1)]
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneFull : mFull oneCases = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma onePOk : pOk 1 oneQ = true := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneBranch0 : oneFast 0 0x2000000000000010000000000000400000000000 0 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneBranch1 : oneFast 0 0x800000080000000000000000000000000000000000000000020 0 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneBranch2 : oneFast 0 0x800000080000000000000000000000000000000400000 0 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneBranch3 : oneFast 0 0x40004000000000000001000000000000000000 0 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneBranch4 : oneFast 0 0x8800000000000000000000000000000000000000000008000 0 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneBranch5 : oneFast 0 0x200000020400001000000100008000000000 0 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneBranch6 : oneFast 0 0x3ff7f77ff77fffdf3fdfbffffdfbefffeffefffeffbf7fffbf7fdf 1 = false := by decide +kernel
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma oneRest : (List.range' 1 11).all (fun t => !(oneFast t FF 1)) = true := by decide +kernel
+
+lemma strongRow1 : Imp [] 1 12 := by
+  apply imp_of (Or.inl rfl) onePOk (by decide)
+  · intro e he
+    unfold oneQ pr at he
+    exact hv1 e (List.mem_of_mem_filter (List.mem_of_mem_filter he))
+  · right
+    intro t ht
+    by_cases hzero : t = 0
+    · subst t
+      refine ⟨oneCases, oneFull, fun p hp => ?_⟩
+      simp only [oneCases, List.mem_cons, List.not_mem_nil, or_false] at hp
+      rw [oneFast_eq]
+      rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+      · exact oneBranch0
+      · exact oneBranch1
+      · exact oneBranch2
+      · exact oneBranch3
+      · exact oneBranch4
+      · exact oneBranch5
+      · exact oneBranch6
+    · have hmem := (List.mem_range'_1).mpr (show 1 ≤ t ∧ t < 1+11 from ⟨by omega, by omega⟩)
+      have hcheck := List.all_eq_true.mp oneRest t hmem
+      have result : oneFast t FF 1 = false := Bool.not_eq_true'.mp hcheck
+      refine ⟨[(FF,1)],ffull,fun p hp => ?_⟩
+      simp only [List.mem_singleton] at hp
+      subst hp
+      rw [oneFast_eq]
+      exact result
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
@@ -7106,38 +7113,38 @@ noncomputable def secondAt (i : ℕ) : SearchState :=
 
 
 def successorCodes (row : ℕ) : List ℕ :=
-  (List.range (row % 64)).map fun i => (row >>> (6 + 19 * i)) % 524288
+  (List.range (row % 64)).map fun i => (row >>> (6 + 16 * i)) % 65536
 
 set_option maxRecDepth 100000 in
 def secondSuccessorsList : List ℕ := [
-  0xe6031d005a880a3a012160205403b9006c000b1e011ac018a802c2003a6000d,
-  0xd3053a80a2c413cd0266b04aea093481192822ef04396081d40f9381e4803a1c070cc0dfa01aa0032cc0617c0b928166f02a2005350099e81206023620408007f000ea901ba6001e,
-  0x174102ec1fcc03e8107aa40f1701ddc83a0c073b60e2dc1bb08361306be00d36c19b28324d062180c16417dd82e2405bd00b260158382ae001d520359,
-  0xf2135e8262b84b400952a125c4240d847af08d341149022060431508488104d,
-  0xc433190650f0c9e618c4031620611a0c19c17f142f3f05d4d0b85216f382d40059670b0a415f5c2b5f8557e0a99014da429190515f0a08c13c3c2722041070544003dc,
-  0x3083d51879800f1121dd683b32075c10e9de1cf78395d071160e1f01bf8c373686d140d8c21ad7835618692c0d1e019d18278784e98057620418,
-  0xb4435f885791089020f24413d88162101741fde43f6307dc30f9ac1ecc,
-  0x5c1382e26c604d1d099f01304625f644b55095f91296824d9049198910f1216823d98472688d381194a22d904558889ae1103021f583d96068f00cebe1409016f402c3d0240c045e,
-  0x3d456fb0acc3157582aa3454c38a8e414e6e29b7452c38a4391461628a4050bc0a03713f0827a044e8c087c30d2d2148c828dd82e10029a804d8,
-  0x80179022ed785d238b918170442ddfc5b668b5a1168fa2ced8596d8b1a1160262bf34574089dae111861f178356405315084de0556,
-  0x1063121061b08c24a1833e301ec5f928be5617b0827ac444e307d610d6b20bcd,
-  0x6c35cdc6b0a0d5f81a82a34f24690f8d1d31a10633d4867170cdd31999832e1465530c96c190ae31c0c63620c55617b9a2b8dc4fb208a790fc281b1f82a060305f02e4a059d,
-  0xee39560721a8e33e1c41e38464703b0df931bcde377d06e630dbad1b5a4366606c018c6c418a262bde0505288bba0ff7e1543021a6831a0032cc0619,
-  0x24076138ebdc1d5563a4c4746f0e7341cd20285b436eb85624088ca0c8c,
-  0x13c7d050f90b1f1c63df307b4e8f5a71e8ae3cc9879238f1021e14e3bd6477200ed341cda4366606c2b8c7db163422c02c511c08ce30dca415e6822ed83333037e8069c,
-  0x17904f8207c240af0808f1006c1fe963f85c7ede0fc6e1f6803b6b46d530c96c1916c2c93446b1080f80dece162bc23780344803a1c0717,
-  0xe0871c90d16219f442f2c8510909d52110a41d64836d1056e1f6b23bb7873e30dbcc1970a328e451b308e7b1022c1c2002c898352703d840058,
-  0x431166722a8845134898f112282230a4420c87ed105bc1f94e3bcc4747a0dcd31984a2fa1c525a08fc91059c1686c23b08367503e2a0097,
-  0x3708f6e91dba239d046e8c8d3a1197e2305c45e0c878b8fd471e2043c1bc6e970cd7b17efa2cf745287890ba0e25216dc4245b837cb040d600d8,
-  0xa92516249bc48f1c915112104240a447d6483258fe261e5563a64c6f290ce9f181422d0cc48a4083de0e49a1725424ed838ef0431e0117,
-  0x1b12b17255f04a724940f927d324ca447cb88bc29076c1feae3cf7075418cfcd16a6e29990493c884ef0e78a179f82e8603925045800157,
-  0x390968b12c042410a44078803b0df7f16dc829f043a5c83ad2046e4018c,
-  0xcb2690c4ce1c9954931642609a4bc78970b12c1f24fa649a8890bf118282224242754845e101a71e8323807c68e98d02216f0e2a3e44a5a093640ea34183382fae03b750482a01de,
-  0x469375a26c864d4789764928742323c44b2c854e8f5271d61e3845469e48d2181711a2a6a84adf8855a0ec2018b1030a903c6b04a160217,
-  0xab275584e6249c219354d25ff04a71c917411ba32349a44fe885f0902cc1ec7c38be06a250c147173582a88c4bec896890efe618d00254083d9a04c74025a,
-  0x3089dc49385a26d524c590986f123ba2388845058867c103e31ee6a38c506ab08c25e175862ace84cf8098800f01e1915c25cc03eb104ea20298,
-  0x1ea4f2b09cc693787265c84b45c950b124dd23ace454e486858f8901d8b0390dc6b420c381177ec2b0604d16886a30f264195e8265d83fd4050e802d9,
-  0xf5279844eeac9d65934862666c4ac5492ee11e8622c70438bc82278fa0a1f2ee394d86bc18c480179ea2b5704e0b89bc20f462199e426dd040d3052e6031a]
+  0x34031e02cc02b8025c023401ea01ac0176012800c800a80060000d,
+  0x300a5a0a0809f409980970092608e808b20864080407e4079a0750070006f40698064e060805fc05bc0564050004ca04a40450040603fc03980360001e,
+  0x1c10060ff20fa00f440f1c0ed20e940e700e220dc20da20d7a0d200ce60cb80c680c120bea0bb40b500b3a0af00abc03980359,
+  0x2a1354130212ee12ac125e123c11ca11ae1174110810f610a6104d,
+  0xa19b21960190e18f218b0184c180a17c41782174c173c16dc16bc1668160e15d415a61556151614fc1498147c140e13e813a610700a8603dc,
+  0x141ebc1e6a1e181dfa1d941d4a1d0c1cd61c881c481c321bd81b9e1b601b0a1ae01aa21a6c1a0819ce13e813ba0ad00418,
+  0x2e21ac217c210820d820b8206420221fd21fba1f521f121ecc,
+  0x1c272826d226b22640262025ec2590255c252824e024aa245c243a23dc2388236c230622f4229e2274223621d21eec1a0819fc14340b500b0a04a4045e,
+  0x142b7c2b1a2ac82aba2a442a3829fa29b62956293628c8288e2860281027f82790277621e21a7c1498146a0ba4050004d8,
+  0x22f2a2ed82e862e682e022df62db82d562d082ce02c902c462c1e2bce2b90277422121f201a9614f610bc0556,
+  0x2a311430c230ae306c301e2ffc2f842f78279e227a1f4a1ad20bcd,
+  0x235ea35983546352a34e834843442343833c433b43354333632f432aa3260320631e8319e31442f4e2b9027f422921fa01b1615280c0805fc059d,
+  0x12397a392838d638b83852380837d437863764370636f036a036563628319e315e2be0280622e21fe6154810f80c58064e0619,
+  0x283b263af63a823a523a3239c2398e285e1b5415b411260c8c,
+  0x2c3eb83e623e103dfc3da03d783d303cfa3ca03c6c3c0c3bec3b983b4239a03656360631d02c462c0828ac23181b8e15ee11600cc006f4069c,
+  0x24412a40d84094404a400c3fe63f883f663f083ed83b7036aa326032202c88236420321be8160a11ba0d1a07500717,
+  0x2843924340432c42d042aa4268422041fc418e41483eec3bb239c636f632f432b628dc23b820481c3c16620d6407a80058,
+  0x845b0455e450c44ee4488447c440e43ce41663f0c3bd23a243714333c2f96293a23d8209c16bc11c20d8407c80097,
+  0x2847924740472046ec46904668462045ce43c83f603c6c3c063774335e2fc82cf6295c24081c7c16de12220de4082800d8,
+  0x84970490e48fa48b6486c482e47fc41a63fba3c823a54378433ac30162d2a244820d61c8c172c12700e3208760117,
+  0x2c4ad64ab04a544a2e49ec49ae47e045e041cc3ff03cf63ab833f82d7a29a024bc210c1cc4178217540e6808ac0157,
+  0x144b604b2c483c440a400837f62db829ca1d120ea608ea018c,
+  0x284d344cde4c804c4c4c384bdc4ba04b2e49ec49b648684608446a4268421440783d123804344234022dc42a1c252824d41d4c180a17dc0ef0093401de,
+  0x164df24da04d5c4b944a10466e449042a03d663af8386a34e834a82e3a2a50256c217a1db218b018440f18095c0217,
+  0x384ea24e504e204d784bf04a7a48a046ec468c44ec42d840bc3d963886352e30462e482aa025ec25981dce18ee12a00f7409b8025a,
+  0xc4ed04e324d804c4c4c0e48c0471e4500432a40d03de838d8354230982e9a2af22640262a1e20190212f20f8809cc0298,
+  0x2e4f224e564dde4c944b564ab049124770455243623e283b3a392a359430ea2efc2b1226ae21bc1e72195413060fda0a1e02d9,
+  0x2e4f0c4ef84ea84d344cec4ac84968478845a843a4412c3eb83e52394235ea31022f142b5c272826d41e8a19aa135c10300a74031a]
 
 def secondSuccessors (i : ℕ) : List ℕ :=
   successorCodes (secondSuccessorsList.getD i 0)
@@ -7154,323 +7161,323 @@ noncomputable def thirdAt (i : ℕ) : SearchState :=
 
 set_option maxRecDepth 100000 in
 def thirdSuccessorsList : List ℕ := [
-  0x39c05f400ac50135c021fc03c4806e600a720102001ef8028900276000c,
-  0x13a03efc077b80d7d018760005,
-  0x280af1014eb0277804b1808930107d019120048,
-  0x2000dc581a460322e060840be601626021be0088,
-  0x59820b403ed4079140ef801cf701a1000c7,
-  0x6a024b50473608af410f801ccc02c720107,
-  0xb404bcc0142,
-  0x6e0509809fac135a025bd0428a074840be3011bf01d12018a,
-  0x30057f00ab84148b818bc024fe01c6,
-  0x4f059c20a7ac134d8226a03d16069180cf58139d01f5c020a,
-  0x3e01526027e20298a0244,
-  0x26016a782c300576a08ed00fc001b0a02bd00288,
-  0x1300b5b8146a024b3041ce02c5,
-  0x2f422df0449b087081095420af840bc07e1e0fb781edd03c640762c0e8c81cf98381d06fbc0da281aa8034490661e0cbd41893830d205e820b98,
-  0x3d02cfa858d20af7615a302acb054f30a68c1486828f88509b09e9a139a4269784c540963412b0424c38488008e8c1194,
-  0x1a073350e4241c7d8380986fc70dc3a1b744366406b810d4a01a4b03468867830cd48195a83247863550c40218708305d85f810bd96175b02e4c85b490b4820b9b,
-  0xc510f4c21a0c42c60845d106ce20b1040f9080e10ff7a1f8643e9d07c000f64a1eb983ca8878170eec21d8083a97874490b5a40bd6,
-  0x17c500d09f1b13c7a277cc4e1309bdc1355a264044c5b8976712c6c254484a5b893691251424540483a88f3b11dc4236a0465088b6711562225484417874990b64e0c1c,
-  0x2585c288b75216ce82d4bc5a2e8b318165c82c4e058770af9e15cda2b52456770aba0155822a61c54560a77214c3c2977c526c0a39e145d02858,
-  0xf8195f23271864578c79018d143179c621d0c3e018514304f060240bf0e17d6a2f5ec5e3a0bb3a175082e54844010756c0b9ea0c56,
-  0x341b86a36c086d730d9c71b18235c8c6b388d51c1a98234dcc693f8d1451a1d833ec867558cd711997632d2,
-  0x841d0c239d28730d8e5251c9a038e9071400e1f31c1bc37d406f078ddbb197082e7a050d8889610ed961752,
-  0x1d0f6171ea003d06079e60f2221e3ac3c21877eb0eecf1db103b2a475ca0ea061d21e375c4661d0ba9e144ce2285c3bc085e4608c1e0c97,
-  0x73208e840d44811d10152200163fd707f0a8fdc01f91e3edac7d0a8f90e1f1843deac66ba0bbd81474222d443c5d85f8008e920cd6,
-  0x5b21a7043104858910a1c213ee4232483f5106d520a0c3a5406f590ce7b179be292a0466106087090a00d12,
-  0xb42312a45dc88b3d9154c228ac44ecc8968111ac2206c43c2087760cfb517a3c297884680861c1093140d52,
-  0xa44883890e7920a023f54479688ea511caa236b8469f48cea905941d5bc37d1468070be7214c7623b983caa8621a095bc0d95,
-  0x1184bd1c972412d252581c4af68957212994250c649e10931f925e42492c48dfc68a40bfac14eea23c943d47863540963a0dd5,
-  0x3226e004db909adf9346f2669c4cafc98b89307d233d441aa475f98e087150a0240003db50642f099e60e12,
-  0x1b0a09d1402327ff24f96c9ed493c88276a84ebe49cd5938c115314244e83e520656909a640e50,
-  0x7652cf0a50c949022919c51c90a36c14588288b850f74a155938712612c48d708d0410ec920e1c3e3087be78ed881d8e6348f060500aa69124321f60c332684e1607476001d,
-  0x11254da8a923951502a04253caca74414d86299ba50be49cdf931e42495446cd887fb908151f3ac3bb0469c50c1ee1576e24f4433cd84f64077120059,
-  0x380ad5e959eb2b14c55ddcab40955312a90c531509d421263f24a94472b088358fa801c2383538061248ac121297a1f8b03478850ba079be0098,
-  0x60b00c95fe12bd9457694ae2a95b5c287104ed389931927d02231e3ee9071368ad3612bc21fd40348d051de07a1000d4,
-  0x392cc3459400b266163222c5ac58554ad9895488289524f1bc99ca1285a23b803f21877e80e3711aa7430e785733896f2101901ae0435230520f07c72011a,
-  0x73968192cf105356c9ed9912231adce3131040f9853bc07fcc014b,
-  0xce2df125ba28b6d616c672d6a05a884b48c967222c5ac58694ae409552b29c4851b60a2fc93ebf269c84a6a88f2b1131c212b83f8547e910f1d61e04a393046bc50c538161dc2bc044c5b897671043a1b744364b0545f0811201a6,
-  0x481725d2e28c5c084b4e6163772ac4253f38a3ed12aa023e984504885291000b1fe303cf30790d8e5c71b12031b9058d68995d106261bf1c374605555082fe01db,
-  0x57175af2e9185cd18b82816a002c994577acac53157502a0045208c9ff21350e2579e481ec8aa090b3a202003d12873730d9af18eba2cc60591309bdc13518213d8385d856840855c021f,
-  0x314bb461735d2e3585b19cb5f095ebd2b28e54464a49d1400026c4a4b1c88b1c10c512042e3d58473810dac6190e82d4bc5a1e89df3139062144838e90579b0878a025c,
-  0xf82ef5e5d240b94516de72d03459464aff015a6a2a4785292096871219522eb6435d0819d0f6841d06a36fe464a90b61b13d4c218d4397a858be089d0029a,
-  0x7c177c52ed5c5d738b7c496e392cc3058224a99d94b6c282644de3097a392e5224568461cc821a0dcf81952c2e1445baf8a01a13f8a21cd039fa059bd08bce02db,
-  0xd98d1c319e862f74c57a989ae3100861ee0c357985683087860c60c15e9816f300a25fcf0bf6097da92f8d05ed4cbd40179302f0820b97,
-  0x5619e8d33ad4671cccda219a4e3335666364cbe6996a932a0a65388c9e699257323f26412cc78b18e302f1a40bd3,
-  0x118d9809b202362486c368d7869aec335b286b38cd5cf1aa4e352446a3e4d3d19a65534a6e69088d1c79a24e34336680e4cf8b18e802f24e0c18,
-  0x1f4e39c1c63938ab671058e1a21c2fa383967007cdfea9be8537ab26f0d4dded1ba8c372dc6e164dbe31b68536ba46d14,
-  0x6f9d7e03ad5a75658ea3b9d3713a59c74484e8661cf7639c50737c0e63d1cb6239442725b8e41c99f532f5ea0c53,
-  0x6e3ba6877238edb51da143b280761b8e4691b49b3409663ca,
-  0x407c084f7fc9eee23dbf47b2ccf5849eabd3d2da7a104f38e9e6c23cb76791d0f1c81e2563c282783a0efd71de403b04272614daa71a1f9320d05ee0023a3046490661e0c9d,
-  0x613f8847ec7cfd141f9f43f0067de08fb2f1f5e33e96a7ce5cf95e1f1e83bf5c77988e5631b68f345525f30424c38488a06aa00d16,
-  0x7a4062280b1900cd200203ff9a7f878febd1cb57323825f4a,
-  0x1ca0ef041b6c8321d05c8a0a414122a820d903f62069640a9081078fede1f1413c1e073164db911a3cd324785f950258d04a1d06fbc0d97,
-  0x650bf1216cb42b4c85159099d21206423568417507cb9f2903c4ac785b8dc1b9a4e2326a25fda4269784c32073e60e14,
-  0x4e87ca10f02a1de94397486c410d6221974430ba83d2102669feb53e776791d0f1941cd8c372aa69414ca379804d09c2c0e95,
-  0x3aa265644a66890f11186a2217442e8882ad084b205203ffc67d308f28a1d97639db46ea8cd35e9819b09ec80ed3,
-  0x1968bb3116d4a2cd7457248a98d14b6a281d44e0c844d903f62065e3ea3a799a8ed661cf35377f269ea4ca8c182f10a1740f15,
-  0x2235054699a8ced91948a31ee460828bce9090aa089a401047d904f3c71db59378446a334cb1e1831a0a3bc0f53,
-  0x408ec051d71239b3470128def51b20a2f1d44ee88615909a0a09c6402da7a084e8429bd4e353b265ebcc2b4184460a41e0f95,
-  0x3391e8023cee460e888338e8d5998f30a7780fc8,
-  0xb5488e090dc52149a414e4806e8fc211f0023c0946f7a8da4518b6a28174422086b110cd321491414067dc24f55e9e9713a43e6ff54df719ab9e3549c66410c3dc186960a8be101e,
-  0xee91d112316a450847d668e18d1486a22ba4370e82c45017a1f8fa3d9667addce9e59c0943588866bd4c4d71888c0aaaa1055,
-  0x12a92a5924b9a482d48a6e8ff891cdb232d7457248a8f111f4a1ccb42b6c830a0fcf11ed343b92c75110e17d1c10d35d866b5cccdee98abb0ad081099,
-  0x15892dcd2422246934829c9033519d4a2c334480a877890b0f9faf93dd5a7556ce20b1c324361b46bda8ce7a18bd20af3610d5,
-  0xdf4992c925dd23b8a42ce47a028e8151a6622d5644a5087bc106bd203423f6427bdb8eef01d63938a046c634ce8e18cf50b17c1116,
-  0x6fa4cac4972a92ad5223824320476088d72d173aa262743e3285ce507309fc203e1be75df4e39c1c646366026cab0cf0d98df40b37a1157,
-  0x2c257594ac6c955d12a28253f54a51c945e52801a4fe649dde934b,
-  0x294c05497c1d2f75a5d4a4b84c96e112d25259b74b1de934a,
-  0x813500a69d94d1c499cf1330c2659d4c8ac98ded3120a61b74b1cc938c,
-  0xd84d60693c2,
-  0x79a74ae4e75e9c9d538e5270eb4df4c9b94136f226cd84d6f69890530c225a4a4b2f2940f,
-  0x1a69ea853cc5278ef4ef769d9953af226c564c71c9449,
-  0x5e9fc413f7427df14f8589ed953aa826d9d4c9ea9489,
-  0x42a838650522a0531401627bbb4edd69be99370c265264b6a094cb,
-  0x172a1ee94343a8570509de9df29381e2664a4b8e89509,
-  0x2a28a555123ea21c14248a814c501e29f2293c3aa71e24cfd6974b,
-  0x8750bd09f6853ceca68074bc6c9546,
-  0x13ca2d5544dd28686504209fabd3900a692a4beb29589,
-  0x4f28b5451572a1e154197a7fd34f5e69d2b9399026a294c0b095cb,
-  0x2353608a6b714cf2a980252e18a5a5d4aa82943f52636a496548a2290c951f74a396d46c428c302f0921692,
-  0x5a55a76ab0615590aaa39553daaa10d53fbaa6ce54b0ea91d951a92a2a954320a81ed4f82a9ea753be2a712,
-  0x2e16339ac5745892cb0d45613fac13a580a4afc2d5f50abd5c578b4aec555d062b9c05711eaddad5b0aab5c256952ace5159032b1c05601eabead574428c802f33216dc,
-  0x565a8aeb4c916906ad1355a1d2b3cbd676d2cd3e599c6b2d9d65762c9d4591bab1ead572da8d532f4d81712,
-  0x8d5cd1cb956d72222e36c5c44ab8599700fadf165bd94b75d56e0fadbcc5b53cb64a16c082d7ca5ac32b552,
-  0x3717beeaf6ba5eb46bd2ed79ba2f2c55e2fcbc1d577972ee025dbb2bb05d759e2ea025d2deba0b9738cad5dd58e1eabfc54e5d28eef49b961758,
-  0x9260ce0c15658238b037b60456c06b980452ff345fc5abf41d7e642fbb35f4bebe4957c172e7ca5ad80ac29d4eb417bbb0bf021796,
-  0x1a6c56d18a48b139a62564c45ad885e30f7561ddec372d862ab0b276141cc24cd847a3075f5f24abe1bd74082d7d45900cac799275497c010c3841819,
-  0xec63b94c720d8dc231a0c6331ac60fd8bc8316285b1d8b24154f64a8f0349f825f4e,
-  0x2ad973332d6765888cacb59522b29f96509ec9c21937d325b364904c8e8d912f321086416ac7e718f4831633611e8c1ecd7d1e2ea025d33cb659d654a2b27b53e88a41e5281e17e8f0c6aa18a0,
-  0x45b395967084cdd919b0eb351466990cce9d9939b311d66194cbe718f07309075f990bec5d75d4ab390540b2a463928a897fa40cad41917,
-  0x94682e4d016d9fb9b3e7d67a5acf2d59d9db3aca65f6ac7cfd8b93b0a2d5fb98b6b095a54aa16f301061992,
-  0x1c4d2b0da4d0348a968f82d19e9a2e5b4484687bed08ed9d0eb30086411ac6155859a2fe1f5b7c6b2c555afaa52bd303a219d5,
-  0x3d6aa7cd506da9a4b52046a238d4341a79334eda69ba2d3229a5efb427366346c897990e5b0c8a5ffb2bb1d56e1f2cc6b56ca4a886d492825318304581a1a,
-  0xe2d75c9ae1fb5b286b494d640dac7ab57ae6ad6acee9d99413230c633dec36b980012ed8f56eeca8cfd49ba2543c306a01a55,
-  0x926c4e6d8565b038b5f7b6bd5cd5a29a596b3cc866766c90ad80972eeca5bb80ae21d522829468309021a92,
-  0x365b2dd364a06c7ead5f45a60a334fa64b08c69d5778b2deda59a18ae73952cba95af30b901ad0,
-  0x58dab89b485368a96cf82d99edaf01b58da69b08d0df59e8eb350864ceac39ed813f2f01f5beb4aec555d7baa6b830da21b15,
-  0xe6dc0b9b797b6e516da18db3c1b5a53592669d96d11919b27b27bc61f8abc5997017acea157ab8af10d53862960430e3a1b55,
-  0x74b73b66e53edc705b338b5fd069ef4d15cd9f7cb2883636d6c41c581ba2f2255c3d2b3c2d5f76aa8ae3118e1b93,
-  0xd5bb01375e66e838d4305a322b29ca63964c46ed79b62e2355a0a4afce55481297f5312261bd0,
-  0x31bc86b78e56efccdd27db8f836ba96cf40d8d65b01435a496a408d46a5a3adb3f4266e5acaa69892cb04a35e888b8c3568bfac13a58042aab954c0fa88dd315ec1c1c,
-  0x46deb95bb81375b66e4a2db431b6053683f6b636d4e81a4393405967088cae4589b8305ba5eab6b9091694b2c35158430aaf714c9b255f4316241c59,
-  0x566f61ade0d5bb74b732f6dd74d91cdb0b935c3e6a986d259d967631db4629babda3972abad37458876ab0114d2ca561c3186a1c96,
-  0x159bd91b7a0c6f2e6dc0b9b79636ae26d3b2d9649b138b5d3d6abc4d2a51a0c5b39ab65ccccb74d8ac9306dc5ef1ab99596a5c2c67358ab4ab48d4dac2571b31a681cdc,
-  0x2738f0971dcae3431c66138b1571596e2671c475b87a670c6ce1495c200b83587047ee04a9c02b37fa36fd40df505be4428c1631c5e1d17,
-  0x42ba24074242e810dcffcb9e4c73a0ee734dcd93b9add732dae6171cb9c3968f72aece5185c9c6b92da723aee413,
-  0x1ceeb321d5cabaa9e752feea025d3e7ba6f874b04e91cdd1a0b7c5b51a041d4d,
-  0x1c9dd29bb93077072edc29db0a3b5717693eece4dd937bb1a87619aebe4dd75fbad73747aee4281bef8a9cba51cc21d94,
-  0x75782acf00cddf9e3be9177adaef121dded391a36fc9663ca,
-  0x50f3825e6f0bccea7960ef2845e4aabc84478e40f1af9e2cc3c45e78692f0921dddfbad8d724acdfe9d4efc990510f02e1dd5,
-  0x627a832f4eb9e94ebd1d07a04cf3e09d202a9ec951eae644a,
-  0x82f87ddf06c3dfb57bd7cf763dee4cbdb297b430f64e5ec77bd74b7ac64f5499e7a4bc2cd75f26ebbe1d2b0b932a700f6a7d114866992250f5cc1e59,
-  0x85f5653e9d37d15cf9c41f31f3e53d7c812f8d81f1193d598788bcf0ea1d83b3943f70320a816548f11933a0f8001ed4,
-  0xa9f885bf0e37dfd8fb84df6abbec4b7d6c0f892deb683d0be78b1ee5561c154aa105328321f50,
-  0x19cfe6bdfc463f7da7ed2afd599fa383f3007e412f8ce5ec77bd72078cdaef1bdd8e7ba63872c02e0d49510da92a932b7a1f95,
-  0x1e0071bffb07fd72ff651fe78bfb247f496facf5f20c3d99d7a288f1e45dec9bb25c72e4ae11d9519fa93cd32dc21fd4,
-  0x880b950126e01f6402a580248fe801f92bbec3e7ca52f6ab9e92abc89f76612e9db5cc1b385ce54b0ea925d4aa8294d932fe42016,
-  0x5b4070880de2fec41f338bb4ab331882047,
-  0x17b035e2062cc0b7b8146d024fe0404406ec8054b00651fe383f3137db5cf9e65ed88bc91476a4ee6b75ccf5b87a670c86a9fdd53062964e332ce2099,
-  0xbf040b2079ac0e9b806ccfd23dee0cbd30779414ed9fdd469b9b9c71072aa7b5540129744334ba20d1,
-  0x27609bf4125b8226b038fe0465404b97fbb4fda55faf63eed37d17cf77a9e59e3be3976f3cea531ce83b9c1571596e24855572a9873337182118,
-  0x94828b7044b207bdc0a3681360ffa31fbf1befca7d36af7b85e619bbf307712aea90dcffcb9e0c71984e2c6155ee2996a339062156,
-  0x31e0abf4125f820b302eda03f1bffaf7f016fc361efb13d40979aacf014ddce43ab21741cae34ed560229a8d33b4c2194,
-  0x31e0aca4149d8277b035e20604405078019cfe4a9f890bea417c3eef80a1e73abc172775ceeb215d1203a14e71e12e39695691a9bac33d8a21d8,
-  0x75c208283e790782e0ec641c3e8364b069f60c9e4188982f0d058b,
-  0x1b1091be1194c22f88430d0585,
-  0xad84b1305c2,
-  0x3642a2f852510a00a13ad426ad84a790607,
-  0x15f0b59a162842b5a84cfb0645,
-  0x30e17d142e0284e4b0684,
-  0x2c2189b430288507d06c4,
-  0xbe866eb0c8da182842b2f853190706,
-  0x6d86b530d2c218d142ef8842170746,
-  0xdd0daa61a61c2f29844790785,
-  0xe486eeb0c99a163642a6f8470507c6,
-  0x724376e86cdb0d6fa19d7c2dd8849d70807,
-  0x40c4a3c8927b1213e23854463888bdd1133e2189c42c9882f3100921fe4c3e7b87a9b0f2ea1dbcc3ac6873870e105be55aae3933ea42217,
-  0x191730a2de1c5ae58b3411633a2bc4c565a8ab5315192298a452e38a37f143e2279144ee389aab1305225e1c388682daee4281be87aafe8143622259,
-  0x7c65c68c9d118f463146461e18c17b17d9e2f4c45dc68731305f69c8d1b7ed236936680f,
-  0x17b1f5e23e3cc7b9b8f4ad1e6123c1fc77578ec211d69a3a30c735f8e4351c716384a46f708dc351b44e3663c6be88d55d1a6663422c670b8cd311745225bcc3a3c8311ae4959bfe02b08536a9c6876051cf0a2a1116ce22a5,
-  0xe46dcc8c9a91779229de44e2c888090ea321a8242adc84d590763208ee4086c80ef8fe331f9163385c6655899750edf60c832b1c636d1e6887852ef8a4e211b50231c,
-  0x123261364bb7c965892bbf250ce49ccc926892313243a647cdc8e198fd331a08a2771c4d4d878c2e4ca9c04a2b25936e4468eb053b90a67511e762399,
-  0x5b4a5719490928cfe5136ca1289409127c0e4f5749d8d938b326c0e4d58499ef8ffd11aaba34fc44f25834ece50fdc0d4ab36e3706e6930454c38a88a122a0241b,
-  0x17f2d1ea59bdcb29d962b12c21a57a0cae1295b512b18e55b0caa1c9538f2a26e5390ca6b093337238364009c6cc78d6f70f4fa0dc7b955870584ad230dcaa9a5a0154d2249d,
-  0x4a5fe44bea997b972f21a5dea4ba8f972c12e2be5bb54b6c596a432980e4d74c8f3b902351b59e2f64c3e8c8382aad768dd519a6ee1576e24d8,
-  0x6898c493151a6217cc3b698415305c26062cb55993713242c6413846ebd8bf7f140921f9c39601706d6ad8d4ddfc9a749158242516,
-  0x1393415e67ac4ce6a99a4b3314e65874ca2e993c93225263cdca78d938d12475641ca46fe18c1c71442e0eae397257091eadd64de111a86d15a6c2559,
-  0xbd9b2f1361666bc24d63f9aa213529a69b0cd25f9a32931dc26063ca8ae93b3324b16380a4527988079079b5cc1b3850c57380ae214dea71a99e15cce259a,
-  0x129bd93377ae6e6a4db609b4c334b9264054c16a96cc72ac725481c9e33926b721186398d471648a79310775ccd33865c5782aaeb54df4f1aaee15f6e25da,
-  0x139c14b37e9a69afcd12e9935f2dea25630caa4893f412169a3a2fc72a98a8271089dcd75b87a157ab4aec7cdff19ab38160022616,
-  0xcf9cbc33927271e54e2859c34b37d826d084d4b6984c12e04a56efc945190caf1d8423aad455cf8870507f4dcdce3885257e16afb2ce04a1ace41635a265a,
-  0xde74774e7159cd0b387526d9fcd50e9945f30e3e5ca0cae28940b125602439fc778c8c31315bba2203b9ccb71274b03e8e0e19ad18165b82698,
-  0x1c4e9ca9c5093594e65ea4ba8695edb287164442478d18c59d15ce222a639d15714feb0510e1069ae5d1664c26d3,
-  0x9d3a856734e4e3eb9b84b3311a62434bb589607f289be4b3bc89568f3411602a237cb9ec2716a2b0858e1ed1af2f169e62715,
-  0x1c3391aa66e5cbc9d9630928ef2454dc7ae88c7cb1653e23a1b9f0c7192cb0d6ce2121b07416a7a2751,
-  0x819d8793ace274f74e7cf9ca27383266eaccd75899c49316a65ebdcb24d92f3522de63de3464c38b47b123ae1010ba0e571ae8b10e4e2811b15216c36279a,
-  0x3c9d69d3a8de74094de789b0af33da263644be7a966e3292464c5cc8c788f98516cf224a03a10971ce6b14e0e3009b25116e3427d6,
-  0x819d97b3667268094bfbf9696d2940e46dec7d0f8ca19172062542ba24e71f70b19f4e3a31b396170be2812,
-  0x52cf9a69f0e73dd727b1ecf5379e9293cf8a79494f1f09e16d3bca277714edc3870e6e8c656aeeac7bb197082e53,
-  0x151402a67fbb4fe5f9fb213f0ea7db5cfac6872dc7209,
-  0x5ba1ab9430a6858950a3aa13dd420d283a1d06e8a0bc3411b2818c502d9a02d73eb8a76bcc3aca5ac42726ac66b88cc74176742e96,
-  0x4e5197da309545d4e8b1a5152ea291744e128907511dba21cf43eb6870c502d9a02513baea1d882d7d4590c472bb067d90ceb517af62f17,
-  0xb5a3e9947bc68ea351cf3a369346a09d2142d8ec592f472ca,
-  0x3a52b2fa54614a7e29470d27c2a4d79495b2922e52317a4579485ba9024d1ae7a1f5b439b281f84f0b69de9b0f3e1d2cf2d967595e0731fc68a28d04817e1c2f9b,
-  0x176992f5312ba60294bfc2971b52defa58dd483ce8dedd10e1a08f70f7316d141cd731a4783010,
-  0x2ae9d4653959a70c54dd0e9b1ed359aa69314cfbe965e52146a381d447a2829d4fbc987c3eb6f8d65bb1cec11a7143054,
-  0x6a840f5073ea00153fb8a7d334f64e9e21d3b98a66b948c5e914251243a0d213f24a789243fcf74ceab70f966661cf1c1a9c03096,
-  0xb751cf2a309545eea886950d0e9db6524f1a3bc53c9e62004ba7165bd94b776966909d0711aa7430d1,
-  0x3aa495d489aa691744e5279e71d1231adce3108,
-  0x3c2a855d4faca9d7d535e6a63154b43a9457520d2a1c9d3c3da6a6d4b6f2929751434a0e6f3d04e2164c41665c03eb7cbd67389d2c11af143158,
-  0x7faa4d15450ea57754499a7a874dbc297615264ca3c69454ea84f75083d9eb9f10dfdd4362e2255c26ab43a567bb9d3c71b1203196,
-  0x68555d1aa93d54da2a8b154b12a8a054fee29f3153714a5fc349d4e8b0950a5f9fab93d8e222f74449e75288b8c3568cb1d4e61b35e31d7,
-  0x1cf55a7aa9bfd52bea9af35333ea02cd382ba61f14a12a8b94d0b769fce73dd3e238544695754b6b909169569d5021b58c3215,
-  0x346aa5654e0ea92795181ea0c65395ea62614a6d68fbed185ca19533fe9a7c1ec48c87571cb955d69f01d6351b7f23254,
-  0xe7aada1557c2a855d4f5ba8e0d50aae9d2ed3274a565f4aa728cadd0da8a014b3e606251e449e77591ab99596a6f9d7341b9f03296,
-  0x1c558afeb0d4560c0abf9557a0eae99d5c07ab7bd5695aaca0d58aeaafc53b45225dfbad2e5ce1e3751,
-  0x8ad5c15a7a6b45d567c4acc9159492b241563aeaae513b9562637ae8b74b0a0378e,
-  0xfaae96d5cdf2b926d7157ae00f5bf5ab77bd6db2ad8555ae0ab1a0d58b69dfc71364dd7012e94a4b3bc37d2,
-  0xe6bff7d7ef0afb9b5f2dabdc3d7a91af2835e056bb9b576ecaebe13c08a2766baf3c5d5089690,
-  0x1b561aa2c2c8d846cb063960802c0e3d802aad6ad567e227d43b0175d7e6380d,
-  0x12363a4ac6b7d8c9db16b1628a6c499d88deb0f8f600dabb76575f7adb655b092b26f55a929e37f141bdd8ecaec264b7003855,
-  0xc5b2b8d6524ec9be59257b23696401ec78058115aefad5b922b283d5be38a3f10864dd9012ed4a4b9483892,
-  0x70d9bc2b3551665e6cc6559783b2c0f63f7ac38e58241af00f5bcceae714f2148a45308a7dd9baaef2e5dda038d3,
-  0x12967706ce5a590949e6e2ed05,
-  0xf7690dad19bda259b4229683e2cfe4d9ec1b399565e0ecb2bd9133b10d960e46bcabd70c4acd9557a0eae9bcf4a98a8c914c51dae2af17e5e04a3919,
-  0x7b69c2ad3775a5c9b3cf3660a6c4c3d7a4dae37559f02af9ecf55a8aadf08c29db5daf3745e4363951,
-  0xb76a972d49cda8eeb4bf167ea2ccbe5929db16b162a46c25b57b7cae5d35a2a2b02e4f6ce8af13158e5dbd1af4eb4ba943995,
-  0x72b56736a02ad32cda114b412764dbec654585cdaf9c15a6feb0b9cf7e58b341160c1dc5d2f5074bcc239d2,
-  0x52dac5cb527b69cded14a59dc2b358d6524ac6f857db6ae6115ab8ab1534f8c38b5b10914ddceeaf62a4bf083a13,
-  0xa5b58e56ad6ed53dda436b47c366f16cac8d8edab0c735ffbebf7d574a59f2191730a2db93badc5ee529812,
-  0x355b26bb62916c21ad7b15ae0cb5ad73ea622ed6c254877680760b,
-  0x6adb795b500b686d6cc32d69d4fb678bc287648,
-  0x1216e66edc2b5b736b66c56ba427e5ec5f6d778d47689,
-  0x61dbcc4b76f56ea1ad7f0c609177b1c76c7,
-  0x2fdbe31b7af56ea6edc2b5b700b68bf3f74631464613c77c68770b,
-  0x1e56d522d83b4fee88c666efc5,
-  0xa8b7ebf6fb12ddc85b91ab6cd76c6a67fe346456780dc774a,
-  0xa8b7f876f1aad9545000f8caeaf046,
-  0xb9b972d72a7ee4dbdc870b8f83719eae2ad5c473b865970936e09c5c0aeaafb34042e3312af8ae3bc0c3a52,
-  0x17bb1e775f42eb6cdd5f1ba95574c02e95a5d133ba01f73e52e756dcd66b98314091633ad4265f5f3d077d2,
-  0x161795b2f2195e34abc40778552f006ddfb8bbd5177436ee035dbbabb5b7764e2e020d586ca07331a125e159afa413c1283a95,
-  0x1217b97af6a3dec69bd6457ab36f4d65e822bce3779b6eeca6dc156ab35d1a579e1e42fb563c3523ad1,
-  0x32afccc5f881bef477d972fa865f4e6be7657c972f8aadf00ebdfd11a80a13cc3c4075f9207890,
-  0x133805df00305ff78bfd057f4cafe5d5fb40bf41d7beeaed335cc2cb858f1acb57eba1e3c21ef103b11,
-  0xe0c0fc381afb02d3e0406c070f80956f80dde606bb75b735cee1f0d04138d8510a2f9e2dd9e40e1f19e3b52,
-  0x39f086460fa5c1d5d8371b063fe0bd0c1513827930443e0240bf4b97c48af386ddc94b9cb571032d6f45051a8da5f0a4d17f611e5151f3ac3b98,
-  0x87864830c2761709c2c43857570a15e13dfc251f8479304595f2a8bba1f73d8ad76f55a43a0ce11b881e3452ff1d3ccd63e95,
-  0x3b62077c3e89878b70ea7e1c08c37678681b01dd5fbe6be7597a0cee8435af07ab7291bd11e3d7300413cf1e3ed3,
-  0x97c4af18917b11bb62280c436786a3f08995fc0cbe99b7a6e2ef19d5cc58e0aaf20ad80b69e8c01f90c3bd2,
-  0x31c55cf8a43f1457627c6c4d01884230defe1289c13057f572fa915ea0dbbf69745eae2c1d5d5f8e4351c5ed815e9e9151fbac3c16,
-  0x78c60678bcd3172b62d11c59eb8ad3f0e15e13d0c15477d9a6f5aa5e000ba58371b2aaf1a507a68e8c31cc45e4849ea5c1fc443c56,
-  0x1dd8ceef1952631c6c4ced88b570a3fe0b78bfc07786aae9b85c7eea10211d5c581d99eb0b1ff983c91,
-  0xeb1b03e35ebc68438571b06255e2f1ba96f72302af9d509578ecd90a81de57d1ec52200303cd0,
-  0x238e44b1c75637ebc69498c7d715d76275ec465b8753b0b84e16aec1b4f81182ffc0df747bd86578f66eacfdc931b7b515804a85424783f8efd4f2d6582711ed3a202003d1d,
-  0x28c75d58dc1f1adde3256c5a238b03f142261e20c314b83afb02bbe0098bf0bd7b742eb4b5ca48b617f584a685cdc7a568f3c2f31c182fc9ee512042e3d5a,
-  0xb78ec4b1c1d636eec66698b9e3123be1f43c339183f8703365e4f3baf7372daed8f15625ca18f31ec25e6909ef74206743d95,
-  0x16f1d9463a11c72f18c0cf1798e2ae7c532f895db1073e10e0c0f338072afcc85eeb0bca2f761aad92dd0dbd8faf11f0a1e749306203e0e64118,
-  0x3c720c6e4044c7fd38f8bb1e90e3c38b810558eb6877a307414c3aa414c,
-  0x619379b2663e4ba4c955b925fb244464707c8c519177b22346433ac85cf43c663f19b087b4c5787c51,
-  0xd1ca8ff94e232931e51edca08793c572710e3c4db83df1fc3984ab263973e5d4418e,
-  0x1b5976ef2e4c65ba1cb4e59670f2c3e65700cacc395457271d642adb9acd731cee1965c2dba201b2009d855a9f30821d9241d5,
-  0x3731e7e62a0cc355980332f8565e61caa8793da3219763d94b9cb57103a889dc8150856aac2e7532719f43621fee4214,
-  0x64cd2839a23f33a56661bcca4b9902b2f14645dec89d38f83ee79256484a256320b2d860c2655e3eb584412,
-  0x5be6e98cdacb9b1bb35a4e6a00caddb9401f2319dd048acbab20fbd869e266823eda0444f,
-  0xd79c2e3378665f8ba27664485,
-  0x1cb3b96e760ecea619d39b39f7e72c0ce3719bd273512e64aacc187961f32bb1e5188c8e0174ad2e8e0dc67ab8b89598ba8a504855b90978c3dd587019f75622638425c,
-  0x14cf5b99e7973c606711bccb41985cb2cbf64844c7fe3752aae9dbdc870b8f7559cd28aa8c866685964c45ad887a1f84c228244296,
-  0x2967d33cf8219ef973c77e726ecd71f99d2b3367e62a1cb51194ab724ecdd59fb93d35a14e8b62c888090f34c4b8933941f97b22a8242d7,
-  0x939f8433dee67930ce9cd9cd973620e6898cb6ff94e9325685d696b95c15a52a8bde48a7791322c4f65340f9fa7222c704315,
-  0xf99fccf3e0a67a0ecead79c26336b2669bbcb98f92e372079dd7b9b96115a9f68c4d48baf85b68c500534a11fb9522eb64355,
-  0x1f33fa4e7e52cfae59dcb73b5be6e0dcc7b5977472a1864de6c99e39045eec4e5190391b732334d8a9026a613f9684614,
-  0x24e85dbd092ba0d934172e8197d009346899e7c8316d84d63c7f4b,
-  0x3cf440c68799d0d2fa03ce8de83d03f62f9a7f88,
-  0x1368ad8d1333a1b9740a351c8d630407fc7,
-  0x6868c11d1631a1d93414ebd10c633348007,
-  0x68e8d11d172ba0fc68ed73d2846358c8047,
-  0x133476c689dbd089947865e9e531c83636228088,
-  0x4cd1da3a3743461368af3d1093a16d68fb13d4ec63af480ca,
-  0x54e92a1d2301a42474790e3cdbbb2555acc9eace31ee44d8fa464b,
-  0x2cb4db769a34d320ba615b4b87e96bad2b1da505349cbe803ac840d76eeaed375209b91c96f5ad58fa420496246b84694,
-  0x1751ce6a279d4305a814f4faee9e02d3b71a705349f2e8168c865d8f436ee5e521e991e10c814136cb205e42495446d4,
-  0x5bd542faa4e754116a7a9d4df1a958f525c69cdec89d95d6cab60bd2289921def5d7990d326eec40c7e4952,
-  0xb9ab7bb56546ab02d3b23a3ca322f4e3ea8bba6d5dbdeb6ae523397b146c8bad379b2078424c944711,
-  0x8fd6695ac92f5880eb0d7d5f0faba3b4a4069064d040f91856bbeb56e6892230f660991e527015410c649d2,
-  0x586b96bd7099adccb5b01eb554d690fabaa355b1ea4bad2b43a465741dc5de41af00f5bdb2924cc92297b5f4c96cd9220a0994250b44757,
-  0x2ebdbcd79bdaed4f5d2a6b4d7d5ff1a95774f2b6970fd2d1191d52f006ddf91af2af5c2f29299c93997b69ec9c219348a0ae4253544797,
-  0x30b6047ebf78d7ca7ae80f5af76aca9d4ca7a7c174c6de847ec90898fd2af101de187af49b5c70a936fc948f7b88aca7e59443a0bda2554047d8,
-  0xab6170ec178d7c65ad80758116a782d4069a66b724995e3b6af6f95cb8693ac495be7ba5aca9d538db20c0e2579e4814,
-  0x10761c7ebfded7673aa1e750d264acdaf9f14a1be4b5abde446564a4b0c,
-  0xe9b14bf6270ec1c2d8179af1335ba5eb15cd5a2faa673513769a49d0b8f92e3720365e4f0afb6d5ccc294a6c97d87bececb2bd397820d4825a1c4859,
-  0x17ec441d8655b08175eb5eb84ad64b7aab9b2677d7e2fa5523263ddf03332dae4e68e4b8f,
-  0x74d8b61ae63f5982ea3b2d3753a48c326f8e41b0bca735ffeaba3a52b417c356cbbcd3a1ca0e8c25ea44892,
-  0x92d9ac1b312765b5eca24d939fb22cf6394ec615c9cab7c03af78dde6b0932c0f8b2997aea0fab270e24c12,
-  0x706d28eda32fb41cb67e6ece29d8c8793d72f8915e7039343acc1953ad5a10f92737e4c4f,
-  0xef6c04ed737daddbb57236a3c6d3cdd9d23a3ecaf963d805993612f8dcd98dda7606422a84e90,
-  0x1eedd26db803b6d7b6d566d9b3d8f01a43b728735f3acbd001606364e5142e3d7c94eccbbd3b9d212882769c4c93,
-  0x486e147dc0d3b7c8b6f566d978da79fb228748865f4cdbd23960aba4ee1c2f3e7ca28cd32199ab213a9278de4cd3,
-  0x183712f6da107ccb64f44,
-  0x156e7e0dcde7b96bb724bee360dc4d3b7c8b6f00edbc8da8e5b3daf65126c963ca3477d972fab4deb22bd4d960d224f81c9eae7cec8cd8759ad3214f927d7e4d1b,
-  0x15ba74f744bee347dc04db70df6b76ed597da093b2e232940df747bd923611b650944a0d37d084cde293c65a152327fc84d55,
-  0x877569ee8f3dcb5db90f76e84ed78eda2c1b31ff29cc5f85ebdb5161612519fca2ca7d2b2ce2853cf12163a280004d94,
-  0x43ba82b74956e7e0dcd21b84ef6c706d292d9b53a4b472a655f990bddb561ada52b8ca4217d516ce74d3d0ca176c282644dd5,
-  0x776f1cfde159bbed777436edd7dd921baca7630a69399d0cc39561f01205faefa5843298da181db3add284fa0313,
-  0x3eef87edee97bd8d37aab6f40fde775bcacf63c769418d0e019581b01dd5fb9b94f610c52df5dab3b5c287ee0353,
-  0x133bf1eb7db06fa82df375bcb3f645d69532bf98f2a15df616b3c7443110510d,
-  0x67c07a78008effb0dfd91bf60b7c87ef390dd649b243f4b3e65782bfac32a87254beb3dc4433b05151,
-  0x7ae0e6bc18db82ac70413e07efc095b7a6beec6bd94ada5f0f2c1b52da8958c72ac4df68821a2428d7e0392,
-  0x1e1c2af784d3708c8dfb0dbb4174c3965978bfde14b84a56b9b3eba4379c51cd,
-  0x13e1a29c33b385d3708f7e0561bf9837d1a6f5b5ddc93b2cd34cd0e5aa7c08c17fc5297c34af4195dd8fb96d9ff4a1c022913a03d6,
-  0x1570eece177bc25638209f0311dfe97bdab377b06cc98cb77d815df0015d309d962b12c38df7b93400543a325253,
-  0x177878a70cf0e146dc15eb7dbf6f7cfde0dda6bcf445de5ce1c0cbd4c5ee5905bf02843c785290,
-  0x5de1e55c384f86bd70735e0c67c07a7804cefc7ddf1ddbc64b66d969bdacbbc181e6700aed32bf968f52cca9f8ca3412743e7652d6,
-  0x4bf1678e2aabc528f89af7122fe2273c4337670169db8d381597b93041b5b398a678b2d77da11627b862984c0413,
-  0x7ae318fc5c332fcd53474441105346,
-  0x2078f9e71e1de3a7fc73d78d81f1acfe338fc5ce7886beec90dd6e5b3d774f55660d0c1513824f69ad7cb76a96d96d1211a18ba212b29d8c0458,
-  0x11f22ebe43e9c833f8c97f1186ddaa7a7f6344d0661c6c18ff82d0e9b304b87586582d19e9a286a222129f780493,
-  0xc3c950b920ff23f4e4007c6a8f89af712b5ddd2fb420b5067e62aec1a016d18a9bea4ba8f97352d1fc53e1e223502a1d604d5,
-  0x2c7261fe47d7c84ff8e7af1b55e2959bbe3b68bcea1a5c1de56d5669c65cbc8697740d23a13e99a24472a3c40513,
-  0x45f2742e4847c88778ebd71878e2b9fbc273511368ac8c1e356da329cd4cbdbe86786d24413f2b2256a2a4140553,
-  0x8be4eb1c998792c0f1f3ce3d2fc5bbb78f06d205d461b98f9f0855d3a1297f912fb89a517a7f7544d1254d2,
-  0x2172d23e589dcac27956af292be50f1b4ea355b1ea48fc23bd61d0e9db84c0007e5a2d3229a58ea27312a9980593,
-  0x1afcca4f98daf309ee5e55cb8af941cf10c8da9f1a94973215e13dfc24676224e9e054c1707e64cd3b69a6b6a28812aa4205d5,
-  0x133cd99b9aca7344fe6655cbb579497f11eed5953a986f3290e15d5c2853626669edb4c2667e838d4341a7b1a29772ac2e0615,
-  0x3ce6e39c6d7374fe673dcbc27952f712eddaa45a9d2b3304e1656b6eb162ae29f17cc3957ea08d4531404922aa62ae8c0655,
-  0xb9d4a7344ee5747c4cdf6b47e674ec2f376e276c58153fda7ec92d4a4540eba2beb2b1160690,
-  0x6d73766e6b6bcc1578a04ed739d50839a0830c37d8ccfa808d31231fb8db53a94597a564f,
-  0xdcec0b9d5c73899e6d27cc48f963c7155cd5a2faa59334a1e1990b73256341ea0924c5af7f07cd5219416622de02b50006d5,
-  0x6e7603ce75f992172d97e2c77b616f5548d8e06a84d131b39fc9eb5585507968b8e,
-  0x3b74057e7e5bcf93f9e8473cbade559b661f5708e8bb3c340f63e5263d4c34247f5ead5eb9ab20a2f552b7e00713,
-  0x29e848dd057b6d5a590f17f7dc8c06,
-  0x21d231ba3e3f46d9e8b29d11f7a1a37414fe7a11cf15b7a07ef301db7afabd273527e1c08c36af644ba64f24c8947f894d640dac48a31a52b88a0759,
-  0x3afa5f674ab9e92fbd0cb79f1a6f526db803ac1bb3596e1d7ab74f96494e65874cab97fa50d69c1425b232ca2bad40794,
-  0x1fa65cf49d9e8b29d112f7b1eedd65cd88987a4ec9b54cd2599960ff8fdadc3a85cd467c25790,
-  0x7674ac7e8c53d095f9fbf6f74bd63a1a326336bbe1fc4b778d651626736c35e37fee4d72e94302a34192bf6807d3,
-  0x1fa675f4b10e918dd1ddba03eef88fd6695acadf373b620c3b798b65672682bccf07800e2d76e54382235182c1660814,
-  0x63d3f23a76374d08e7905be48b6f4062183b2cbf3469600bdb5ebd46dac584d,
-  0x1e3a999f5214ea3ebd413f9e95f2869dbea9ad32acb9a543a69a6c334bb20104a37222c57a0850,
-  0x19dd5693aa6374dd5e5207ad5db113cd98eea88213526e01b8b5fb34719858cd,
-  0x23d5fb7ab52754f5ea05bcf93b9584f2a60df48fb80cb5b2f623a8b3225516126b1fcd5ca80940d8d65b071239002c9360895,
-  0xefac76f56ceeaa29d4723a72bf3f23e58f5bed335be8e8d78c4985668f2a32ccd76e86d74d91cdb080a3a1a2cb6a08d4,
-  0x3beb023d5de3a999f5231e9eedd010b96ccefc90dc361ae5af5c4be25e1b36b751ef66cbc4d80880bb2d9649b11023b392cda80916,
-  0x15f5946e838fc5d83715c66fc1b385752022030023c192cf68094b,
-  0x57d64a7a13d7186bce1296743aa4db407ce47bce5a09,
-  0x87d7157adfa75ac6e9a55cbb3f8ce46fd53d75819c71b1364d9e43a954b37d826d60b660847c425a51,
-  0x5375f62ebd09d77d3ad7af507de873dcbc0f8d7bf02b0dfd2fb8fbf397ae2baec4ff167d8aa5ea4db3f811e0daea5b39ba3f502d5d60997,
-  0x17bd8213aeca744b5e61ebc6c4f81d76e4ded77cd9cc47160a5a079a99d7370da048636c4e480ce5ad1,
-  0xabd6f67a29ff1c58e0823bffcf729867456c5a1f8a166d0df54d7b814a2db429b449a41ac2d89809d1,
-  0xf0ec557d858baf21f5c2beb229d4723a763f4693e623bc74db82de6bc0ecea698b8ded15654e139c193375660597b6e71485145b56,
-  0xabec37bd829baf99f52c6e8fafcc8f38f1af06e9e01c1b98175e96e7633c5fcf8a4dad1d5d4f129bcf1030b9b7f136970487125b96,
-  0x7876278ea663d3c43a440f1f7ae0e67c04ab73b967778c60638a9eed278550bd81ae6dc0b1b55aa44ce2dedc0a13,
-  0x68ec86bd8fd3ad5275494e689fccfd3905370878d7dcb9e3af1a52631eeb4ad15472a7142ce13581dccdd27db896a45462e1c20a56,
-  0x1af6355eb6cdcd7af90def098fd7fb99e41f1adde320ab4cff54b86724e4e32c81e04dd6d9b9222465d2e3f00a93,
-  0x1a3b221f5cceeab33cd88f917870ac2d8099a38533d1d636eec667b69f3e72f24375f8206addba5b9bba47902e4600ad4,
-  0xd7b1c275db9e93b5cdc7f91f670bd3dd0219efab1b9cda89eaa62b3996e08f2b7773491185cd0,
-  0x6876568ec8c5d7bb7ab7674a02e7571ce10b920a70ce1d82679f04b1c2fdbe5cb53a3550e274f74e77e8241ade15544cb249af2e89e0b17,
-  0x68765a6ebe23d5fafa580f3961e4a27c342b74956c252cfa238e56ed568555379d13b04c31bcaa28a954955c5d53,
-  0x5ef6007e98b1c98ab8710eea41d86939f8a31d395abe7aac9d3aa520a11b7aac4978a5d8f,
-  0x1a1d97c3b155f613beb00dcee2f93aef0f74d8a5fb11f33fade3ba8b7f4b6b206761e4ebc782aacdee7945efa4cf82ef300b55]
+  0x602ee029c024a022c01c601ba017c010800f800980078000c,
+  0x1203d003a2037203380005,
+  0x160544053004d404ac0472043203180048,
+  0x3606c606920674060e05c605b204380088,
+  0x2c081607e0079c07540722034800c7,
+  0x12093a08d608940854070605bc0107,
+  0x6097a0142,
+  0xe0a2409de09860954085c074e05ec04500386018a,
+  0x3a0ad80a860a74061404ac01c6,
+  0x80b060a5e099608a007860692067004d203ca020a,
+  0x180aa409c4051c0244,
+  0x140b480b3a0afa08d607f606d6056e0288,
+  0x140b4e0a12092c080602c5,
+  0x3c1166111410c210a4107c10320ff40f920f440f220ec40ea60e5c0e0c0dc20da40d5a0d140cca0cb00c560c020bf60b98,
+  0x22164c163815e6158a1562151814da14b61468140813e8138c1342133012e6128a1240123811ee1194,
+  0x2a1cd41c821c6e1c141bd21bac1b6a1b241ae21aac1a5e1a3c19de1994194a193818ee18921848180217f617b6175e170416ee16b60b9b,
+  0x3421de218c2178211c20f420aa206c20361fe81fa81f5e1f141ec41eb81e4c1e021dc21da81d4e1d2e16820bd6,
+  0x3c280a27f227942760270226ce26b0267c260a25c2258c257c251c24fc24b22468241823ce23b02366232022d62296227c220e1d0416d60c1c,
+  0x222e2e2dd82db82d462d262cf22c962c622c2e2be62bb02b622b022ae22a982a4e2a3c29f22996294c290628fa28ba2858,
+  0x34329e327a322831dc31a4315a311c30d830b6305830322fe82f8c2f422f3a2ef02eb02e7c22281d5e17300c56,
+  0x1a370436e0368e3642360a35c03582357c351c34fc3498344e343033e633a03356331632d2,
+  0xc3a3839e6398a3962391a38f638a8384c383037ca37b8375632f02e7a285622421db61752,
+  0xc3db83d663d0c3cca3ca43c623c1a3bf43b983b563b0c3af03a8a3a78375633302eba289622821df617ae118a0c97,
+  0x2c411640c440b0405640143fee3fac3f643f2e3ee03e803e623e203de0337a2ec628e022cc1e0217f811d40cd6,
+  0x1c434a433642da42b24246422641dc4182414a3a4a37a633822f0c292623081800121a0d12,
+  0x3c462645d445824564453c44f244804470441043f043b033cc2f5629702352184a12640d52,
+  0xe4884485e480247da47924742472c46ce4684464241703ab037ce34282fb2298e23b81e6e18a612820d95,
+  0x184be44b8e4b7a4b284acc4aa44a5c4a2649cc49984976491848d834722ffc29d823c41eb818f012cc0dd5,
+  0x64dcc4db84d744d2c4cc84c884c684c04465c418c3acc380e2a2824141eca1902131c0e12,
+  0x10505650044fc04fb44f764f124ef24e924e724e182a72245e1f14194c13660e50,
+  0xa52f252a0524e523051cc518a5142511e50ee50b24e284c1848ce46b043a641e23e203dd83b563b3c349830222abc24a81f5e19a813840eb8001d,
+  0x2854d25480546c541053e8539e536e532e50924e484c76492c46d043c642003e743b9c34f630422adc24fc19c813e20ed80059,
+  0x3256a05642560e55f0558a5542552e53324e8c49984942473044203ea8387c351830a22b3c25281f9e1a2814040f380098,
+  0x28581257ee579c5758571056de50d24ec84ca649c0446e3ef638b02b4c25761fec1a7614520f4800d4,
+  0xe59b65952593458d0588e585056c2550251364f2c4cdc4a1247643f1a3bda38c2355c30e62b8225ac20241ae21a9a14b40fbc011a,
+  0x345a0259de53744f724480359a312a205814f20ffa014b,
+  0xa5bd65b805b605b2c5ada5abc5a4259d0588e5858570a5568538c518a51404fb44d244a5a47bc44f2426e3fac3f643c623c22390a35e431622c2e2bfc260a25f420ac1b6a1b22153c100601a6,
+  0x365c945c425c3c5a7458f0559053f051cc4a8247e4451a429640143fcc3cca3c8a3942361c31962c70265c20d41bd21b8a1564106c01db,
+  0x1a5d445d305cc25c1a5a92591c5742560e55ec540e52044ff84d684ade4802457642f040663d26398e366831e62cf22c8226ce26b8212e1c261582108a021f,
+  0x2c5db05cd45c605b2c5aee57a0564054605256500c4dba4b14458a430440b83d7839e036ba32382d462d142760270c21421c7815d410dc025c,
+  0x105dc45d365c805b745a36595257f2569254b2528e4b44486645dc435640cc3d8c3a0436de32582db2279e21941c8c1626112e029a,
+  0x105dec5d9a5d4a5bd65b8e59a8582854ca52d050464dd84be44b8e48bc462c411a373432a22e2e2dfc280a27f421ea1ce2167c114602db,
+  0x166340632c62da6280627c621861d66190614e612a60dc60ba605c60345fda5fa05f725f225eca5eae5e5a5e360b97,
+  0x20678a6776672466c866a06656661865f465a66566650064e464aa646c641663f8639a5e020bd3,
+  0x286cf46c9e6c406c0c6bec6bb86b5c6b286af46aac6a4a6a3a69da69ba6954693868d26882686a682867f863ae5e560c18,
+  0xe71da71847164713070d2709e7042700e6fda6f926f6e6f206ec06ea06e786e1e6df66da66d506d14,
+  0x2075ca75a67554750874d074867448741673f473967354731a72ec729c7246722867ca5eb00c53,
+  0x20777a770c76fc769c7650760672106d2a681663ca,
+  0xe7c367be47b927b767b347ad07a8e7a467a2279d479b27956791478f678ac7852783477ea7790761c72666d42686c64225ef811ee11940cca0c9d,
+  0x1e7f087ef47ea27e467e1e7df27da47d447d247cfc7cac7c7477ea77ac72b66d9268b25f0a124012240d5a0d16,
+  0x3480f28084806080307fd27f8e7f5a72ea64605f4a,
+  0x3883ae834a832c82c682bc825a820081cc81aa814c810e7f6c7c527814731e6df868e4649a5fb012e6128c0dc20d97,
+  0x3085f685a48560851884c684a68446842683fc7cb678ac78786e14690064f45fcc134213260e5c0e14,
+  0x887f0879e874c872e86ca86888640862683cc81127fa47cd6791478d673606e7a6966651c602813840e95,
+  0x268990897c892a88ce88a6885c8806842a81707fc47d32795c767473806e9a69ba604813e20ed3,
+  0x88bb08b5e8b008acc8aae8a488a0089e6844081cc81a47d5479bc769673e06efa69e6655c60a814040f15,
+  0x268d508d2c8cda8c968c4c8c0e8bc6849a822080327da279cc76ee6f0a6a3465aa60f614520f53,
+  0x388ee28ebc8e608e3a8df88d8e8bc089c0861884fc824480467a0874126f6c6a5865d0614e611a14b40f95,
+  0x208f6c8f0c8c1c88067456661814f20fc8,
+  0x34910290ea908c905890068fe88fac8f3a8df88d968c488a26884a868886608506829e7dd07a8e7a50748e6fda6fa86af46aa0665861d661a2153c101e,
+  0x2291c091ac91688fa08e2e8a4e88ae86ec82f280867e367b347ac874c2701c6b086680627c620a15641055,
+  0x692ae925c922c91468ffc8e5a8c808acc8aaa88cc8724854a83227e527b7a77147512709e706c6bb86b6466da62a615821099,
+  0x1892dc9200918c9058902c8cde8b3c891e877685b47ea47ba67564713070c06c0c6bf6672c62f815d410d5,
+  0x3a932e926291ea90a08f628e908d308b50897087ae837480c87ef67be0774a7584715e6c4a6740630c16261116,
+  0x3a931892c692b4910290f88ee68d488ba6898887f085f8839e7f0e7c2075ce71da71a86cf46ca067966362167c1157,
+  0xc95f495a2954e950094de94aa9450941693e89398934b,
+  0x1c980697f297a09770972296ea96a096789618934a,
+  0x2c9a969a449a3099ee99a09940990c98fa98b098789628938c,
+  0x1c9ad693c2,
+  0x89d149cfc9c989c569c3a9bc89ba69b729b1c9afa98b0986a96a09650940f,
+  0x9e869e729e029de29d829d729b0c98ea9449,
+  0x229fcc9fb89f669f289ec29d669b40991e9489,
+  0x4a0eca0baa048a0289ee29dba9bc89ba0996296c094cb,
+  0x22a1cca1a8a156a1029dd69c2e99b0970e9509,
+  0x14a2bca250a216a13aa048a0269f329e189c7099e0974b,
+  0x28a1789f469e449a3297a29546,
+  0xaa2fca24ca1aca08c9fbc9c969a4697f49589,
+  0xaa2d4a2a2a1c4a0e29fc09e889d149cec9a9c980c95cb,
+  0xea6f6a6a4a652a636a5d0a588a546a510a4c2a4aca452a418a3daa382a366a31a5e2e1692,
+  0x32ab5cab0aaaf6aa9caa5aaa34a9f2a9aca96aa934a8e6a8a6a852a836a7fca780a740a712,
+  0x16b1a2b14cb12cb0f8b09ab066b00cafcaaf98af64af16aee2ae9cae5aae24add6adb4ad56ad02ace6ac80ac6eac2eabd6aba6a32e5e4416dc,
+  0xeb536b4d4b482b476b434b3c0b3b6b370b310b2c2b288b25ab20ab1d6ab82a34a5e9e1712,
+  0x32b99cb978b926b8dcb89ab864b822b7dcb79ab756b734b6d6b6a6b66cb600b5eeb5aeb552,
+  0x3abde4bd92bd40bd24bce2bcbcbc7abc34bbf2bb90bb42bb1abacaba80ba58ba08b9eeb54ab1eeabc0a71aa39893761758,
+  0x3ac192c140c124c0fcc0b4c07cc02ebfcebfb0bf64bf1abec0bea2be58be08b9eeb5aeac00a7625ec217f61796,
+  0xcc574c522c4d0c4b4c472c40ec3ccc38ec340c31ec2c0c2aac25ac210c1e2be58be18ba00b5dab200ac6893b25f1218481819,
+  0x22c762c720c6f2c6bac64cc62cc5fac5acb608b27ca798a3d693e05f4e,
+  0x26cbb2cb5ccb0acaf6ca9cca5aca34c9f2c9acc96ac934c8dac8a6c846c826c7d2c7bac59ac210c1c0be8aba80ba66b642b2a6acb6a7d2a410941a5fb818ee18a0,
+  0x1ece64ce12cdd0cd8ecd48cd06cce0cc82cc60cc02cbd2c7aac264bf1abedabac2acd2a82ca46a94745fd4194a1917,
+  0x22d078d026cfcccfa4cf5ccf36cec8ce82cbe6c7ecc5c0c2b0bf56b696ad26a85c601e1992,
+  0x2d2aad258d206d1ead1a8d144d102d0c8d088cea0cc06c80cc61ec2cebfb4b6d0b2f4ad5e94ba607c19d5,
+  0x22d54cd538d4dad4a6d44cd40ad3e4d3a2d35cd31ad2c8d082cc5ac8a6c840c32ebfc2bb16b730b316ada6a882a48094dc609e1a1a,
+  0x2d76ad708d6f4d6b2d670d62ad5e8d5b6cee0ccb4c8fac64ec37cc010bb64adf4a8d0a4ce952a60ec1a55,
+  0x26d890d86ad810d7e8d7a8d59ad2dccf06cceac934c072bb9ab75aae2aa906a50e61221a92,
+  0x28d952d92cd8ead5dcd308cd2cc972c6b4bbdcb7b6b35cae6ca948a55061641ad0,
+  0x22daaeda78da32d9d8d9a8d7b0d622d342d0e4cf4ecd72c98cc3bcc0babc22b7d6aee2aeb2a99661aa1b15,
+  0x24dc30dbdadbbadb48db34daf2d664d384d110cdb4c9cec3fcbc64b800b398af64af34a9d0a59861ec1b55,
+  0x10dcecdc9adc58d990d7cad3e8d14ccf9aca20c6f2c424c0e2bc9ab874b3caaf9aaa3c62121b93,
+  0x12ddaedd5cdd0cd42ad19cca62c734c464bcdcb8b6b40cafdcaa76a5c062541bd0,
+  0x32de5cde0adddcdd1adc74daf2d9ecd8ead834d69ad4a6d446d1e6cfd2cdf6ca90c480c100bd26b8c2b45ab066b036aa92a610a21a62ae1c1c,
+  0x6de8addeedd6cdcbadb48db38da08d6f8d4d8d238d024ce0acae2c4d2c152bd78b914b4acb0f8b08aaae4a662956c62c21c59,
+  0x28dedcde12dd90dcdadb92d910d86ad70cd52ad25ccb22c774c524bd9cb976b4ccb11cab36a6b4958063141c96,
+  0x28dec6deb2de64dc30dbe2daaeda68d966d882d762d542d2a2d05ece66cbb2cb4cc57ac1babdf2b98eb516b1a2b172ab4ea6cc95d6636a1cdc,
+  0x20e3ece396e376e304e2e4e2b0e254e220e1ece1a4e16ee120e0e0e08ce070e038dfe2dfb8df60df26a338638e1d17,
+  0x6e892e87ae81ce7e8e78ae756e738e6c6e692e64ae614e5c6e586e570e516e4dee488e45ee413,
+  0x18eb02eadeea8cea40ea00e9fae98ce952e914e8e0df02a3681d4d,
+  0x6eeaeee5cee0aedeced86ed7aed3cecdaec8cec64ec14ebcaeb92eb54e8dee438df40a71aa3821d94,
+  0x2ef058f006eff2efb0ef62ef08eec8e462df9663ca,
+  0x6f3aef35cf30af2eef288f27cf208f1f8f1baf16ef124f0caf088eed2eb5ee4b8dfc0a76c640c1e021dd5,
+  0x2cf52af4faf486f476f406f3d2e93ca798a3ea644a,
+  0x30f87cf826f7d4f782f764f73cf6f4f680f664f630f5f0f59cf546f3caf094ebcaeb8ce956e4f0e036a7d2a42464841eb81e59,
+  0x28faaefa5cfa18f9cef990f96af90cf8ccf89cf56ef124f0e4ec30e50ce052a82ca44064de1f141ed4,
+  0x2cfc56fc04fbf0fbaefb64fb02faccf8b0f5b6f43af146e560e0a6a86665281f50,
+  0x2cfe56fe04fde4fdb0fd54fd2cfce4fc8cf8e4f630f5f8f1a2ef0cec7ae986e5a0e0e6a882a4a665681f95,
+  0xd0034ffd2ff80ff7aff30fef2fe82faeaf900f646f448f1f0ef5aec94e5eee134a8d0a4f465b61fd4,
+  0x310175011900f300b10072fea4fca4fb10f974f6baf4bcf23cecc0e9cae624e16ca96aa908a546a51865ec2016,
+  0x1901e501b0fecef9baed16662a2047,
+  0x2d0379032302c50291027d022501b300b1007aff2cfceefb58f9fcf6c8f246ed46e692e660e1ece1b4a9f2a990a5a066742099,
+  0x1b043703e5039900d4fd24f72af4eef2aced80ea38e6d4e21caa5aaa36a5c8669c20d1,
+  0x3d04e70495046503bd02350100ff64fdb0fd70fb9cfa02f74af2f2ef8aedccea4ae756e724e2b0e276aa92a62466f82118,
+  0x110515047703c502910252ff84fdc4fbeefa54f79cf306efdcee1eea9ce7e8e7b6e304e2caaae4a676670c2156,
+  0x330567049b042302d901f4ffd6fe16fc26f7ecf52ef358f02eee42eafae816e35cab36a68a675e2194,
+  0x330551053d04ed03790331014d002cfe6cfc68fab0f87cf806f3aef046ee98eb06e892e860e3ece3b2ab4ea6e067b421d8,
+  0x21081f07ef07b9074b072b06d706950645062d05c5058b,
+  0x21091f08ef088d08450585,
+  0x39096d05c2,
+  0x210a8b0a6d0a2109df09b909450607,
+  0x310b6f0b1b0adf09950645,
+  0x30bdd0ba109d70684,
+  0x330c450c2d0a2b06c4,
+  0x270ce50c850c1b0acb0a4b0706,
+  0x270d650d330c5d0b8d08790746,
+  0xd0da50d030bef08af0785,
+  0xd0de50caf0b210a9f08df07c6,
+  0xd0dcd0da70d670cf10b6109210807,
+  0x2112ad1257122711f311951161111510d1109d105510110fef0f910f610f390ee90e930e690e20df16aba867fc2217,
+  0xf171b16c516a51671161315df1583154f151b14d314af1461143913e9139f1377132712e90e05059ee438df6eabfa28562259,
+  0x37196d190f18fb18891847183717d7179d17530e6d05c8e462df906d2a680f,
+  0xf1f5b1f051ee51eb11e531e1f1dc51d831d511d1d1ccf1c9b1c531c1d1bcf1bad1b511b0f1ac51ab91a5f1a0319f7199d176712e90e85061ee4b8dfeeac266d42684628fa28a022d622a5,
+  0x1f236b231522f522832263222f21d3219f216b212d20df20bd205f200b1ff91f8319f719b713390ed50640ac766d926896294c29302366231c,
+  0x7263b25dd258b2579250724cb24952479242523c723b91f9f1a29139f13610f16e4f0e026ac9e6df868fc29f2299823ce2399,
+  0x31297d293728c528a52871282127ed27a52741272126c126a1264b1fc51ab91a7913d706b0e50ce042acf86e1469182a4e2a322468241b,
+  0x352d032ceb2c8d2c592c392bc72ba92b772b052af52a832a792a1729e729a12647239f20111b0f1ad10f6b06c6e560e096ad206e7a69622abc249d,
+  0x152fe12f8b2f6b2f372ed92ea52e492e152de12da72d67298126a523fd206d1b5717af0f8b0734ad406e9a69822adc24d8,
+  0x3531ab314d313930e930b5307930272d6126f9241f208f1bb717e114110fc6e5a0e0d6ada06efa69e22b3c2516,
+  0x15342133cb339b3367330932d532853251320931d729c12715246d20dd1bc7182f14790754e5eee124adee6f0a6a302b4c2559,
+  0x393647362f35fd358b356d353b34c934b9344931f930392a25274b24931c131495102f078ae624e15cae5aae126f6c6a662b82259a,
+  0x337b73759370736f536893491323530612d852ac32a6d278724eb211d1cdb1c5b14dd1052e66ce1a4af22ae9a6fb46aae2bca25da,
+  0x2b382937fb34f9344532552df72b352aa127df21511d0f1c8f15111086e6a0e1d8af56aece6fe86ae22c3c2616,
+  0x2f3941390d38ed38b9386937f536ad352930892e292b79251321851d831d43155510df07f8e6d4e20cafcaaf82701c6b162c70265a,
+  0x73a3b39dd39b9384736cb355532b930e52e472bb1280b256f21df1dc9185f15a11116e730e266b01e70786b722c8e2698,
+  0x2f3a6d38bd358932d92eb92be5286322131e3b189315d5114ae764e29ab05270ac6ba62cc226d3,
+  0x193a9d398d38d93727330d31372ed92c05289d258322711e71163311a8e784e2f8b0b070cc6bc62d202715,
+  0x1391b336b2f0d2c7728f522a51e8f18e5166711dce7f6e32cb0e471006c382d542751,
+  0x3b3b093aef3a7b39ef396b3837376f35cb33ab314b2f6b2cbb25d522c51eed190516971221083ae816e34cb104715e6c582db2279a,
+  0x93ad93a873a033787362133f531a12f832cfd2907262b231b1f1b16ed1252e86ce3a2b15a71b46cae2dca27d6,
+  0x3b3b39365534152ff52d31295f234f1f77194f17211286e8a0e3d6b18e71e86ce22e3c2812,
+  0x73e6f3e0d3df93dad3d753d2b3ced3cbb3c453c393bd33b833b690e14e8eeb54ab1d632f02e53,
+  0x2f40193ff53fa33f533f313ef73e930e467209,
+  0x7436f430d42f942af426d423741e94189416b413940dd409340773e833b690eaeb59c72603356333a2ef02e96,
+  0x174641461d45cb45bd4547453b44f944994479441543cb439d409340533bb90ec0b5dab22c72b033e6338c2f422f17,
+  0x2d47eb47ab4747472746f54692e92cb608b25a72ca,
+  0x314afd4aa74a454a3149e549ad4965491548e1488148614835469543cb43b940c53c393be10f0ce966b642b2947318344e34322fe82f9b,
+  0x2d4c974c734c214bd54b9f4b434b21482746f9442b41110f56b696737c34983010,
+  0xd4eb54e534e014df34dbb4d714d034cc34b0148474719444941713eef0fb4b6d0b2f4739c34f63054,
+  0x2d5097507350154fe14f954f5d4f154ec34cd548e148b944a941933f3b3c510ffae996b730b31673fc35183096,
+  0x3151db51a55159512350d54ee5492b476d3c951000e9dcb79ab776b3487402355c30d1,
+  0x19525552314d3b44eb3cc67440359a3108,
+  0x2d543953e353b35341532d52e15295522350dd4f3b4d5f4b6d4947453741f53d11109d1064b822b7c0b390748a35e43158,
+  0x3754a55461529951154f734d954ba549ab47bd456f426d422d3d5510c0ea1cb89ab876b434b3c874c2361c3196,
+  0x3d5567550554e5546d52e551554fe14f814de14bf149cb45b942a33f793d951161110cea66b8c2b454750e366831d7,
+  0x11558554f754b35341533350134e334c054a1d45cd42f53f8d3de711f3119eeab8b914b4a6756036ba3215,
+  0x2755235399525b519750754e574c674a6d47c1462f43193fef3e171202eadcb976b4ca758436de3254,
+  0x1155bd556d543953f151ed508d4ead4cb14afd4a974647436f40073e6112ad1258eb32b98eb52075da37343296,
+  0x1d588b5877581d57f557b3576b570956f9569d5643561b55c33b6712d2eb48b9f83751,
+  0x2d5a9b5a495a2b59c55999594b591358db55d33bb71318ba38960a378e,
+  0x1f5d155cef5c935c6b5c235bc15ba55b715b155ad358c356393bdf134aeb80ba60967037d2,
+  0x295ff55f9f5f4d5f395edd5eb55e6d5e0b5def5dbb5d453c291394ebcabaaa9690,
+  0x17619d614b610760fd60ab604d60155add567913e4ec1abacc380d,
+  0x2d63976345632562f16295626d622561cd602f5dbb5d655b715b0b593956bb3c61140cec42bb2296e83855,
+  0xd6575651364c164bb6471643363eb604b5dc15b99594956ef144d085aec90bb7097363892,
+  0x1f66c966a36647662165df65b363e561fd60ad5e235beb572d3c9314af08bcecf4bbf2bb9a38d3,
+  0x767536731642b3cfaed05,
+  0x1b692768d168b1687d682b67cf6793672165df65bb646d620760f55e6b5c0559b557b357753d0f151b14c6ed7cbc7abc223919,
+  0x969e56993694f67876615625d5e935c6b59dd57ed3d43155f08eceda4bce2bc8a3951,
+  0x2b6a956a436a13696b67e3664164a562f1628b61395eef5c895a3758393d9315df158aedc0bd2097663995,
+  0x3d6ac36a2569b1687d681364c5631d614d5f1b5a4b584d3de51671161cee12bd7297b839d2,
+  0x216b156a4969d16887674966b56517635f5f555ced5a9d58af3e0516a1092eee64bd8697cc3a13,
+  0x216b3d6aeb6a9b692768df66cd656d639761a95ff55f9f5d073e4f171b16c6eebabddc9812,
+  0x296c936c416c2b6bdd6bbb6b773e9d17790948eed0760b,
+  0xd6db96d676d296cfb6b713ed7179c7648,
+  0x2d6e7b6e096de96cdd6b933f3717e2ef3c7689,
+  0x236f0d6ed76eab6bc71830ef4c76c7,
+  0x3d6fad6f576ebb6e096de76d233f7b18891872efba770b,
+  0x396d416c353f8f18c6efc5,
+  0xb6ffd6f8d6eed6e4d6d936c593fed1918f020774a,
+  0xb6fe36f296caf4037196ef046,
+  0x2d72db7289726d722b71c771857157713970f770ad7053701b55d340771998be2a778a3a52,
+  0xf763775e575937577753574d1748f7451740373e173857343731d408319df09a2be7477d2,
+  0x1f7955792f78d57893786d782b77e37793777d772176df769576537003563940df1a0af080be9278303a95,
+  0x177b9d7b4b7b097ac77abd7a597a1979fb7995766d705d56791a64f0dabeec784c3ad1,
+  0x217e677e157dd37d917d497d237cc57ca37c477c057bc51aa109eef124bf367890,
+  0x1b8071801f7fc57f9d7f557f2f7ec17e857bdf76837337708f1af0bf5478e03dd63b11,
+  0x1d81c781b38161813180c380877c3b79a176c5737970eb41111b2d0a3af15679223e183b52,
+  0x39842383d183bd8363832182fb82b98241820380817ea37c5979fd77217397713b6b49416d1b4b0a4ebfb279403e743b98,
+  0x58671861385df85858543851d84db8493844182057c93774373dd6bb956a9418f1bb8f1aebfd479a03e95,
+  0x39882387c187ad876b872986e186b180ef7ee37cd97a11742b6bc956dd1bc8f1fcc02279ee3ed3,
+  0x1f8949892388c988a18861869384557f097d3d7a6377ab57131c3cf234c0467a243f1a3bd2,
+  0x1b8aa78a718a2b89d189a1886986db84b9825d7f517d477aab77cf74457173574f1c9b1c7cc08e7a6c3f623c16,
+  0x1d8c298bd38bb38b418b2d8aeb871d84fb82937d897aed7811748771b557b741d11d1d1cc8f2507aae3fa43c56,
+  0x98ce58c938c5189898883852182c57f93787574eb71ed42031d64c0f47ad43fca3c91,
+  0xb8da78d558d058563831578b7752d721d57ef42451da10aaef2b67b16400c3cd0,
+  0x2b8e558e038dd58d138c6d8aeb89e388ed875385df85bd8361811f7fd57dcb7b2f78d37549726d6f77583942931e1f1dcaf2c0c1127b7040663d1d,
+  0x3d8e838de78d658cb38b418b318a0187b1861183b3817180277e1d7b65759b72816c0b584d42e51eb11e5cf312c1647b8440b83d5a,
+  0x218ed58e0b8d898cd38b89892387c5866383c78195793775ed72d36c5d58af43051eeef3767bd640cc3d95,
+  0x218efd8eab8e5d8c298bdb8aa78a5f89798839841d81db80617e577b9f794f76296c87434f1f5b1f06f3bac18e7c2c4118,
+  0x2f906590238fe38f8f8f658f13701358cb4390c1f09842414c,
+  0x399347932f92dd928b926d920791c991ad9179911990f9909543f91f9ac23a98ac7c51,
+  0x27952d94db94979469942993cb93a58f2d704b1feac24c98fc7c9c418e,
+  0x2b9755970396ef9693966d962b95c19591954b93b990857343733970f770b9441f2000c2a47cf043a641d5,
+  0xb98cf98b1984b980197d19791956993d990cf8f6173977119447d205b0adec2c099047d1043c64214,
+  0x159a439a2399ef9993996b991197ad917991238f8373cb5939449f2080c32099647d704412,
+  0xb9bb39b519b3d9af99a8195a9940991917419596d20cec36e99b27d80444f,
+  0x179c239bc197fb44f24485,
+  0x2b9df79da19d439d0f9cfb9c9f9c639bf99aab990b982d962b95d7944791d1748f7447718571455987451f216b210ec3ccc39e7dfc44f2425c,
+  0x199eb59e639e1f9c5399719853966d92238ff7753574ed722b71eb59fd455321af0b34c472c4067e24451a4296,
+  0x3b9f659f139ee39e3b9cbd9ae399ef998f98af969b948b9253754972495a0b45a3222f21d0c4b099e27e42457642d7,
+  0xf9f939ef59e439d0f9cd19b039a0396ed94dd92a5759b729b5a5d45f522832262c4c49a347e94458a4315,
+  0x319fe59f199ea19d579c339b559a55972f92e5903775ed72ed5a81461522f10b74c5169a487ee645dc4355,
+  0x319fcf9fbb9f6b9df79d8b9b8b98eb976795399347932f904f7617465f236b230cc56c9a9e7f3c4614,
+  0x11a14fa11fa0e9a0b9a05ba0354686f3fac59c9ace7f4b,
+  0x3a22da1fda19ba02746f6f42cc5d27f88,
+  0x21a29fa27da1b9a047470cc6307fc7,
+  0x21a31fa2eda1e9a086f47ac6608007,
+  0x7a35fa2dfa0eb477af4b2c6848047,
+  0x7a39fa24fa12b47aaf4e2c720c6f28088,
+  0x7a387a361a321a283a211a16d47ecf522c77480ca,
+  0x3a4b5a451a425a3e58f1576555adcf552c7b29b04464b,
+  0x7a6fba697a679a615a5d3a58ba567a537a4dba03990a176df76a1480723b0f5a6c7cc811848ce4694,
+  0x25a8dba889a875a819a7f1a7aba777a737a4f9a05990cf8f7d7701486523c6c8269b6a8176492c46d4,
+  0x7aabbaa5daa0ba9f9a987a94ba937a739913b5d715b2148b92430f5e6c8489b8c81984952,
+  0x2fab6dab3daaeba765a3ed91638f93776f5da55b5548e4f61ac8ba9bc081cc49824711,
+  0x25acf1ac9bac65ac21abd9aba7a511a429a089918b5dc15b952440f674c8d69c1a822649d2,
+  0xbae57ae01addbadbdad59ad19abbdaacba90ba575a45fa0e377ad5e235be5490b24b4f6acc96ac93c825c4a124757,
+  0x13af49af29aec7ae99ad21abc7a971a795a5d3a58791ed782b77f55e6b5c2d494724fcf6f4c9f2c98682a44a5a4797,
+  0x1b01dafcbaf87aebdad6dab39a999a7f9a60fa12d92238fd57893785d5e935c6549b92524f71cca5aca2c82cc4a8247d8,
+  0x17b08db04baf9bada5ac0ba9f5a817a64b926f78f95eef5cb149cb2542f776ca989c4a83284ade4814,
+  0x29b0ddafe9aeddaa09a85d928d5f054a1d2594f78acafa4b0c,
+  0xdb159b10db041b009af01addbac6fab7baa5ba8bba691a16f92e59015791f5f555ce74a7b25e6f7dccb3c9cae834e4b444859,
+  0x19b129b0d7b093af57ae31ac87aa8793355fbd4a87263cf832cb549ce44b8f,
+  0xdb14bae65ace5a8c7a6c3a4b9936f905f79695fdf5d314af0f866cb889d3883984bce4892,
+  0x3db345b331b2efb2adb265b213b1d3b18b93877c057bfb79a1264cf882cbe683f24e284c12,
+  0x1db4a3b451b40db3d3b393b1a993e37c5979c126a0cc029d4684124e484c4f,
+  0x3db605b5e5b5b1b56db525b4d3b3a5a3c57c8d602126ccf8c2cc629da684724e90,
+  0x23b751b70db6c3b685b653b1d1a42994237cd97a2b6041271d0baaf920cc829dc684924ec84c93,
+  0x3b875b833b7f1b785b665b4e5b235a4497d3d7a7d60a527430bd0f948cd06ccd884f64f2c4cd3,
+  0x25b883b68ef9b44f44,
+  0x3db9cbb985b951b93db8e5b8b3b7f1b78db6edb50db3efb2adb25794537d917d497ac77a8760e127ed2798f9d0cd8ecd6085004fb44d1b,
+  0xfba55ba3db8f5b811b725b5b1b551b431b2db94957dcb7b0b61252871281cfa12cdf29e2485444ff84d55,
+  0x21ba95ba05b951b923b745b5e3b445b32d94e77e1d7b5d617728c528aefa64ce069e768596500c4d94,
+  0x21ba8fba7db9cbb983b87db61db4bdb343a4a795217e577b9761b1297d2928fa9ece409eb085d050464dd5,
+  0x33bc5dbc0bbbf7bb9bbb75bb33bad3b1b7a4fda191954380817e834b2729850c08ceae50b20313,
+  0x33be1dbdf9bda7bd65bd23bcdbbc93b1e7a52da1c195b180ef7ed729f30c42faf6cede50e20353,
+  0x7bf2fbecbbe89be5bbca5b20ba5557f392a24fb1ccf008602510d,
+  0x3c04fc019bfd3bfb7bf49be63bcf3baedb253a5ab95dd7f752a832a64cf48864a5151,
+  0x5c1d1c1b9c15bc127c0d5c0a5bd35bb2fb295a5ed961f4b772b052aeefb4a868c51900392,
+  0x2fc28dc279c237bf5bbb79a61396457f954ba92b4ccfae86f051cd,
+  0x13c37bc329c2f9c215c093bf8bbea7bd77bbb1b2d7a66f96a1811f7fe14bf92bc72bb0fba6cfcc870e521203d6,
+  0x25c3a9c2cdc25bc127c0d9bff9bd8bbbc5b30396f3817180334c0d2c592c04fbf8d01e87605253,
+  0x9c3fbc32fc2b9c16fbeddbdddbc3ba683a215970781974c6b2c96fc3087b25290,
+  0x9c3e5c393c345c1d1c183c04fc007bf33be33bc7db347a6eb975d81db806d4cb52d032cecfc62d04887ca52d6,
+  0x33c59dc54bc52bc4f7c49bc473c413b3aba777a711978182296cc34ce72d48d0a89eee53320413,
+  0xdc619c5c197f14d1c881e5346,
+  0x21c7edc797c777c705c6f1c695c659c5f3c435bb33bacdb3f1a78b983b82b9827b4d552de12d84d102d0e6886853ac0458,
+  0xfc8abc859c815c65bc45bbb59a7dfa2719863832182f34d892e250caad1a8d14e889053d40493,
+  0x31c95bc909c8d9c831c6abc4f7c4b7bb91b435a80f98bd83676d014dd92ea52e46d1e69f2a88ec543004d5,
+  0x5c989c8ebc877c705c6cbc50bbbe3b449a85183b96d534e2b2f372ed8d2389f7c890054440513,
+  0x27c9dbc90fc897c74dc61dc55dbc1ba8a1a2a383cd6db54e4b2f670cead24c9f90895254960553,
+  0x27c9c5c9b1c961c7edc7b3c5b3bc5db4a5a8cb98f9840d4e952fe12f82d2a29fe689a854d2,
+  0x7cb6fcb3dcacbcaadca49ca25b4fdaacba913846561d54ef93024fc9cd31ad2c089c255060593,
+  0x3ccb7cc59cc07cbf5cb89ca33c42db507a96b991d84db84ad621d4f35306cfce4d3a2d3488a0a554e05d5,
+  0x2fcd8dcd6dcd39ccf5cbadca5bc46dab39a99399458543851562554f693094fd0cd40ad3ee8a7055b40615,
+  0x7ce7bce1dcdf9ccc7cbcbcab7c4b1b54ba9ef999f85896df162a14fb930f0fd66d448a00c8a8e55d20655,
+  0x2fceadcd3dcaebc4e5b5a399d385fb6e2562d54fe4fd9ad4baa0408ac256060690,
+  0x1dcdcdcd59cc0bc505b5ddaa039a3186056333500d3104fdf8d4de8b20564f,
+  0x9ceefcebbce2fcdb7cc6fcb1dc56fab7baa559a45866d6e576357506b3156fe0cd52ca0b08b7256b606d5,
+  0x9cec7ce43cc87cb73c5bdb607aaad63ad50b531acfe62d544a0c88b8e,
+  0x25d00fcfd9cf97cf55cf1bbc85b659ab9fa2e186b363c931e50d32feaad5e8d58e8bd056d40713,
+  0xdd089d043b6b16430fecc8c06,
+  0x21d22dd1d7d1a7d173d121d0c9d057cf55cf25bd23bccdb6e1abf99aab872986fb64453251323aff32d670d6168c58571c0759,
+  0x31d2dbd2b7d261d0d9cfa7bd51b725ac3d9aed87576e81648932d53280ff74d696a11a8c9c57600794,
+  0x5d337d267d173d139bda3b7519b01879364db33673312ff88d6e8a16c8cee5790,
+  0x1bd297d18dd08fcfddbddbac61a3339b6387cd6ef5650b33a70d74ffead70ca1908d1257d607d3,
+  0x5d331d2e1d22dd1e5d033be25acf1ac8b9bb988236f0d6555342133cd0002d762a1e68d68582c0814,
+  0x7d3fbd3bbd355cf09be71b7a1885f65b934710068d7b88d8e584d,
+  0x9d4d5d4bdd459d417cf49ca33b7d9ad2165e350fb34c934b300ba8dd058940850,
+  0x33d57dd53bd36dca7dad4988876619512d351900d0d7e08e3458cd,
+  0x17d5c1d5bdd519d419cfbdcacbca8bbeb5b81bada388e36665517d358b3575012cd8ead83c8e5259160895,
+  0xdd601d5b3d57dd47bd38fcfefcb2fbec1adc7a3498909669b51af35cd0d92d910d8628eb6597a08d4,
+  0xdd617d5c9d4d5d487d3e5d007cb47bf03b84bae57ae1f895f66f151f9364736310168d966d8b88ece59920916,
+  0x2fd649d059c5e5b8a39bd36715522501ac8f0259c6094b,
+  0x2fd64dd08dc6179c076759525901e08f745a09,
+  0x3bd70dd6c7d6bbd375cb95c677bf47ae9f9c51898f67a152a937f53698d9a88fbc5a51,
+  0x13d7c9d7a9d747d699d421d0c7cbf1c695c093bfbdb8fb9cad8aeb89eb67ed52c736fd0234daf2d9c68fda5a9e0997,
+  0x25d829d773d119cc05c6e7c0d1b929aecf9cc18b3d6801531937110248db18902c5ad1,
+  0xdd6e7d177c71bc119bfc5b9439d338b718a316873534502badb78da0c90605b2409d1,
+  0x9d895d849d7bbd72fd67dd47bd397d1b7cc57c779c149af219d538b9168a353ab3837376302dadbaa90805b56,
+  0x15d865d813d7d5d4add1c3ccadc791c18fc00bb993af779da98be78a6768f953c337b90330dbeeda4290d65b96,
+  0x9d889d4c7d3e1d221c7c5c1c3c07db9eb9ddd8c1b8a9b692d542d0364dc22dab4910a5bce0a13,
+  0x1d91dd8c7d6bdd52dcd39ccd9c839c20bafa39e158d138c536965546d38b93865039cdd1adc6c91425c060a56,
+  0x1dd8cdd6cdcd6bc84dc25daff59e678d658ca569b75481390d38f703eedd6cdc8091945c580a93,
+  0x1d93bd733d56fcd8fc8afc281b007a3999e8b8d898cc969ef394d0ddb0412dd90dce291f65cba0ad4,
+  0x1dd8e9d777d25dcdc9c8e9c2d5ba139ec38dc36a0554dd3995044adddc92305cd0,
+  0x19d941d909d781d59bd2afcebbce1bc93bc30db0659f158e3d6f956a67552f3a7b39e7049cde3ca26e92445d080b17,
+  0x19d953d7d7d5f1d2c7ce71c953c34fba57b0bb9f6b8e6b6abd55473a3d04f2de54a286929a5d53,
+  0x25d805d305c9a5c3a1baa9b0cf9fbd8ebd6ad155993a910506de9892ec5d8f,
+  0x19d949d895d84dd609cee7c9c9c3cdb159b1319fe18ecb6fe16b3b3b093af30568decaa2fa93105dd40b55]
 
 def thirdSuccessors (i : ℕ) : List ℕ :=
   successorCodes (thirdSuccessorsList.getD i 0)
@@ -7530,7 +7537,7 @@ lemma boolOfNeg {b : Bool} (h : (!b) = true) : b = false := by cases b <;> simp_
 
 
 def taggedMissing (codes : List ℕ) (atState : ℕ → SearchState) (z : ℕ) (v : List W) : Bool :=
-  st (z % 251) fun tag => !(codes.any fun code =>
+  st (z % 31) fun tag => !(codes.any fun code =>
     (code / 2048 == tag) && !frontierMissing [atState (code % 2048)] z v)
 
 lemma taggedMissing_found {codes : List ℕ} {atState : ℕ → SearchState} {z : ℕ} {v : List W}
