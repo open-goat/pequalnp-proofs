@@ -3128,7 +3128,7 @@ def anySub (d : Bool) (l : ℕ) (v : List W) : ℕ → (List W → Bool) → Boo
   (fun w t ih c h => Bool.rec (motive := fun _ => Bool) (Bool.rec (motive := fun _ => Bool) false (ih c h) (Nat.beq (Nat.lor c (cov d l t)) l)) true
     (st (Nat.lor c (sp d l w.s)) fun c => ih c fun r => h (w :: r))) v
 def sumc (v : List W) : ℕ := List.rec (motive := fun _ => ℕ) 0 (fun w _ ih => Nat.add w.c ih) v
-def MM : ℕ := 37
+def MM : ℕ := 35
 def hb (H x : ℕ) : Bool := Nat.beq (Nat.land (Nat.shiftRight H (Nat.mod x MM)) 1) 1
 def pairsC (H : ℕ) (h : X → X → Bool) (xs : List X) : Bool :=
   List.rec (motive := fun _ => Bool) false (fun a r ih => Bool.rec (motive := fun _ => Bool) ih true
@@ -5635,63 +5635,63 @@ lemma strengthenGrade {t : ℕ} {e : ℕ × ℕ} (base : HasGrade t (gradedRow t
 
 end InversionFree
 
-def floorPiece0 : List (ℕ × ℕ × ℕ) := [(0,0x10402004,0)]
+def floorPiece0 : List (ℕ × ℕ × ℕ) := [(0,0x220800400,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece0Ok : floorPiece0.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece1 : List (ℕ × ℕ × ℕ) := [(0,0x21020100,0)]
+def floorPiece1 : List (ℕ × ℕ × ℕ) := [(0,0x40288,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece1Ok : floorPiece1.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece2 : List (ℕ × ℕ × ℕ) := [(0,0x42040200,0)]
+def floorPiece2 : List (ℕ × ℕ × ℕ) := [(0,0x82200020,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece2Ok : floorPiece2.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece3 : List (ℕ × ℕ × ℕ) := [(0,0x4080400,0)]
+def floorPiece3 : List (ℕ × ℕ × ℕ) := [(0,0x4001100,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece3Ok : floorPiece3.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece4 : List (ℕ × ℕ × ℕ) := [(0,0x1f88b1d8fb,1)]
+def floorPiece4 : List (ℕ × ℕ × ℕ) := [(0,0x5595be857,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece4Ok : floorPiece4.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece5 : List (ℕ × ℕ × ℕ) := [(1,0x10402004,0)]
+def floorPiece5 : List (ℕ × ℕ × ℕ) := [(1,0x220800400,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece5Ok : floorPiece5.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece6 : List (ℕ × ℕ × ℕ) := [(1,0x21020100,0)]
+def floorPiece6 : List (ℕ × ℕ × ℕ) := [(1,0x40288,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece6Ok : floorPiece6.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece7 : List (ℕ × ℕ × ℕ) := [(1,0x42040200,0)]
+def floorPiece7 : List (ℕ × ℕ × ℕ) := [(1,0x82200020,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece7Ok : floorPiece7.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece8 : List (ℕ × ℕ × ℕ) := [(1,0x4080400,0)]
+def floorPiece8 : List (ℕ × ℕ × ℕ) := [(1,0x4001100,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece8Ok : floorPiece8.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece9 : List (ℕ × ℕ × ℕ) := [(1,0x1f88b1d8fb,1)]
+def floorPiece9 : List (ℕ × ℕ × ℕ) := [(1,0x5595be857,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece9Ok : floorPiece9.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece10 : List (ℕ × ℕ × ℕ) := [(2,0x10402004,0)]
+def floorPiece10 : List (ℕ × ℕ × ℕ) := [(2,0x220800400,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece10Ok : floorPiece10.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece11 : List (ℕ × ℕ × ℕ) := [(2,0x21020100,0)]
+def floorPiece11 : List (ℕ × ℕ × ℕ) := [(2,0x40288,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece11Ok : floorPiece11.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece12 : List (ℕ × ℕ × ℕ) := [(2,0x42040200,0)]
+def floorPiece12 : List (ℕ × ℕ × ℕ) := [(2,0x82200020,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece12Ok : floorPiece12.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece13 : List (ℕ × ℕ × ℕ) := [(2,0x4080400,0)]
+def floorPiece13 : List (ℕ × ℕ × ℕ) := [(2,0x4001100,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece13Ok : floorPiece13.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece14 : List (ℕ × ℕ × ℕ) := [(2,0x1f88b1d8fb,1)]
+def floorPiece14 : List (ℕ × ℕ × ℕ) := [(2,0x5595be857,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece14Ok : floorPiece14.all (okS cut3 0 11) = true := by decide +kernel
@@ -5699,39 +5699,39 @@ def floorPiece15 : List (ℕ × ℕ × ℕ) := [(3,0x0,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece15Ok : floorPiece15.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece16 : List (ℕ × ℕ × ℕ) := [(3,0x1fffffffff,0)]
+def floorPiece16 : List (ℕ × ℕ × ℕ) := [(3,0x7ffffffff,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece16Ok : floorPiece16.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece17 : List (ℕ × ℕ × ℕ) := [(4,0x1fffffffff,1)]
+def floorPiece17 : List (ℕ × ℕ × ℕ) := [(4,0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece17Ok : floorPiece17.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece18 : List (ℕ × ℕ × ℕ) := [(5,0x1fffffffff,1)]
+def floorPiece18 : List (ℕ × ℕ × ℕ) := [(5,0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece18Ok : floorPiece18.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece19 : List (ℕ × ℕ × ℕ) := [(6,0x1fffffffff,1)]
+def floorPiece19 : List (ℕ × ℕ × ℕ) := [(6,0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece19Ok : floorPiece19.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece20 : List (ℕ × ℕ × ℕ) := [(7,0x1fffffffff,1)]
+def floorPiece20 : List (ℕ × ℕ × ℕ) := [(7,0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece20Ok : floorPiece20.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece21 : List (ℕ × ℕ × ℕ) := [(8,0x1fffffffff,1)]
+def floorPiece21 : List (ℕ × ℕ × ℕ) := [(8,0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece21Ok : floorPiece21.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece22 : List (ℕ × ℕ × ℕ) := [(9,0x1fffffffff,1)]
+def floorPiece22 : List (ℕ × ℕ × ℕ) := [(9,0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece22Ok : floorPiece22.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece23 : List (ℕ × ℕ × ℕ) := [(10,0x1fffffffff,1)]
+def floorPiece23 : List (ℕ × ℕ × ℕ) := [(10,0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece23Ok : floorPiece23.all (okS cut3 0 11) = true := by decide +kernel
-def floorPiece24 : List (ℕ × ℕ × ℕ) := [(11,0x1fffffffff,1)]
+def floorPiece24 : List (ℕ × ℕ × ℕ) := [(11,0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma floorPiece24Ok : floorPiece24.all (okS cut3 0 11) = true := by decide +kernel
@@ -5830,103 +5830,103 @@ lemma theGrades1 : ∀ e ∈ table1, HasGrade 1 e := by
   exact sg1cut3 v hv
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p0Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x4 0 = false := by decide +kernel
+lemma gcheck1p0Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x400 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p0Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x4 0 = false := by decide +kernel
+lemma gcheck1p0Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x400 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p0 : BinarySearch.chk [] table1 0 12 1 0x4 0 = false := BinarySearch.binaryJoin gcheck1p0Conj gcheck1p0Disj
+lemma gcheck1p0 : BinarySearch.chk [] table1 0 12 1 0x400 0 = false := BinarySearch.binaryJoin gcheck1p0Conj gcheck1p0Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p1Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x100 0 = false := by decide +kernel
+lemma gcheck1p1Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x80 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p1Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x100 0 = false := by decide +kernel
+lemma gcheck1p1Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x80 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p1 : BinarySearch.chk [] table1 0 12 1 0x100 0 = false := BinarySearch.binaryJoin gcheck1p1Conj gcheck1p1Disj
+lemma gcheck1p1 : BinarySearch.chk [] table1 0 12 1 0x80 0 = false := BinarySearch.binaryJoin gcheck1p1Conj gcheck1p1Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p2Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x200 0 = false := by decide +kernel
+lemma gcheck1p2Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x2000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p2Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x200 0 = false := by decide +kernel
+lemma gcheck1p2Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x2000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p2 : BinarySearch.chk [] table1 0 12 1 0x200 0 = false := BinarySearch.binaryJoin gcheck1p2Conj gcheck1p2Disj
+lemma gcheck1p2 : BinarySearch.chk [] table1 0 12 1 0x2000000 0 = false := BinarySearch.binaryJoin gcheck1p2Conj gcheck1p2Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p3Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x400 0 = false := by decide +kernel
+lemma gcheck1p3Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x1000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p3Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x400 0 = false := by decide +kernel
+lemma gcheck1p3Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x1000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p3 : BinarySearch.chk [] table1 0 12 1 0x400 0 = false := BinarySearch.binaryJoin gcheck1p3Conj gcheck1p3Disj
+lemma gcheck1p3 : BinarySearch.chk [] table1 0 12 1 0x1000 0 = false := BinarySearch.binaryJoin gcheck1p3Conj gcheck1p3Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p4Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x2000 0 = false := by decide +kernel
+lemma gcheck1p4Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x200000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p4Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x2000 0 = false := by decide +kernel
+lemma gcheck1p4Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x200000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p4 : BinarySearch.chk [] table1 0 12 1 0x2000 0 = false := BinarySearch.binaryJoin gcheck1p4Conj gcheck1p4Disj
+lemma gcheck1p4 : BinarySearch.chk [] table1 0 12 1 0x200000000 0 = false := BinarySearch.binaryJoin gcheck1p4Conj gcheck1p4Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p5Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x20000 0 = false := by decide +kernel
+lemma gcheck1p5Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x8 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p5Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x20000 0 = false := by decide +kernel
+lemma gcheck1p5Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x8 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p5 : BinarySearch.chk [] table1 0 12 1 0x20000 0 = false := BinarySearch.binaryJoin gcheck1p5Conj gcheck1p5Disj
+lemma gcheck1p5 : BinarySearch.chk [] table1 0 12 1 0x8 0 = false := BinarySearch.binaryJoin gcheck1p5Conj gcheck1p5Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p6Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x40000 0 = false := by decide +kernel
+lemma gcheck1p6Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x200000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p6Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x40000 0 = false := by decide +kernel
+lemma gcheck1p6Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x200000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p6 : BinarySearch.chk [] table1 0 12 1 0x40000 0 = false := BinarySearch.binaryJoin gcheck1p6Conj gcheck1p6Disj
+lemma gcheck1p6 : BinarySearch.chk [] table1 0 12 1 0x200000 0 = false := BinarySearch.binaryJoin gcheck1p6Conj gcheck1p6Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p7Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x80000 0 = false := by decide +kernel
+lemma gcheck1p7Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x100 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p7Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x80000 0 = false := by decide +kernel
+lemma gcheck1p7Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x100 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p7 : BinarySearch.chk [] table1 0 12 1 0x80000 0 = false := BinarySearch.binaryJoin gcheck1p7Conj gcheck1p7Disj
+lemma gcheck1p7 : BinarySearch.chk [] table1 0 12 1 0x100 0 = false := BinarySearch.binaryJoin gcheck1p7Conj gcheck1p7Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p8Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x400000 0 = false := by decide +kernel
+lemma gcheck1p8Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x20000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p8Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x400000 0 = false := by decide +kernel
+lemma gcheck1p8Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x20000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p8 : BinarySearch.chk [] table1 0 12 1 0x400000 0 = false := BinarySearch.binaryJoin gcheck1p8Conj gcheck1p8Disj
+lemma gcheck1p8 : BinarySearch.chk [] table1 0 12 1 0x20000000 0 = false := BinarySearch.binaryJoin gcheck1p8Conj gcheck1p8Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p9Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x1000000 0 = false := by decide +kernel
+lemma gcheck1p9Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x40000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p9Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x1000000 0 = false := by decide +kernel
+lemma gcheck1p9Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x40000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p9 : BinarySearch.chk [] table1 0 12 1 0x1000000 0 = false := BinarySearch.binaryJoin gcheck1p9Conj gcheck1p9Disj
+lemma gcheck1p9 : BinarySearch.chk [] table1 0 12 1 0x40000 0 = false := BinarySearch.binaryJoin gcheck1p9Conj gcheck1p9Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p10Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x2000000 0 = false := by decide +kernel
+lemma gcheck1p10Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x20 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p10Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x2000000 0 = false := by decide +kernel
+lemma gcheck1p10Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x20 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p10 : BinarySearch.chk [] table1 0 12 1 0x2000000 0 = false := BinarySearch.binaryJoin gcheck1p10Conj gcheck1p10Disj
+lemma gcheck1p10 : BinarySearch.chk [] table1 0 12 1 0x20 0 = false := BinarySearch.binaryJoin gcheck1p10Conj gcheck1p10Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gcheck1p11Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x4000000 0 = false := by decide +kernel
@@ -5938,35 +5938,35 @@ set_option maxHeartbeats 0 in
 lemma gcheck1p11 : BinarySearch.chk [] table1 0 12 1 0x4000000 0 = false := BinarySearch.binaryJoin gcheck1p11Conj gcheck1p11Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p12Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x10000000 0 = false := by decide +kernel
+lemma gcheck1p12Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x800000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p12Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x10000000 0 = false := by decide +kernel
+lemma gcheck1p12Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x800000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p12 : BinarySearch.chk [] table1 0 12 1 0x10000000 0 = false := BinarySearch.binaryJoin gcheck1p12Conj gcheck1p12Disj
+lemma gcheck1p12 : BinarySearch.chk [] table1 0 12 1 0x800000 0 = false := BinarySearch.binaryJoin gcheck1p12Conj gcheck1p12Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p13Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x20000000 0 = false := by decide +kernel
+lemma gcheck1p13Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x200 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p13Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x20000000 0 = false := by decide +kernel
+lemma gcheck1p13Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x200 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p13 : BinarySearch.chk [] table1 0 12 1 0x20000000 0 = false := BinarySearch.binaryJoin gcheck1p13Conj gcheck1p13Disj
+lemma gcheck1p13 : BinarySearch.chk [] table1 0 12 1 0x200 0 = false := BinarySearch.binaryJoin gcheck1p13Conj gcheck1p13Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p14Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x40000000 0 = false := by decide +kernel
+lemma gcheck1p14Conj : BinarySearch.binaryCheck (!·) [] table1 0 12 1 0x80000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p14Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x40000000 0 = false := by decide +kernel
+lemma gcheck1p14Disj : BinarySearch.binaryCheck id [] table1 0 12 1 0x80000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p14 : BinarySearch.chk [] table1 0 12 1 0x40000000 0 = false := BinarySearch.binaryJoin gcheck1p14Conj gcheck1p14Disj
+lemma gcheck1p14 : BinarySearch.chk [] table1 0 12 1 0x80000000 0 = false := BinarySearch.binaryJoin gcheck1p14Conj gcheck1p14Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck1p15 : BinarySearch.chk [] table1 0 12 1 0x1f88b1d8fb 1 = false := by decide +kernel
-def gm1 : List (ℕ × ℕ) := [(0x4,0), (0x100,0), (0x200,0), (0x400,0), (0x2000,0), (0x20000,0), (0x40000,0), (0x80000,0), (0x400000,0), (0x1000000,0), (0x2000000,0), (0x4000000,0), (0x10000000,0), (0x20000000,0), (0x40000000,0), (0x1f88b1d8fb,1)]
+lemma gcheck1p15 : BinarySearch.chk [] table1 0 12 1 0x5595be857 1 = false := by decide +kernel
+def gm1 : List (ℕ × ℕ) := [(0x400,0), (0x80,0), (0x2000000,0), (0x1000,0), (0x200000000,0), (0x8,0), (0x200000,0), (0x100,0), (0x20000000,0), (0x40000,0), (0x20,0), (0x4000000,0), (0x800000,0), (0x200,0), (0x80000000,0), (0x5595be857,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm1covers : mFull gm1 = true := by decide +kernel
@@ -6079,103 +6079,103 @@ lemma theGrades2 : ∀ e ∈ table2, HasGrade 2 e := by
   exact InversionFree.strengthenGrade (sg2cut3 v hv)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p0Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x4 0 = false := by decide +kernel
+lemma gcheck2p0Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x400 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p0Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x4 0 = false := by decide +kernel
+lemma gcheck2p0Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x400 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p0 : BinarySearch.chk [] table2 0 12 2 0x4 0 = false := BinarySearch.binaryJoin gcheck2p0Conj gcheck2p0Disj
+lemma gcheck2p0 : BinarySearch.chk [] table2 0 12 2 0x400 0 = false := BinarySearch.binaryJoin gcheck2p0Conj gcheck2p0Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p1Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x100 0 = false := by decide +kernel
+lemma gcheck2p1Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x80 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p1Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x100 0 = false := by decide +kernel
+lemma gcheck2p1Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x80 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p1 : BinarySearch.chk [] table2 0 12 2 0x100 0 = false := BinarySearch.binaryJoin gcheck2p1Conj gcheck2p1Disj
+lemma gcheck2p1 : BinarySearch.chk [] table2 0 12 2 0x80 0 = false := BinarySearch.binaryJoin gcheck2p1Conj gcheck2p1Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p2Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x200 0 = false := by decide +kernel
+lemma gcheck2p2Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x2000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p2Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x200 0 = false := by decide +kernel
+lemma gcheck2p2Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x2000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p2 : BinarySearch.chk [] table2 0 12 2 0x200 0 = false := BinarySearch.binaryJoin gcheck2p2Conj gcheck2p2Disj
+lemma gcheck2p2 : BinarySearch.chk [] table2 0 12 2 0x2000000 0 = false := BinarySearch.binaryJoin gcheck2p2Conj gcheck2p2Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p3Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x400 0 = false := by decide +kernel
+lemma gcheck2p3Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x1000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p3Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x400 0 = false := by decide +kernel
+lemma gcheck2p3Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x1000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p3 : BinarySearch.chk [] table2 0 12 2 0x400 0 = false := BinarySearch.binaryJoin gcheck2p3Conj gcheck2p3Disj
+lemma gcheck2p3 : BinarySearch.chk [] table2 0 12 2 0x1000 0 = false := BinarySearch.binaryJoin gcheck2p3Conj gcheck2p3Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p4Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x2000 0 = false := by decide +kernel
+lemma gcheck2p4Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x200000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p4Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x2000 0 = false := by decide +kernel
+lemma gcheck2p4Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x200000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p4 : BinarySearch.chk [] table2 0 12 2 0x2000 0 = false := BinarySearch.binaryJoin gcheck2p4Conj gcheck2p4Disj
+lemma gcheck2p4 : BinarySearch.chk [] table2 0 12 2 0x200000000 0 = false := BinarySearch.binaryJoin gcheck2p4Conj gcheck2p4Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p5Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x20000 0 = false := by decide +kernel
+lemma gcheck2p5Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x8 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p5Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x20000 0 = false := by decide +kernel
+lemma gcheck2p5Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x8 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p5 : BinarySearch.chk [] table2 0 12 2 0x20000 0 = false := BinarySearch.binaryJoin gcheck2p5Conj gcheck2p5Disj
+lemma gcheck2p5 : BinarySearch.chk [] table2 0 12 2 0x8 0 = false := BinarySearch.binaryJoin gcheck2p5Conj gcheck2p5Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p6Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x40000 0 = false := by decide +kernel
+lemma gcheck2p6Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x200000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p6Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x40000 0 = false := by decide +kernel
+lemma gcheck2p6Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x200000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p6 : BinarySearch.chk [] table2 0 12 2 0x40000 0 = false := BinarySearch.binaryJoin gcheck2p6Conj gcheck2p6Disj
+lemma gcheck2p6 : BinarySearch.chk [] table2 0 12 2 0x200000 0 = false := BinarySearch.binaryJoin gcheck2p6Conj gcheck2p6Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p7Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x80000 0 = false := by decide +kernel
+lemma gcheck2p7Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x100 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p7Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x80000 0 = false := by decide +kernel
+lemma gcheck2p7Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x100 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p7 : BinarySearch.chk [] table2 0 12 2 0x80000 0 = false := BinarySearch.binaryJoin gcheck2p7Conj gcheck2p7Disj
+lemma gcheck2p7 : BinarySearch.chk [] table2 0 12 2 0x100 0 = false := BinarySearch.binaryJoin gcheck2p7Conj gcheck2p7Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p8Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x400000 0 = false := by decide +kernel
+lemma gcheck2p8Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x20000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p8Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x400000 0 = false := by decide +kernel
+lemma gcheck2p8Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x20000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p8 : BinarySearch.chk [] table2 0 12 2 0x400000 0 = false := BinarySearch.binaryJoin gcheck2p8Conj gcheck2p8Disj
+lemma gcheck2p8 : BinarySearch.chk [] table2 0 12 2 0x20000000 0 = false := BinarySearch.binaryJoin gcheck2p8Conj gcheck2p8Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p9Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x1000000 0 = false := by decide +kernel
+lemma gcheck2p9Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x40000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p9Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x1000000 0 = false := by decide +kernel
+lemma gcheck2p9Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x40000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p9 : BinarySearch.chk [] table2 0 12 2 0x1000000 0 = false := BinarySearch.binaryJoin gcheck2p9Conj gcheck2p9Disj
+lemma gcheck2p9 : BinarySearch.chk [] table2 0 12 2 0x40000 0 = false := BinarySearch.binaryJoin gcheck2p9Conj gcheck2p9Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p10Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x2000000 0 = false := by decide +kernel
+lemma gcheck2p10Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x20 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p10Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x2000000 0 = false := by decide +kernel
+lemma gcheck2p10Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x20 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p10 : BinarySearch.chk [] table2 0 12 2 0x2000000 0 = false := BinarySearch.binaryJoin gcheck2p10Conj gcheck2p10Disj
+lemma gcheck2p10 : BinarySearch.chk [] table2 0 12 2 0x20 0 = false := BinarySearch.binaryJoin gcheck2p10Conj gcheck2p10Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gcheck2p11Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x4000000 0 = false := by decide +kernel
@@ -6187,35 +6187,35 @@ set_option maxHeartbeats 0 in
 lemma gcheck2p11 : BinarySearch.chk [] table2 0 12 2 0x4000000 0 = false := BinarySearch.binaryJoin gcheck2p11Conj gcheck2p11Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p12Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x10000000 0 = false := by decide +kernel
+lemma gcheck2p12Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x800000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p12Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x10000000 0 = false := by decide +kernel
+lemma gcheck2p12Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x800000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p12 : BinarySearch.chk [] table2 0 12 2 0x10000000 0 = false := BinarySearch.binaryJoin gcheck2p12Conj gcheck2p12Disj
+lemma gcheck2p12 : BinarySearch.chk [] table2 0 12 2 0x800000 0 = false := BinarySearch.binaryJoin gcheck2p12Conj gcheck2p12Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p13Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x20000000 0 = false := by decide +kernel
+lemma gcheck2p13Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x200 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p13Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x20000000 0 = false := by decide +kernel
+lemma gcheck2p13Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x200 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p13 : BinarySearch.chk [] table2 0 12 2 0x20000000 0 = false := BinarySearch.binaryJoin gcheck2p13Conj gcheck2p13Disj
+lemma gcheck2p13 : BinarySearch.chk [] table2 0 12 2 0x200 0 = false := BinarySearch.binaryJoin gcheck2p13Conj gcheck2p13Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p14Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x40000000 0 = false := by decide +kernel
+lemma gcheck2p14Conj : BinarySearch.binaryCheck (!·) [] table2 0 12 2 0x80000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p14Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x40000000 0 = false := by decide +kernel
+lemma gcheck2p14Disj : BinarySearch.binaryCheck id [] table2 0 12 2 0x80000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p14 : BinarySearch.chk [] table2 0 12 2 0x40000000 0 = false := BinarySearch.binaryJoin gcheck2p14Conj gcheck2p14Disj
+lemma gcheck2p14 : BinarySearch.chk [] table2 0 12 2 0x80000000 0 = false := BinarySearch.binaryJoin gcheck2p14Conj gcheck2p14Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck2p15 : BinarySearch.chk [] table2 0 12 2 0x1f88b1d8fb 1 = false := by decide +kernel
-def gm2 : List (ℕ × ℕ) := [(0x4,0), (0x100,0), (0x200,0), (0x400,0), (0x2000,0), (0x20000,0), (0x40000,0), (0x80000,0), (0x400000,0), (0x1000000,0), (0x2000000,0), (0x4000000,0), (0x10000000,0), (0x20000000,0), (0x40000000,0), (0x1f88b1d8fb,1)]
+lemma gcheck2p15 : BinarySearch.chk [] table2 0 12 2 0x5595be857 1 = false := by decide +kernel
+def gm2 : List (ℕ × ℕ) := [(0x400,0), (0x80,0), (0x2000000,0), (0x1000,0), (0x200000000,0), (0x8,0), (0x200000,0), (0x100,0), (0x20000000,0), (0x40000,0), (0x20,0), (0x4000000,0), (0x800000,0), (0x200,0), (0x80000000,0), (0x5595be857,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm2covers : mFull gm2 = true := by decide +kernel
@@ -6328,103 +6328,103 @@ lemma theGrades3 : ∀ e ∈ table3, HasGrade 3 e := by
   exact InversionFree.strengthenGrade (sg3cut3 v hv)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p0Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x4 0 = false := by decide +kernel
+lemma gcheck3p0Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x400 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p0Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x4 0 = false := by decide +kernel
+lemma gcheck3p0Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x400 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p0 : BinarySearch.chk [] table3 0 12 3 0x4 0 = false := BinarySearch.binaryJoin gcheck3p0Conj gcheck3p0Disj
+lemma gcheck3p0 : BinarySearch.chk [] table3 0 12 3 0x400 0 = false := BinarySearch.binaryJoin gcheck3p0Conj gcheck3p0Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p1Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x100 0 = false := by decide +kernel
+lemma gcheck3p1Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x80 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p1Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x100 0 = false := by decide +kernel
+lemma gcheck3p1Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x80 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p1 : BinarySearch.chk [] table3 0 12 3 0x100 0 = false := BinarySearch.binaryJoin gcheck3p1Conj gcheck3p1Disj
+lemma gcheck3p1 : BinarySearch.chk [] table3 0 12 3 0x80 0 = false := BinarySearch.binaryJoin gcheck3p1Conj gcheck3p1Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p2Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x200 0 = false := by decide +kernel
+lemma gcheck3p2Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x2000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p2Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x200 0 = false := by decide +kernel
+lemma gcheck3p2Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x2000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p2 : BinarySearch.chk [] table3 0 12 3 0x200 0 = false := BinarySearch.binaryJoin gcheck3p2Conj gcheck3p2Disj
+lemma gcheck3p2 : BinarySearch.chk [] table3 0 12 3 0x2000000 0 = false := BinarySearch.binaryJoin gcheck3p2Conj gcheck3p2Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p3Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x400 0 = false := by decide +kernel
+lemma gcheck3p3Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x1000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p3Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x400 0 = false := by decide +kernel
+lemma gcheck3p3Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x1000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p3 : BinarySearch.chk [] table3 0 12 3 0x400 0 = false := BinarySearch.binaryJoin gcheck3p3Conj gcheck3p3Disj
+lemma gcheck3p3 : BinarySearch.chk [] table3 0 12 3 0x1000 0 = false := BinarySearch.binaryJoin gcheck3p3Conj gcheck3p3Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p4Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x2000 0 = false := by decide +kernel
+lemma gcheck3p4Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x200000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p4Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x2000 0 = false := by decide +kernel
+lemma gcheck3p4Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x200000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p4 : BinarySearch.chk [] table3 0 12 3 0x2000 0 = false := BinarySearch.binaryJoin gcheck3p4Conj gcheck3p4Disj
+lemma gcheck3p4 : BinarySearch.chk [] table3 0 12 3 0x200000000 0 = false := BinarySearch.binaryJoin gcheck3p4Conj gcheck3p4Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p5Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x20000 0 = false := by decide +kernel
+lemma gcheck3p5Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x8 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p5Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x20000 0 = false := by decide +kernel
+lemma gcheck3p5Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x8 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p5 : BinarySearch.chk [] table3 0 12 3 0x20000 0 = false := BinarySearch.binaryJoin gcheck3p5Conj gcheck3p5Disj
+lemma gcheck3p5 : BinarySearch.chk [] table3 0 12 3 0x8 0 = false := BinarySearch.binaryJoin gcheck3p5Conj gcheck3p5Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p6Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x40000 0 = false := by decide +kernel
+lemma gcheck3p6Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x200000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p6Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x40000 0 = false := by decide +kernel
+lemma gcheck3p6Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x200000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p6 : BinarySearch.chk [] table3 0 12 3 0x40000 0 = false := BinarySearch.binaryJoin gcheck3p6Conj gcheck3p6Disj
+lemma gcheck3p6 : BinarySearch.chk [] table3 0 12 3 0x200000 0 = false := BinarySearch.binaryJoin gcheck3p6Conj gcheck3p6Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p7Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x80000 0 = false := by decide +kernel
+lemma gcheck3p7Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x100 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p7Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x80000 0 = false := by decide +kernel
+lemma gcheck3p7Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x100 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p7 : BinarySearch.chk [] table3 0 12 3 0x80000 0 = false := BinarySearch.binaryJoin gcheck3p7Conj gcheck3p7Disj
+lemma gcheck3p7 : BinarySearch.chk [] table3 0 12 3 0x100 0 = false := BinarySearch.binaryJoin gcheck3p7Conj gcheck3p7Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p8Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x400000 0 = false := by decide +kernel
+lemma gcheck3p8Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x20000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p8Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x400000 0 = false := by decide +kernel
+lemma gcheck3p8Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x20000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p8 : BinarySearch.chk [] table3 0 12 3 0x400000 0 = false := BinarySearch.binaryJoin gcheck3p8Conj gcheck3p8Disj
+lemma gcheck3p8 : BinarySearch.chk [] table3 0 12 3 0x20000000 0 = false := BinarySearch.binaryJoin gcheck3p8Conj gcheck3p8Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p9Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x1000000 0 = false := by decide +kernel
+lemma gcheck3p9Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x40000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p9Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x1000000 0 = false := by decide +kernel
+lemma gcheck3p9Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x40000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p9 : BinarySearch.chk [] table3 0 12 3 0x1000000 0 = false := BinarySearch.binaryJoin gcheck3p9Conj gcheck3p9Disj
+lemma gcheck3p9 : BinarySearch.chk [] table3 0 12 3 0x40000 0 = false := BinarySearch.binaryJoin gcheck3p9Conj gcheck3p9Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p10Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x2000000 0 = false := by decide +kernel
+lemma gcheck3p10Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x20 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p10Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x2000000 0 = false := by decide +kernel
+lemma gcheck3p10Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x20 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p10 : BinarySearch.chk [] table3 0 12 3 0x2000000 0 = false := BinarySearch.binaryJoin gcheck3p10Conj gcheck3p10Disj
+lemma gcheck3p10 : BinarySearch.chk [] table3 0 12 3 0x20 0 = false := BinarySearch.binaryJoin gcheck3p10Conj gcheck3p10Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gcheck3p11Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x4000000 0 = false := by decide +kernel
@@ -6436,35 +6436,35 @@ set_option maxHeartbeats 0 in
 lemma gcheck3p11 : BinarySearch.chk [] table3 0 12 3 0x4000000 0 = false := BinarySearch.binaryJoin gcheck3p11Conj gcheck3p11Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p12Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x10000000 0 = false := by decide +kernel
+lemma gcheck3p12Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x800000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p12Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x10000000 0 = false := by decide +kernel
+lemma gcheck3p12Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x800000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p12 : BinarySearch.chk [] table3 0 12 3 0x10000000 0 = false := BinarySearch.binaryJoin gcheck3p12Conj gcheck3p12Disj
+lemma gcheck3p12 : BinarySearch.chk [] table3 0 12 3 0x800000 0 = false := BinarySearch.binaryJoin gcheck3p12Conj gcheck3p12Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p13Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x20000000 0 = false := by decide +kernel
+lemma gcheck3p13Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x200 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p13Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x20000000 0 = false := by decide +kernel
+lemma gcheck3p13Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x200 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p13 : BinarySearch.chk [] table3 0 12 3 0x20000000 0 = false := BinarySearch.binaryJoin gcheck3p13Conj gcheck3p13Disj
+lemma gcheck3p13 : BinarySearch.chk [] table3 0 12 3 0x200 0 = false := BinarySearch.binaryJoin gcheck3p13Conj gcheck3p13Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p14Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x40000000 0 = false := by decide +kernel
+lemma gcheck3p14Conj : BinarySearch.binaryCheck (!·) [] table3 0 12 3 0x80000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p14Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x40000000 0 = false := by decide +kernel
+lemma gcheck3p14Disj : BinarySearch.binaryCheck id [] table3 0 12 3 0x80000000 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p14 : BinarySearch.chk [] table3 0 12 3 0x40000000 0 = false := BinarySearch.binaryJoin gcheck3p14Conj gcheck3p14Disj
+lemma gcheck3p14 : BinarySearch.chk [] table3 0 12 3 0x80000000 0 = false := BinarySearch.binaryJoin gcheck3p14Conj gcheck3p14Disj
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck3p15 : BinarySearch.chk [] table3 0 12 3 0x1f88b1d8fb 1 = false := by decide +kernel
-def gm3 : List (ℕ × ℕ) := [(0x4,0), (0x100,0), (0x200,0), (0x400,0), (0x2000,0), (0x20000,0), (0x40000,0), (0x80000,0), (0x400000,0), (0x1000000,0), (0x2000000,0), (0x4000000,0), (0x10000000,0), (0x20000000,0), (0x40000000,0), (0x1f88b1d8fb,1)]
+lemma gcheck3p15 : BinarySearch.chk [] table3 0 12 3 0x5595be857 1 = false := by decide +kernel
+def gm3 : List (ℕ × ℕ) := [(0x400,0), (0x80,0), (0x2000000,0), (0x1000,0), (0x200000000,0), (0x8,0), (0x200000,0), (0x100,0), (0x20000000,0), (0x40000,0), (0x20,0), (0x4000000,0), (0x800000,0), (0x200,0), (0x80000000,0), (0x5595be857,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm3covers : mFull gm3 = true := by decide +kernel
@@ -6495,8 +6495,8 @@ set_option maxHeartbeats 0 in
 lemma gcheck4p0 : chk [] (pr cut3 0) 0 12 4 0x0 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck4p1 : chk [] (pr cut3 0) 0 12 4 0x1fffffffff 0 = false := by decide +kernel
-def gm4 : List (ℕ × ℕ) := [(0x0,1), (0x1fffffffff,0)]
+lemma gcheck4p1 : chk [] (pr cut3 0) 0 12 4 0x7ffffffff 0 = false := by decide +kernel
+def gm4 : List (ℕ × ℕ) := [(0x0,1), (0x7ffffffff,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm4covers : mFull gm4 = true := by decide +kernel
@@ -6513,8 +6513,8 @@ set_option maxHeartbeats 0 in
 lemma gcheck5p0 : chk [] (pr cut3 0) 0 12 5 0x0 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck5p1 : chk [] (pr cut3 0) 0 12 5 0x1fffffffff 0 = false := by decide +kernel
-def gm5 : List (ℕ × ℕ) := [(0x0,1), (0x1fffffffff,0)]
+lemma gcheck5p1 : chk [] (pr cut3 0) 0 12 5 0x7ffffffff 0 = false := by decide +kernel
+def gm5 : List (ℕ × ℕ) := [(0x0,1), (0x7ffffffff,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm5covers : mFull gm5 = true := by decide +kernel
@@ -6531,8 +6531,8 @@ set_option maxHeartbeats 0 in
 lemma gcheck6p0 : chk [] (pr cut3 0) 0 12 6 0x0 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck6p1 : chk [] (pr cut3 0) 0 12 6 0x1fffffffff 0 = false := by decide +kernel
-def gm6 : List (ℕ × ℕ) := [(0x0,1), (0x1fffffffff,0)]
+lemma gcheck6p1 : chk [] (pr cut3 0) 0 12 6 0x7ffffffff 0 = false := by decide +kernel
+def gm6 : List (ℕ × ℕ) := [(0x0,1), (0x7ffffffff,0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm6covers : mFull gm6 = true := by decide +kernel
@@ -6546,8 +6546,8 @@ lemma invalid6 {S : Finset ℕ} (sw : (S : Set ℕ) ⊆ WZ [] 0) (hl : Live Z0 (
   exact imp_of_live (Q := (pr cut3 0)) (Z := 0) (E := []) (L := 13) (Or.inl rfl) (by decide +kernel) (by decide) (fun e he => bounds3 e (List.mem_of_mem_filter he)) (by decide) (fun x hx => Or.inl (sw hx)) hl iroot (Or.inr ⟨gm6, gm6covers, checked6⟩)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck7p0 : chk [] (pr cut3 0) 0 12 7 0x1fffffffff 1 = false := by decide +kernel
-def gm7 : List (ℕ × ℕ) := [(0x1fffffffff,1)]
+lemma gcheck7p0 : chk [] (pr cut3 0) 0 12 7 0x7ffffffff 1 = false := by decide +kernel
+def gm7 : List (ℕ × ℕ) := [(0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm7covers : mFull gm7 = true := by decide +kernel
@@ -6559,8 +6559,8 @@ lemma invalid7 {S : Finset ℕ} (sw : (S : Set ℕ) ⊆ WZ [] 0) (hl : Live Z0 (
   exact imp_of_live (Q := (pr cut3 0)) (Z := 0) (E := []) (L := 13) (Or.inl rfl) (by decide +kernel) (by decide) (fun e he => bounds3 e (List.mem_of_mem_filter he)) (by decide) (fun x hx => Or.inl (sw hx)) hl iroot (Or.inr ⟨gm7, gm7covers, checked7⟩)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck8p0 : chk [] (pr cut3 0) 0 12 8 0x1fffffffff 1 = false := by decide +kernel
-def gm8 : List (ℕ × ℕ) := [(0x1fffffffff,1)]
+lemma gcheck8p0 : chk [] (pr cut3 0) 0 12 8 0x7ffffffff 1 = false := by decide +kernel
+def gm8 : List (ℕ × ℕ) := [(0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm8covers : mFull gm8 = true := by decide +kernel
@@ -6572,8 +6572,8 @@ lemma invalid8 {S : Finset ℕ} (sw : (S : Set ℕ) ⊆ WZ [] 0) (hl : Live Z0 (
   exact imp_of_live (Q := (pr cut3 0)) (Z := 0) (E := []) (L := 13) (Or.inl rfl) (by decide +kernel) (by decide) (fun e he => bounds3 e (List.mem_of_mem_filter he)) (by decide) (fun x hx => Or.inl (sw hx)) hl iroot (Or.inr ⟨gm8, gm8covers, checked8⟩)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck9p0 : chk [] (pr cut3 0) 0 12 9 0x1fffffffff 1 = false := by decide +kernel
-def gm9 : List (ℕ × ℕ) := [(0x1fffffffff,1)]
+lemma gcheck9p0 : chk [] (pr cut3 0) 0 12 9 0x7ffffffff 1 = false := by decide +kernel
+def gm9 : List (ℕ × ℕ) := [(0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm9covers : mFull gm9 = true := by decide +kernel
@@ -6585,8 +6585,8 @@ lemma invalid9 {S : Finset ℕ} (sw : (S : Set ℕ) ⊆ WZ [] 0) (hl : Live Z0 (
   exact imp_of_live (Q := (pr cut3 0)) (Z := 0) (E := []) (L := 13) (Or.inl rfl) (by decide +kernel) (by decide) (fun e he => bounds3 e (List.mem_of_mem_filter he)) (by decide) (fun x hx => Or.inl (sw hx)) hl iroot (Or.inr ⟨gm9, gm9covers, checked9⟩)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck10p0 : chk [] (pr cut3 0) 0 12 10 0x1fffffffff 1 = false := by decide +kernel
-def gm10 : List (ℕ × ℕ) := [(0x1fffffffff,1)]
+lemma gcheck10p0 : chk [] (pr cut3 0) 0 12 10 0x7ffffffff 1 = false := by decide +kernel
+def gm10 : List (ℕ × ℕ) := [(0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm10covers : mFull gm10 = true := by decide +kernel
@@ -6598,8 +6598,8 @@ lemma invalid10 {S : Finset ℕ} (sw : (S : Set ℕ) ⊆ WZ [] 0) (hl : Live Z0 
   exact imp_of_live (Q := (pr cut3 0)) (Z := 0) (E := []) (L := 13) (Or.inl rfl) (by decide +kernel) (by decide) (fun e he => bounds3 e (List.mem_of_mem_filter he)) (by decide) (fun x hx => Or.inl (sw hx)) hl iroot (Or.inr ⟨gm10, gm10covers, checked10⟩)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck11p0 : chk [] (pr cut3 0) 0 12 11 0x1fffffffff 1 = false := by decide +kernel
-def gm11 : List (ℕ × ℕ) := [(0x1fffffffff,1)]
+lemma gcheck11p0 : chk [] (pr cut3 0) 0 12 11 0x7ffffffff 1 = false := by decide +kernel
+def gm11 : List (ℕ × ℕ) := [(0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm11covers : mFull gm11 = true := by decide +kernel
@@ -6611,8 +6611,8 @@ lemma invalid11 {S : Finset ℕ} (sw : (S : Set ℕ) ⊆ WZ [] 0) (hl : Live Z0 
   exact imp_of_live (Q := (pr cut3 0)) (Z := 0) (E := []) (L := 13) (Or.inl rfl) (by decide +kernel) (by decide) (fun e he => bounds3 e (List.mem_of_mem_filter he)) (by decide) (fun x hx => Or.inl (sw hx)) hl iroot (Or.inr ⟨gm11, gm11covers, checked11⟩)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma gcheck12p0 : chk [] (pr cut3 0) 0 12 12 0x1fffffffff 1 = false := by decide +kernel
-def gm12 : List (ℕ × ℕ) := [(0x1fffffffff,1)]
+lemma gcheck12p0 : chk [] (pr cut3 0) 0 12 12 0x7ffffffff 1 = false := by decide +kernel
+def gm12 : List (ℕ × ℕ) := [(0x7ffffffff,1)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma gm12covers : mFull gm12 = true := by decide +kernel
