@@ -6626,7 +6626,8 @@ lemma strongRow1 : Imp [] 1 12 := by
       · exact oneBranch6
     · have hmem := (List.mem_range'_1).mpr (show 1 ≤ t ∧ t < 1+11 from ⟨by omega, by omega⟩)
       have hcheck := List.all_eq_true.mp oneRest t hmem
-      have result : oneFast t FF 1 = false := Bool.not_eq_true'.mp hcheck
+      have result : oneFast t FF 1 = false := by
+        simpa only [Bool.not_eq_true'] using hcheck
       refine ⟨[(FF,1)],ffull,fun p hp => ?_⟩
       simp only [List.mem_singleton] at hp
       subst hp
