@@ -34,11 +34,6 @@ lemma Sol.mono {m T q : ℕ} {S : Set ℕ} (h : Sol R m T q S) :
     intro q' S' hq hs
     obtain ⟨r, rfl⟩ : ∃ r, q' = r + 1 := ⟨q' - 1, by omega⟩
     exact .bi (hs h1) (hs h2) ha (ih (by omega) (Set.insert_subset_insert hs))
-lemma Sol.rel {R' : ℕ → ℕ} {m T q : ℕ} {S : Set ℕ} (h : Sol R m T q S) (hR : ∀ d a b, Al R d a b → Al R' d a b) : Sol R' m T q S := by
-  induction h with
-  | done h => exact .done h
-  | un h _ ih => exact .un h ih
-  | bi h1 h2 ha _ ih => exact .bi h1 h2 (hR _ _ _ ha) ih
 inductive Live (R : ℕ → ℕ) (m T : ℕ) : ℕ → ℕ → Finset ℕ → Prop
   | stop : Live R m T 0 0 {T}
   | un {k t : ℕ} {a : ℕ} {U : Finset ℕ} : Live R m T k t (insert (a ^^^ m) U) →
@@ -1044,6 +1039,11 @@ def covC (NN : Nat) (d : Bool) (l : Nat) (v : List W) : Nat :=
   List.rec (motive := fun _ => Nat) 0 (fun w _ ih => Nat.lor (spC NN d l w.s) ih) v
 def twiceC (NN : Nat) (d : Bool) (l : Nat) (v : List W) : Nat :=
   List.rec (motive := fun _ => Nat) 0 (fun w t ih => Nat.lor (Nat.land (spC NN d l w.s) (covC NN d l t)) ih) v
+def pairCoverage (nn : ℕ) (d : Bool) (l : ℕ) (words : List W) : ℕ × ℕ :=
+  List.rec (0,0) (fun wire _ counts =>
+    let bits := spC nn d l wire.s
+    (Nat.lor bits counts.1, Nat.lor (Nat.land bits counts.1) counts.2)) words
+
 def hitC (HX HY : Nat) (f e : Nat) : Bool := (Bool.rec (motive := fun _ => Bool) ((Bool.rec (motive := fun _ => Bool) (true) (false) (Nat.beq (Nat.land (Nat.land f e) HY) 0))) (false) (Nat.beq (Nat.land (Nat.land f e) HX) 0))
 def hitsC (HX HY : Nat) (f : Nat) (m : List Nat) : Bool := (List.rec (motive := fun _ => Bool) (false) (fun e _ ih => (Bool.rec (motive := fun _ => Bool) (ih) (true) (hitC HX HY f e))) (m))
 def flagC (NN AA : Nat) (d : Bool) (l o : Nat) (w : W) : Nat := Nat.add (Nat.land (spC NN d l w.s) o) AA
@@ -1102,7 +1102,7 @@ def pairsS (h : XW → XW → Bool) (xs : List XW) : Bool := pairs h (fs xs)
 def nots (f : Nat → Nat → List W → Bool) (m g e n z q : Nat) (v r : List W) : Bool :=
   (List.rec (motive := fun _ => Bool) (false) (fun a _ ih => (Bool.rec (motive := fun _ => Bool) (ih) (true) ((Bool.rec (motive := fun _ => Bool) ((st (Nat.xor a.s m) (fun s => (st (Nat.sub z a.c) (fun z => ins ⟨s, a.b, a.a, a.c, 0⟩ v (fun v => (Bool.rec (motive := fun _ => Bool) ((Bool.rec (motive := fun _ => Bool) (false) (child (f s) g (fun h => h v) (Nat.sub z a.c)) (Nat.ble (Nat.succ n) e))) (true) ((Bool.rec (motive := fun _ => Bool) (false) (child (f s) g (rm a.s a.s v) z) (Nat.ble n e)))))))))) (false) (Nat.beq (Nat.succ a.s) q))))) (r))
 def pos (t : Nat) : Bool := Nat.rec (motive := fun _ => Bool) false (fun _ _ => true) t
-def wstC (NN : Nat) (d : Bool) (l : Nat) (v : List W) : Nat := Nat.xor l (twiceC NN d l v)
+def wstC (NN : Nat) (d : Bool) (l : Nat) (v : List W) : Nat := Nat.xor l (pairCoverage NN d l v).2
 def nodeC (NN : Nat) (f : Nat → List W → Bool) (d : Bool) (l m g e n z : Nat) (v : List W) (go : (XW → XW → Bool) → List XW → Bool) : Bool :=
   (fun h => (fun xs => Bool.rec (motive := fun _ => Bool) (go (pair (f0 h)) xs)
     (Bool.rec (motive := fun _ => Bool) (go (pair (f1 h)) xs) (go (pair (f2 h)) xs) (Nat.ble (Nat.succ n) e)) (Nat.ble n e))
@@ -1257,6 +1257,17 @@ lemma cov_bit (d : Bool) (l i : ℕ) (v : List W) : (cov d l v).testBit i = true
   | cons w v ih =>
     change (Nat.lor (sp d l w.s) (cov d l v)).testBit i = true ↔ _
     simp [no, ih]
+lemma pairCoverage_eq (nn : ℕ) (d : Bool) (l : ℕ) (words : List W) :
+    pairCoverage nn d l words = (covC nn d l words, twiceC nn d l words) := by
+  induction words with
+  | nil => rfl
+  | cons word words ih =>
+    change (Nat.lor (spC nn d l word.s) (pairCoverage nn d l words).1,
+      Nat.lor (Nat.land (spC nn d l word.s) (pairCoverage nn d l words).1)
+        (pairCoverage nn d l words).2) = _
+    rw [ih]
+    rfl
+
 lemma twice_bit (d : Bool) (l i : ℕ) (v : List W) (h : (twice d l v).testBit i = false) :
     v.Pairwise (fun w w' => ¬ ((sp d l w.s).testBit i = true ∧ (sp d l w'.s).testBit i = true)) := by
   induction v with
@@ -1276,7 +1287,7 @@ lemma Rep.card {v : List W} {S : Finset ℕ} (h : Rep v S) : S.card = v.length :
   rw [← h.2, List.toFinset_card_of_nodup h.1, List.length_map]
 lemma uq_of {d : Bool} {l i : ℕ} {v : List W} {S : Finset ℕ} (h : Rep v S) {w : W} (hw : w ∈ v)
     (hu : (Nat.land (sp d l w.s) (wst d l v)).testBit i = true) : l.testBit i = true ∧ Uq I.NN d S w.s i := by
-  simp only [nl, wst, wstC, nx, Nat.testBit_and, Nat.testBit_xor, Bool.and_eq_true, sp_bit] at hu
+  simp only [nl, wst, wstC, pairCoverage_eq, nx, Nat.testBit_and, Nat.testBit_xor, Bool.and_eq_true, sp_bit] at hu
   obtain ⟨⟨hl, hs⟩, ht⟩ := hu
   have ht : (twice d l v).testBit i = false := by simpa [hl] using ht
   refine ⟨hl, hs, fun c hc hne => ?_⟩
@@ -3123,7 +3134,6 @@ theorem look_sound (hR : RR R) : ∀ (fuel k t z : ℕ) (v : List W) (S : Finset
   intro fuel
   exact lookCore_sound X hR (Nat.beq fuel 14) fuel
 end sound
-lemma Live.W {m T k t : ℕ} {S : Finset ℕ} {Q : Set ℕ} (hl : Live R m T k t S) (hQ : (S : Set ℕ) ⊆ Q) : Sol Z0 m T k Q := hl.sol.mono le_rfl hQ
 lemma front {m T : ℕ} (hR : ∀ d a b, (R a = 0 ∨ R b = 0) → Al R d a b) {k t : ℕ} {S : Finset ℕ} (hl : Live Z0 m T k t S)
     (hm : ∀ q < k, ¬ Sol Z0 m T q (C m ({x | R x ≠ 0} ∪ (S : Set ℕ)))) :
     Live R m T k t S ∨ ∃ k0 d a b S1, k = k0 + 1 ∧ R a ≠ 0 ∧ R b ≠ 0 ∧ Bi Z0 d a b S S1 ∧ Live Z0 m T k0 t S1 := by
@@ -3239,7 +3249,6 @@ lemma front {m T : ℕ} (hR : ∀ d a b, (R a = 0 ∨ R b = 0) → Al R d a b) {
         have : insert (op d0 a b) (insert (op d x y) (V.erase o)) = insert (op d x y) V := by
           rw [Finset.insert_comm, ← ho, Finset.insert_erase hmV]
         rw [this]; exact hl1
-lemma Min.Z {m T k t : ℕ} {S : Finset ℕ} (h : Min R m T k t S) : Min Z0 m T k t S := ⟨h.1.rel fun d a b _ => al0 d a b, h.2⟩
 lemma NK.toR {m T k t : ℕ} {S : Finset ℕ} (h : NK Z0 m T k t S) : NK R m T k t S :=
   ⟨fun d a b S1 k0 e hb hl => h.1 d a b S1 k0 e (hb.rel fun d a b _ => al0 d a b) (hl.rel fun d a b _ => al0 d a b),
     fun a S1 k0 t0 e e' hu hl => h.2 a S1 k0 t0 e e' hu (hl.rel fun d a b _ => al0 d a b)⟩
@@ -5493,12 +5502,47 @@ theorem co1Singletons : rangeCheck (singletonTest q1 1 10) 0 11 = true := by dec
 lemma co1 : Imp [] 1 11 := imp_of (Or.inl rfl) co1_p (by norm_num) co1_id
     (Or.inr fun t ht => singletonCertified co1Singletons (by omega) (by omega))
 
-def q2 : List (ℕ × ℕ) := pr rt 2
+def pins4 : List (ℕ × ℕ) := [(525, 1), (533, 2), (537, 3), (540, 2), (549, 3), (553, 3), (556, 1), (561, 3), (564, 3), (568, 2), (581, 1), (585, 3), (588, 3), (593, 2), (596, 3), (600, 3), (609, 1), (612, 3), (616, 1), (624, 2), (645, 2), (649, 3), (652, 2), (657, 4), (660, 4), (664, 4), (673, 3), (676, 3), (680, 2), (688, 4), (705, 2), (708, 3), (712, 3), (720, 4), (736, 2), (780, 2), (788, 2), (792, 3), (804, 2), (808, 3), (816, 3), (836, 3), (840, 2), (848, 2), (864, 2), (900, 2), (904, 3), (912, 3), (928, 3), (960, 2), (1545, 3), (1553, 2), (1560, 2), (1569, 2), (1576, 2), (1584, 3), (1601, 2), (1608, 2), (1616, 3), (1632, 3), (1665, 2), (1672, 2), (1680, 3), (1696, 3), (1728, 3), (1800, 3), (1808, 3), (1824, 3), (1856, 3), (1920, 3), (2565, 2), (2577, 3), (2580, 2), (2593, 2), (2596, 3), (2608, 2), (2625, 3), (2628, 2), (2640, 3), (2656, 2), (2689, 3), (2692, 2), (2704, 3), (2720, 2), (2752, 3), (3585, 3), (3600, 3), (3616, 3), (3648, 3), (3712, 3), (4103, 2), (4107, 3), (4109, 1), (4110, 2), (4131, 3), (4133, 3), (4134, 3), (4137, 3), (4138, 2), (4140, 1), (4163, 2), (4165, 1), (4166, 3), (4169, 3), (4170, 3), (4172, 3), (4193, 1), (4194, 2), (4196, 3), (4200, 1), (4227, 4), (4229, 2), (4230, 4), (4233, 3), (4234, 4), (4236, 2), (4257, 3), (4258, 4), (4260, 3), (4264, 2), (4289, 2), (4290, 4), (4292, 3), (4296, 3), (4320, 2), (4358, 2), (4362, 3), (4364, 2), (4386, 3), (4388, 2), (4392, 3), (4418, 2), (4420, 3), (4424, 2), (4448, 2), (4482, 3), (4484, 2), (4488, 3), (4512, 3), (4544, 2), (5123, 2), (5129, 3), (5130, 2), (5153, 2), (5154, 3), (5160, 2), (5185, 2), (5186, 3), (5192, 2), (5216, 3), (5249, 2), (5250, 3), (5256, 2), (5280, 3), (5312, 3), (5378, 3), (5384, 3), (5408, 3), (5440, 3), (5504, 3), (6147, 3), (6149, 2), (6150, 2), (6177, 2), (6178, 2), (6180, 3), (6209, 3), (6210, 3), (6212, 2), (6240, 2), (6273, 3), (6274, 3), (6276, 2), (6304, 2), (6336, 3), (7169, 3), (7170, 3), (7200, 3), (7232, 3), (7296, 3), (8709, 3), (8713, 2), (8716, 2), (8721, 3), (8724, 3), (8728, 2), (8769, 2), (8772, 2), (8776, 3), (8784, 2), (8833, 3), (8836, 3), (8840, 2), (8848, 3), (8896, 2), (10753, 3), (10756, 3), (10768, 3), (10816, 3), (10880, 3), (12291, 3), (12293, 3), (12294, 3), (12297, 2), (12298, 2), (12300, 2), (12353, 2), (12354, 2), (12356, 2), (12360, 3), (12417, 3), (12418, 3), (12420, 3), (12424, 2), (12480, 2), (14337, 3), (14338, 3), (14340, 3), (14400, 3), (14464, 3), (16391, 3), (16395, 3), (16397, 5), (16398, 5), (16403, 3), (16405, 3), (16406, 5), (16409, 3), (16410, 5), (16412, 5), (16419, 3), (16421, 5), (16422, 3), (16425, 5), (16426, 3), (16428, 5), (16433, 3), (16434, 3), (16436, 3), (16440, 3), (16515, 1), (16517, 2), (16518, 2), (16521, 2), (16522, 2), (16524, 3), (16529, 1), (16530, 3), (16532, 2), (16536, 2), (16545, 3), (16546, 1), (16548, 2), (16552, 2), (16560, 1), (16646, 2), (16650, 2), (16652, 3), (16658, 3), (16660, 2), (16664, 2), (16674, 2), (16676, 3), (16680, 3), (16688, 2), (16770, 2), (16772, 3), (16776, 3), (16784, 2), (16800, 3), (16901, 2), (16905, 2), (16908, 3), (16913, 2), (16916, 3), (16920, 3), (16929, 3), (16932, 2), (16936, 2), (16944, 2), (17025, 2), (17028, 3), (17032, 3), (17040, 3), (17056, 2), (17156, 3), (17160, 3), (17168, 3), (17184, 3), (17280, 3), (20483, 2), (20485, 2), (20486, 3), (20489, 2), (20490, 3), (20492, 3), (20513, 3), (20514, 2), (20516, 2), (20520, 2), (20609, 2), (20610, 3), (20612, 3), (20616, 3), (20640, 2), (20738, 3), (20740, 3), (20744, 3), (20768, 3), (20864, 3), (24579, 2), (24581, 3), (24582, 2), (24585, 3), (24586, 2), (24588, 3), (24593, 2), (24594, 3), (24596, 2), (24600, 2), (24705, 3), (24706, 2), (24708, 3), (24712, 3), (24720, 2), (25089, 3), (25092, 3), (25096, 3), (25104, 3), (25216, 3), (28673, 3), (28674, 3), (28676, 3), (28680, 3), (28800, 3), (49155, 3), (49157, 3), (49158, 3), (49161, 3), (49162, 3), (49164, 3), (49169, 3), (49170, 3), (49172, 3), (49176, 3), (49185, 3), (49186, 3), (49188, 3), (49192, 3), (49200, 3)]
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma pins4_ok : pins4.all (fun e => okE [] (pr [] e.1) e) = true := by decide +kernel
+lemma pins4_I : ∀ e ∈ pins4, Imp [] e.1 e.2 := okAll (T := []) pins4_ok (by simp)
+
+def pins3 : List (ℕ × ℕ) := [(517, 3), (521, 4), (524, 3), (529, 5), (532, 5), (536, 5), (545, 4), (548, 4), (552, 3), (560, 5), (577, 3), (580, 4), (584, 4), (592, 5), (608, 3), (641, 5), (644, 5), (648, 5), (656, 7), (672, 5), (704, 5), (772, 3), (776, 4), (784, 4), (800, 4), (832, 3), (896, 4), (1537, 3), (1544, 3), (1552, 4), (1568, 4), (1600, 4), (1664, 4), (1792, 4), (2561, 4), (2564, 3), (2576, 4), (2592, 3), (2624, 4), (2688, 4), (3584, 4), (4099, 5), (4101, 3), (4102, 5), (4105, 4), (4106, 5), (4108, 3), (4129, 4), (4130, 5), (4132, 4), (4136, 3), (4161, 3), (4162, 5), (4164, 4), (4168, 4), (4192, 3), (4225, 5), (4226, 7), (4228, 5), (4232, 5), (4256, 5), (4288, 5), (4354, 4), (4356, 3), (4360, 4), (4384, 4), (4416, 3), (4480, 4), (5121, 3), (5122, 4), (5128, 3), (5152, 4), (5184, 4), (5248, 4), (5376, 4), (6145, 4), (6146, 4), (6148, 3), (6176, 3), (6208, 4), (6272, 4), (7168, 4), (8705, 4), (8708, 4), (8712, 3), (8720, 4), (8768, 3), (8832, 4), (10752, 4), (12289, 4), (12290, 4), (12292, 4), (12296, 3), (12352, 3), (12416, 4), (14336, 4), (16387, 4), (16389, 6), (16390, 6), (16393, 6), (16394, 6), (16396, 8), (16401, 4), (16402, 6), (16404, 6), (16408, 6), (16417, 6), (16418, 4), (16420, 6), (16424, 6), (16432, 4), (16513, 3), (16514, 3), (16516, 4), (16520, 4), (16528, 3), (16544, 3), (16642, 3), (16644, 4), (16648, 4), (16656, 3), (16672, 4), (16768, 4), (16897, 3), (16900, 4), (16904, 4), (16912, 4), (16928, 3), (17024, 4), (17152, 4), (20481, 3), (20482, 4), (20484, 4), (20488, 4), (20512, 3), (20608, 4), (20736, 4), (24577, 4), (24578, 3), (24580, 4), (24584, 4), (24592, 3), (24704, 4), (25088, 4), (28672, 4), (49153, 4), (49154, 4), (49156, 4), (49160, 4), (49168, 4), (49184, 4)]
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma pins3_ok : pins3.all (fun e => okE [] (pr pins4 e.1) e) = true := by decide +kernel
+lemma pins3_I : ∀ e ∈ pins3, Imp [] e.1 e.2 := okAll (T := pins4) pins3_ok pins4_I
+
+def pins2 : List (ℕ × ℕ) := [(513, 6), (516, 6), (520, 6), (528, 8), (544, 6), (576, 6), (640, 8), (768, 5), (1536, 5), (2560, 5), (4097, 6), (4098, 8), (4100, 6), (4104, 6), (4128, 6), (4160, 6), (4224, 8), (4352, 5), (5120, 5), (6144, 5), (8704, 5), (12288, 5), (16385, 7), (16386, 7), (16388, 9), (16392, 9), (16400, 7), (16416, 7), (16512, 5), (16640, 5), (16896, 5), (20480, 5), (24576, 5), (49152, 5)]
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma pins2_ok : pins2.all (fun e => okE [] (pr (pins3 ++ pins4) e.1) e) = true := by decide +kernel
+lemma pins2_I : ∀ e ∈ pins2, Imp [] e.1 e.2 := okAll (T := (pins3 ++ pins4)) pins2_ok (apI pins3_I pins4_I)
+
+def pins1 : List (ℕ × ℕ) := [(512, 9), (4096, 9), (16384, 10)]
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma pins1_ok : pins1.all (fun e => okE [] (pr (pins2 ++ (pins3 ++ pins4)) e.1) e) = true := by decide +kernel
+lemma pins1_I : ∀ e ∈ pins1, Imp [] e.1 e.2 := okAll (T := (pins2 ++ (pins3 ++ pins4))) pins1_ok (apI pins2_I (apI pins3_I pins4_I))
+
+def pinsAll : List (ℕ × ℕ) := (pins1 ++ (pins2 ++ (pins3 ++ pins4)))
+lemma pinsAll_I : ∀ e ∈ pinsAll, Imp [] e.1 e.2 := (apI pins1_I (apI pins2_I (apI pins3_I pins4_I)))
+def pinsSelected : List (ℕ × ℕ) := pinsAll.filter (fun e => e.2 ≥ 7)
+lemma pinsSelected_I : ∀ e ∈ pinsSelected, Imp [] e.1 e.2 := by
+  intro e he
+  unfold pinsSelected at he
+  exact pinsAll_I e (List.mem_of_mem_filter he)
+
+def q2 : List (ℕ × ℕ) := pr ((rt.filter (fun e => 4 ≤ e.2)) ++ (pinsAll.filter (fun e => 6 ≤ e.2))) 2
 lemma co2_p : pOk 2 q2 = true := by decide +kernel
 lemma co2_id : ∀ a ∈ q2, Imp [] a.1 a.2 := by
   intro a ha
   unfold q2 pr at ha
-  exact ir a (List.mem_of_mem_filter ha)
+  rcases List.mem_append.mp (List.mem_of_mem_filter ha) with zero | pinned
+  · exact ir a (List.mem_of_mem_filter zero)
+  · exact pinsAll_I a (List.mem_of_mem_filter pinned)
+
 noncomputable def restrictedTest (Q : List (ℕ × ℕ)) (Z t : ℕ)
     (cases : List (ℕ × ℕ)) (i : ℕ) : Bool :=
   let a := cases.getD i (0,0)
@@ -5799,38 +5843,6 @@ lemma i1 : ∀ a ∈ rt1, Imp [] a.1 a.2 := by
   · exact co32
   · exact co64
   · exact co128
-def pins4 : List (ℕ × ℕ) := [(525, 1), (533, 2), (537, 3), (540, 2), (549, 3), (553, 3), (556, 1), (561, 3), (564, 3), (568, 2), (581, 1), (585, 3), (588, 3), (593, 2), (596, 3), (600, 3), (609, 1), (612, 3), (616, 1), (624, 2), (645, 2), (649, 3), (652, 2), (657, 4), (660, 4), (664, 4), (673, 3), (676, 3), (680, 2), (688, 4), (705, 2), (708, 3), (712, 3), (720, 4), (736, 2), (780, 2), (788, 2), (792, 3), (804, 2), (808, 3), (816, 3), (836, 3), (840, 2), (848, 2), (864, 2), (900, 2), (904, 3), (912, 3), (928, 3), (960, 2), (1545, 3), (1553, 2), (1560, 2), (1569, 2), (1576, 2), (1584, 3), (1601, 2), (1608, 2), (1616, 3), (1632, 3), (1665, 2), (1672, 2), (1680, 3), (1696, 3), (1728, 3), (1800, 3), (1808, 3), (1824, 3), (1856, 3), (1920, 3), (2565, 2), (2577, 3), (2580, 2), (2593, 2), (2596, 3), (2608, 2), (2625, 3), (2628, 2), (2640, 3), (2656, 2), (2689, 3), (2692, 2), (2704, 3), (2720, 2), (2752, 3), (3585, 3), (3600, 3), (3616, 3), (3648, 3), (3712, 3), (4103, 2), (4107, 3), (4109, 1), (4110, 2), (4131, 3), (4133, 3), (4134, 3), (4137, 3), (4138, 2), (4140, 1), (4163, 2), (4165, 1), (4166, 3), (4169, 3), (4170, 3), (4172, 3), (4193, 1), (4194, 2), (4196, 3), (4200, 1), (4227, 4), (4229, 2), (4230, 4), (4233, 3), (4234, 4), (4236, 2), (4257, 3), (4258, 4), (4260, 3), (4264, 2), (4289, 2), (4290, 4), (4292, 3), (4296, 3), (4320, 2), (4358, 2), (4362, 3), (4364, 2), (4386, 3), (4388, 2), (4392, 3), (4418, 2), (4420, 3), (4424, 2), (4448, 2), (4482, 3), (4484, 2), (4488, 3), (4512, 3), (4544, 2), (5123, 2), (5129, 3), (5130, 2), (5153, 2), (5154, 3), (5160, 2), (5185, 2), (5186, 3), (5192, 2), (5216, 3), (5249, 2), (5250, 3), (5256, 2), (5280, 3), (5312, 3), (5378, 3), (5384, 3), (5408, 3), (5440, 3), (5504, 3), (6147, 3), (6149, 2), (6150, 2), (6177, 2), (6178, 2), (6180, 3), (6209, 3), (6210, 3), (6212, 2), (6240, 2), (6273, 3), (6274, 3), (6276, 2), (6304, 2), (6336, 3), (7169, 3), (7170, 3), (7200, 3), (7232, 3), (7296, 3), (8709, 3), (8713, 2), (8716, 2), (8721, 3), (8724, 3), (8728, 2), (8769, 2), (8772, 2), (8776, 3), (8784, 2), (8833, 3), (8836, 3), (8840, 2), (8848, 3), (8896, 2), (10753, 3), (10756, 3), (10768, 3), (10816, 3), (10880, 3), (12291, 3), (12293, 3), (12294, 3), (12297, 2), (12298, 2), (12300, 2), (12353, 2), (12354, 2), (12356, 2), (12360, 3), (12417, 3), (12418, 3), (12420, 3), (12424, 2), (12480, 2), (14337, 3), (14338, 3), (14340, 3), (14400, 3), (14464, 3), (16391, 3), (16395, 3), (16397, 5), (16398, 5), (16403, 3), (16405, 3), (16406, 5), (16409, 3), (16410, 5), (16412, 5), (16419, 3), (16421, 5), (16422, 3), (16425, 5), (16426, 3), (16428, 5), (16433, 3), (16434, 3), (16436, 3), (16440, 3), (16515, 1), (16517, 2), (16518, 2), (16521, 2), (16522, 2), (16524, 3), (16529, 1), (16530, 3), (16532, 2), (16536, 2), (16545, 3), (16546, 1), (16548, 2), (16552, 2), (16560, 1), (16646, 2), (16650, 2), (16652, 3), (16658, 3), (16660, 2), (16664, 2), (16674, 2), (16676, 3), (16680, 3), (16688, 2), (16770, 2), (16772, 3), (16776, 3), (16784, 2), (16800, 3), (16901, 2), (16905, 2), (16908, 3), (16913, 2), (16916, 3), (16920, 3), (16929, 3), (16932, 2), (16936, 2), (16944, 2), (17025, 2), (17028, 3), (17032, 3), (17040, 3), (17056, 2), (17156, 3), (17160, 3), (17168, 3), (17184, 3), (17280, 3), (20483, 2), (20485, 2), (20486, 3), (20489, 2), (20490, 3), (20492, 3), (20513, 3), (20514, 2), (20516, 2), (20520, 2), (20609, 2), (20610, 3), (20612, 3), (20616, 3), (20640, 2), (20738, 3), (20740, 3), (20744, 3), (20768, 3), (20864, 3), (24579, 2), (24581, 3), (24582, 2), (24585, 3), (24586, 2), (24588, 3), (24593, 2), (24594, 3), (24596, 2), (24600, 2), (24705, 3), (24706, 2), (24708, 3), (24712, 3), (24720, 2), (25089, 3), (25092, 3), (25096, 3), (25104, 3), (25216, 3), (28673, 3), (28674, 3), (28676, 3), (28680, 3), (28800, 3), (49155, 3), (49157, 3), (49158, 3), (49161, 3), (49162, 3), (49164, 3), (49169, 3), (49170, 3), (49172, 3), (49176, 3), (49185, 3), (49186, 3), (49188, 3), (49192, 3), (49200, 3)]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma pins4_ok : pins4.all (fun e => okE [] (pr [] e.1) e) = true := by decide +kernel
-lemma pins4_I : ∀ e ∈ pins4, Imp [] e.1 e.2 := okAll (T := []) pins4_ok (by simp)
-
-def pins3 : List (ℕ × ℕ) := [(517, 3), (521, 4), (524, 3), (529, 5), (532, 5), (536, 5), (545, 4), (548, 4), (552, 3), (560, 5), (577, 3), (580, 4), (584, 4), (592, 5), (608, 3), (641, 5), (644, 5), (648, 5), (656, 7), (672, 5), (704, 5), (772, 3), (776, 4), (784, 4), (800, 4), (832, 3), (896, 4), (1537, 3), (1544, 3), (1552, 4), (1568, 4), (1600, 4), (1664, 4), (1792, 4), (2561, 4), (2564, 3), (2576, 4), (2592, 3), (2624, 4), (2688, 4), (3584, 4), (4099, 5), (4101, 3), (4102, 5), (4105, 4), (4106, 5), (4108, 3), (4129, 4), (4130, 5), (4132, 4), (4136, 3), (4161, 3), (4162, 5), (4164, 4), (4168, 4), (4192, 3), (4225, 5), (4226, 7), (4228, 5), (4232, 5), (4256, 5), (4288, 5), (4354, 4), (4356, 3), (4360, 4), (4384, 4), (4416, 3), (4480, 4), (5121, 3), (5122, 4), (5128, 3), (5152, 4), (5184, 4), (5248, 4), (5376, 4), (6145, 4), (6146, 4), (6148, 3), (6176, 3), (6208, 4), (6272, 4), (7168, 4), (8705, 4), (8708, 4), (8712, 3), (8720, 4), (8768, 3), (8832, 4), (10752, 4), (12289, 4), (12290, 4), (12292, 4), (12296, 3), (12352, 3), (12416, 4), (14336, 4), (16387, 4), (16389, 6), (16390, 6), (16393, 6), (16394, 6), (16396, 8), (16401, 4), (16402, 6), (16404, 6), (16408, 6), (16417, 6), (16418, 4), (16420, 6), (16424, 6), (16432, 4), (16513, 3), (16514, 3), (16516, 4), (16520, 4), (16528, 3), (16544, 3), (16642, 3), (16644, 4), (16648, 4), (16656, 3), (16672, 4), (16768, 4), (16897, 3), (16900, 4), (16904, 4), (16912, 4), (16928, 3), (17024, 4), (17152, 4), (20481, 3), (20482, 4), (20484, 4), (20488, 4), (20512, 3), (20608, 4), (20736, 4), (24577, 4), (24578, 3), (24580, 4), (24584, 4), (24592, 3), (24704, 4), (25088, 4), (28672, 4), (49153, 4), (49154, 4), (49156, 4), (49160, 4), (49168, 4), (49184, 4)]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma pins3_ok : pins3.all (fun e => okE [] (pr pins4 e.1) e) = true := by decide +kernel
-lemma pins3_I : ∀ e ∈ pins3, Imp [] e.1 e.2 := okAll (T := pins4) pins3_ok pins4_I
-
-def pins2 : List (ℕ × ℕ) := [(513, 6), (516, 6), (520, 6), (528, 8), (544, 6), (576, 6), (640, 8), (768, 5), (1536, 5), (2560, 5), (4097, 6), (4098, 8), (4100, 6), (4104, 6), (4128, 6), (4160, 6), (4224, 8), (4352, 5), (5120, 5), (6144, 5), (8704, 5), (12288, 5), (16385, 7), (16386, 7), (16388, 9), (16392, 9), (16400, 7), (16416, 7), (16512, 5), (16640, 5), (16896, 5), (20480, 5), (24576, 5), (49152, 5)]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma pins2_ok : pins2.all (fun e => okE [] (pr (pins3 ++ pins4) e.1) e) = true := by decide +kernel
-lemma pins2_I : ∀ e ∈ pins2, Imp [] e.1 e.2 := okAll (T := (pins3 ++ pins4)) pins2_ok (apI pins3_I pins4_I)
-
-def pins1 : List (ℕ × ℕ) := [(512, 9), (4096, 9), (16384, 10)]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma pins1_ok : pins1.all (fun e => okE [] (pr (pins2 ++ (pins3 ++ pins4)) e.1) e) = true := by decide +kernel
-lemma pins1_I : ∀ e ∈ pins1, Imp [] e.1 e.2 := okAll (T := (pins2 ++ (pins3 ++ pins4))) pins1_ok (apI pins2_I (apI pins3_I pins4_I))
-
-def pinsAll : List (ℕ × ℕ) := (pins1 ++ (pins2 ++ (pins3 ++ pins4)))
-lemma pinsAll_I : ∀ e ∈ pinsAll, Imp [] e.1 e.2 := (apI pins1_I (apI pins2_I (apI pins3_I pins4_I)))
-def pinsSelected : List (ℕ × ℕ) := pinsAll.filter (fun e => e.2 ≥ 7)
-lemma pinsSelected_I : ∀ e ∈ pinsSelected, Imp [] e.1 e.2 := by
-  intro e he
-  unfold pinsSelected at he
-  exact pinsAll_I e (List.mem_of_mem_filter he)
-
 def rootBounds : List (ℕ × ℕ) := ((rt1 ++ rt).filter (fun a => a.2 ≥ 7)) ++ pinsSelected
 lemma rootBounds_I : ∀ a ∈ rootBounds, Imp [] a.1 a.2 := by
   apply apI _ pinsSelected_I
@@ -6980,10 +6992,10 @@ def wordModulus : ℕ := 371
 def recipeTable : ℕ := 0xfcfbebdead7e3ce8d362cf6ef9b3d6af1a3f4eb932d4ab122b46bcb9e2c74a9c286c99a247c38e0c3428c082c18a042408
 def rotationTable : List ℕ := [0xffef7cefae78df6d74cf2c70beeb6caeaa689e69648e28607de75c6da6585d65544d24503ce34c2ca2481c61440c2040, 0xffe5544d2e78df63ceaeaa682ca964cf2c7034cb6c8e28607de2486da5d6658f7cefa450d749e6bee75c1c6004083045, 0xffef7cefa8607de75ccf2c70bee658aeaa689e65d68e2e78df6d746dab6c9645544d245024834c2ca3ce1c61410c2100, 0xffe5544d28607de248aeaa682ca5d6cf2c7034c6588e2e78df63ce6da964b6cf7cefa45075c9e6beed741c6001083105]
 def wordLookup : List ℕ := [0x620000000000007000000000000000000052c0000000000000001c80, 0x1800000000000000000000000000001800134000000000000, 0x20f0000000000000000000000001a00, 0x6c0003c0000000000002200000000000000460001800000000000a00, 0x1000000000000002d5820000000480000000000000000000, 0x640000000000540000e000002f00000000000180000002d, 0x2700b000000cc0000001d000000b80000002000200000000000, 0x38000000000000000000000000000000000767800000000112a84900, 0x3d00000000000000000001b000000014000000000f930001300, 0x38d0000000000000000dc02e520000000d400000000004a00009, 0x20000000000000000000000000007c000003ac0000, 0x64000000001f8000a00000000000]
-def orbitSecondRecords : List ℕ := [0xf1ffdadbff1f33fc8dbfb1a37fc3cdffaf33fc8ccff2b37fcc59ff670bfc699ff378ffd651fd3433fdd04ff750bfc6c9ff2a8ffc88cff742ffc6c8ff696fdedefbf372efc6d3ff1b17fd9dbff730ffd6d5ff1b0fecde3bf, 0xd0ffc341ff0d17f8343fe0d07f9a59ffb123fcdccff1917fc644ffb10ffc642ffb107fec53ef5957f5ac2ffb137fc689ff376efc74fffe527fc74ffbb15ffc84fffe523fcdccbf1a4ffc681ff9d17fc3c4ff9d0ffdd03ff, 0x1313fc143ffa50ffc4c3ffa50bfc4c2ff0307fc141ffa507fc1c1ff040ff81c1fe7527fc441fd75277c0c2fa1b33fe74bff0513d8acbff6a67fc84dff1537fc8cfff173ff48cffb6567fcae3ffa537fc4cdffb127fc345ff, 0x6907fe887ffb18ffd94fff7513fda53ff1327fd7c9ff090ffc545ffed27fdb41ff376afd9c9df373efc8e27b2f5efda4fff1323fc845ff210ffd781ffad0ffd981ff2107fc88dff1507f4248de3535fcccdffa517fc4c5ff, 0xb17f82c3fe9d33fdd43ff234ffc8d1ffaf17fc8c5ff2313fc5c3ff230ffc8c1ff2b33fc8c3fb7517fcccbbf3766fedddff0d2ffc34c7e6a27fda81ffaf37fc8cdff1e17fca4dffb12ffcd0dff6a4ffda8fff6927fc885ff, 0x3716fca8dffb7c7fcdc4bf370efcdc2bf3706fca4bbf7327fc8e2fb270ffcd4dff1d5ffe75bffaf27fdac9ff7307fddeb3f1b6bcc7c5ff1f0ffc7c3fb3736fc8e1ff733ffdcd3ffaf23fdac8ff0b0ffe2c7ffaf07fdac1ff, 0x2133fdd01ff6b0ffdcc5ff3727fc44cff1333fc8dfff374ffdd5bff3723fcdc5ff6b17dc8cbff370fffdedff2b35fddeabf6b5ffc34cfe6a0ffc6d9ff3165fca63ff378dfcdcdff3786fcdc9bfb133fda43ff374efcdc8bf, 0x6c4f7]
-def orbitSecondBuckets : List ℕ := [0x28000808000, 0x800001000081007, 0x80000000808800000d, 0x808000000000000011, 0x10080008013, 0x800000108000000017, 0x80080000000080001b, 0x280000000000000081e, 0x100000080001000024, 0x808100000000000029, 0x1082d, 0x1000000000000000830, 0x80000028033, 0x3180000000000001039, 0x980000080808008844, 0x611080801080000004d, 0x401088000800000062, 0x103900008000001006f, 0xb00800000000007d, 0x808000800000000085, 0x80010100000000088, 0x88000808800000008d, 0x1000000408008000092, 0x18000800c900000009e, 0x8000080898000080ae, 0x882001000080b6, 0x80000180000000bf, 0x810000080c3, 0x800808088000080c7, 0x1080080080cd, 0x10000000a00080008d2, 0x9000000888000000db]
-def orbitThirdRecords : List ℕ := [0x744cbff1b4c8ff734c3ff6b243ff676c1ff6b0c1ff1b248de676c1f7216c1fb77ad3bf77ac8bf378c5bf77ac53fb7bc1bf75d04df5e6c1fb214ccff378df3b1b4c5ff1b4c3ff6b4c3ffaf9c1ff374c9ff1b441fd77b41ff2b88d7f2a8cdff1b4c3fbb5bcdff75acdff3534bff378c3bf, 0x378c3fb378e2bb2334cfe758cc7f742c1fff4c45ff6ba83f7b7bc9bf77cc9bfb7b4bbfeb942f7377c5bf377c3bf75542dfb168dff1b4c9ff5f6c1ff1b547ff730c1ff1b243fe377c3bb1b243fb1b243fab174def374cbbf77ac9bfb7bc8bf77ac1bf74a41ff75885ff758c47f77d43bf, 0xa174dff6b6d3f76b7dbf7236c3fb2384cff71a59ffb1443ffb1442ff236c4f3377c3fb376d9bff5b5adf77ac9ff77ac1ff2b4cdff2b7cd7f2b343ff77d43ff758dfdf2b343fe77ad3ff2b345f72164ffd2b345f675d05df77ac577674c2ff1a641fd6b845f7afacd7f75ae37f296cdf7, 0x5e441fdad743ef758e27be5248de6b6c9f7333cdff2b88dff1f6c3fb6b143f7376cdbf74acbff9d143ff9d0c1ff9d141ff6b6c1ff6b6c8f76b6c1f73534cfe9d6ccff756c3ff2b1c1ff742c5fe9d144f62b1c1fe758c9ff758c1ff758c9df77d2b3f6b6d3ff37c593ff4745ff756c3fb, 0x6b9c2f765448f7696c3f325443ff2b8d9ff1a4c9ffb1345ffb1343ff6d681ff75741ff757d9dfb1343fef7b5bbfb14cdef1d3c5ff9d245ff9d241ff9d243fe1d3c5fb1d3c4fb1d3c3fb25443f725442f75f441fd6d441fd2f641fd758c4ff77ac5bf750c2fa6b6c9ff744c3ff77ac5b7, 0xb1845ffb1843ff69741ff316d97f3798dbfb5c4d7f378dffb751c1fe75d235fafacdff2b8cdfff5c49ffb1945efb1943efb1942ef67655fd19141fdb1941ef6d655fdf5c49df191c1fca974dff65449ff65441fd65449f765441f5758ccff378cc7fb1acbff6b4c2ff37c597fb1b4def, 0x69641fd751c1ff75541fd15341fca3745ff74ac3ffa3741ffab94bf7a3745fba3744fba3743fba3741fbf5c44ff2b8c1ffb194fefa5343ffa5341ff1d641fdb1841ff37699bfa5345fea5343fea5341fe0d0c1fe0d141fe0d1c1feb1853efb144bff19241fd3764fbd758c5ff77d04bf, 0xa53cdffe57c5ff13143ff9f741ff13103fe75a53fff5749ffa51c3efa51c1ef3768dbff5749dfa51c1ee75549df9f743fb130c2fa77d51bf1b4ccff9d2c1ff5f793dbaf741ef6b441fd6b448f7378ccbf2354ff9b184ffff5943fff1a49ff21343ff21345fe21343feaf44dff6b6c5f7, 0x77d05bff3949ff15144f61d3cbfb2544bf7238857bb134c7e210c1ff67781df6b74fff75a49ffad84dff2ba8df775a49df13248deb18cdff353417f67981d7353417e37ae33f754cbffeb949ff33343ff746c1ff33345fe33343fe2374ffb258d1f7ef949ef73441fd655d1f56b449f7, 0x69541fd6b64ffd75a4d7f6b655fdf3c41ff752c9ff752c1ff752c9dff5c45ff6ba9377b3c4bbf2f5c8bff5744fff5b44ffb1a41ff1e341fe13245ff13243ff1d441fd677c1ff6d7c1ff6d9c1ffa5841ff211c1ff13243fe09143fe211c1fe37681bf65445f711241fd1934bff77651fd, 0x6a4c9ff6a7c1ffa58cdff23341ff1b64ffd23341feaf94def2b34cfef5bc1ffb17596f77ad93f1b699f35f4c4ff75ccbbf294cdff657c1ff65781ff67941ff29343fe224c5ff6d241ff6ba59ffb774dffb194befb12c7ef378ccff2f5c9bf6ba89776ba8177e9749ff21241ff67241df, 0xeb945f723143fb234c3fb23103fa77d6b3f236ccffb19c1ff1b68df3f5745ff23144f61f341ff332c1bff5b45df2134c7e236ccfb233cbfb291c1fe75849df37644bfb7c43bfb7c42bf2384dffb1a4bbf77d05ff0d2c1feb19c3ff316d9ff1134c7eb5c4dff75841ff316997faf8ddeb, 0x132c3ff738c3fb77d679faf0c1ff23841ff6b781ff6b9c1ff132c5fe1f144f6132c3fe75d0b5f17248de6b248de23543fb75acbff759c3ff757c3df759c3df75243fe75243deb7c48bfb7c45bf234c5ff234c4ff23143ff234c3ff37653bd9d6cdff757c3fb752c5fe27345f623441fd, 0xf1a83ff750c1ff75243df35341ff35341fe37ae3bf6b859ff77d53bf37345bf6b4c9ff23245ff77d5f9faf243ff739c1ff6b7c1ff6dac1ffaf243fe23243fe739c1df77ad97f23243fb23243faf7b6b3f1f4c3ff1b681f3754c3ff1f143fb1f4c3fb67785d7b7c49bf37343bf6b4c8ff, 0x298cdffef449ff73941ff6b941ff371c1be27845f773241ff23755fb378cd7f271c1ff271c1fe7584cffb7c43ff2b64d7f67141f71f243fa779d5bf77d49bf77d41bf734c9ff77d499faf241ff73b41ff6b241ff0b243fe737c1df23885fb77acf3f37acc3f75103fe270c1ff1f4c5ff, 0x37345fe298c1ff77a53bff19dbf7b7c63bfb16c4f7378c17fb184cff75845fff1ac3ffb7c49ff37343ff37343fe37241bf316536d77d6abf37541bd37d4d3f6ba89f7694c3ff69243fe75a83ffb7c48ffb7c45ff75a4dffb7c53ef37445bfb7943bff5942ffb71c5bf37447bf371c1bf, 0x232c3faf4c4bffb16c8ff75ac3ff370c1ffab94d7f2b3417f77d49ff316487ff5b635f77d41ff77d4cbf77d49df77a49bf77a41bf3764bbfab94d77af8c3fb31699ff27881ffb16c5ffb16c3fff3c43ffb16c1ffb16d3ef7794fbf374cdff316457f316447f77d44bf719d97f316427f, 0x748c3fbad8cbff6b957f7656d9ff6b4c5ff6b7c5ff1b4cdff77d741fb16c9ff1b343fff5bc3ffb7941ff371c1ff757dbdf1b343fe371c1fe316497f6b4c5f76b7c5f7237c4fbaf7c3fb237c3fb1b343fb759dbd7378cdbf6b8dbfb234cbffaf8c1ff75d035f2134cfe2b8dbf3232c3fb, 0x1b0c1ffa56c1ff1b1c1ff6d6d5df756c9ff756c9df77ad9ffe775bf71b0c1fb237c9fb6b141f72388c7b378c1bf758cb7f73ac9ffeb743ff278c1ff734c5ffaf7c1ff756c1ff37241ff2b84d7f75d0bdf74a4bbf37541fd1f2c3fb37d4d7f1f2c3fab7bcdbf3734bbfefac9ff75143ff, 0xb1743efb1741ef379c3bf31653ed6b6d9ff37d4dbf318d97f696c9f7696c1f7744c4ff6b6d9f777d745f754c2ff26343fe1b241ff756c4f7696d3f7356cd7f77d6bff2a8c3fb77ac33ff1957efb1acdff376dab377d4cff1b541fd77acfbf372c1bf37accbff19c2ffb1981ff77d45bf, 0x75d03df9d341fef1949ef2b8cffb73ac5f7b174febab94dff2b341ff75d1b5f31648ff2b341fe236cdfff58ddfbf1948ef6b5c5f7236cdfb31645ff77d45ff31644ff31643ff31642ff261c1feb1681ff756ccffb1693ef37a8dbf2a8c9fff4c43ff378c1ff3164b7fb1745ef193c4fd, 0x1d3cdff37acd3f758cbfff5949fff5949df1d3cdfb2544df72b84dfff1a4fff37d4dff6b642ff75681ffedadbff744c5ff6b6cff7236c1fb75441fd2b6ccf73734cbe756c5ff758c37f31649ff1a4cdffb1689ff2b8cfff65651fd9d345ff9d343ff758c37b9d341ff9d345fe0f343fe, 0xb184dff268c1ff376d3bf376c8bf2174ffbb15c8ff2364ffd3734cfe3784cbfb18ddeb356cdff6b885f777ac3bfb194defb1347ef19341fca1741ff376c3bbb15c5ffb15c3ffb574d7f75ac2ff1a541fd676c3fb3568d7f74144f6276c3f32b8e27b77adb372544dff1a1c1fe1a349fe, 0x9d34c7e194c8fd19544fd67641fdb1b42ef21641fdb1248dea374dfff5c4bff173cdfd233cdfb6b85bf319143ff67741ff66741ffb10c1ffb1141ffb1103fe37acd7f3164bffb14c5efb14c4efb14c3efb14c2ef77d0bbf376c9bfb10c2fa6974ffbb16ccffb15c9ffb1144f6b174bef, 0xb13c5ffb13c4ffb13c3ff2b8d3ff2b8c5ff2b8c3ff2b6cd7f13345ffb1245fff5945ff13343ffb1243ff758c3fbb1241ff13345fe13343fe0d143feb1243fe194c9fd11341fd5f641fdb1b41ef2b8c3fb11341fc2b8c5f7f4bc5ff758db7b9d34bff1b34cfe74ac5f76ba99776964ffd, 0x70c1fe07141fe378cf3b754c9ff757c1ff75b41ff754c9df757c9df6b6c3f70d243fead345fe75b41dfa50c2fa6b6c3fb6b6c3f3a385dfb75bd7bf2388d7bf1448ff2b4cbff2b8c8ffafac1ffa584dffb1885ff21341ffb1b4fef759c1ff21341fe759c1df758c3ff738dfdb3384dbf, 0x759cd5fb7743bf6b0c2faa58e27b238817be7943ff3568dff75941ff738c1fff1a89ff22345ff150c1fd21441fd75241ff22345feaf441fd75241df2b8e2fb753497e353495ef574bff33341ff77adbb7f5b4bdfb78dd3ff17c4ffb1781ffb1a4dff37acdbff1449ffa50c1ff2b8c9ff, 0xb18c5ffb18c4ffb18c3ff15241fd6b741ff75a89df6b653fd353497f373c8bfb7745bf77d03bfb7741bfb18c3fba53c5ff754c4ffa53c3ff757c4df214c5ffa5243ff214c3ffa5241ffe7749df891c3fe091c1fe5f541fd6d541fd151c1fc354cd7ff594dff353457f353437f757cd5f, 0x298cffbb17c5ffb17c3ffb17c1ff37acdff1e1c1ff1e1c1fe378cf7b653c9ff1f643fb29341fe694c9ff34345fe34343fe6da41fff7d71bf37689bff1ac8ffb12c3ff73741ffb12c1ffb12c5fe739d9df194cbfd6b641fd373c9bff5c43ff653c8ff1d541fd697c1ff22141ff37693bf, 0x759c5df75d015f1f343fb1f343fab13cbff37641bdab74d7f2b6cdf71334bffb12c9ffaf341ff75ac1ff0d2c3feaf541fdaf341fe1334c7eea749ff234cdfff1ac9ff23345ffaf343ff23343ff3774fbfaf345fe23345feaf343fe23343fe75a8d7f73641fd23343fb3774fbb23343fa, 0x6b541fd75cc9df6b443f723843fb2388dfb69643fff5743ff27341fff5b43dfaf3cdffa58c5ffa58c3ff230c1ff23141ffa58c1ff231c1ff231c1feb7741ff755c9ff75ac9ff75cc1fff5bc9df75ac9dfa58c3fb2d54bdf230c1fb65645ff2b6cdff754c5ff757c5ff334cbbf757c5df, 0x9d6c3fbb5bcd7f75acd7f3534b7f378cfbf378c33f1b693f3a57c3ff746c3fb1f141ff6d545ffa174cff1f1c1fef7ae5b7378c33b75141ff332c9bf75245df2234c7e75144f61f443fb1f0c1fb3764dffb7c61bfeb943ff37341bfeb748ff37341bef7949ff0b0c1fe0b1c1feaf941ef, 0x35345ff35343ff757cddf35343fe37641fd3784dbff494bff294cbbf370c2ba77ad33f376ccbf77ac83f77adf3f75d045f27243df75a43ff27243de270c2fa6b94fff75349feb794dbf35349de677c3fb9d6c1ff6ba53ffeb749ff23241ff752c3fe6b94ff7731c1ffad2c7ef3774ffb, 0x37243beaf8cdff6ba837777d4bbf27841fff1ac5ff1b64dff35349ff3164d7f374c5bf374c4bf37143bf374c3bf374c2bff1ac5f775accff3434bffe56c9ff752c3ff37441bd372489e73841bf1d6cffbb18cbff378c93fb7b633f777de9b274c3ff1b689f375d0c5f759e2df354cdff, 0x6a4c3ff27889dff5bc5ff75ac5ffb794dffb16c7ef6b853ff75a8dff374c9bf37245bf316417d37547bf75ac5f76a7c3fb6b9e1f72334bfff7ae5f7378c37b378e23bb17cbff75889df37341ffaf34c7e2334c7eb7347fe374c8bf37243bf777c1bf37544bf779c1bf37542bfb7847bf, 0xf5c42ffeb745ff237c1ffa56cdff748c5ff374c5ff779d3ff1b341ff1b341fe318597f7754ffd6b849ff37248deeb745f7edac5f76b841ff232c1ff77ac97f77ac17f2b4cd7fab74dff75cc5ff2b3437f37a4dbf758df5f759e35f696d9f777ad37f2b8ccff2b34577758df5b75d055f, 0x1b4c4f7f4943ff737c3db378c3bb1b103f23534c7e6b7c3ff6b9c3ff1f2c1ff374c8ff6b243fe37243ff777c1ff779c1ff758c97f37243fe758c17f758c95f6b9c3f7216cdfb77a89bff4c44ff278c5f76b6d1f7]
-def orbitThirdBuckets : List ℕ := [0x108800020190988000, 0x2800880013000902812, 0x180800010a88808829, 0x10000808010008839, 0x980800008000881041, 0x100000002100000084b, 0x1881800008188900054, 0x2800100819908008863, 0x901908000809000876, 0x1010b80808000000884, 0x8808088000008a9893, 0x41100808080080108a2, 0x10018000008000010b5, 0x2b980000900000018bd, 0x9128801880200088d2, 0x20a20880909008108e7, 0x89991082120100100, 0x18c2100888089008919, 0x1801088200010809934, 0x8a0900890000008146, 0x881110111880808154, 0x2109820018800008166, 0x1108801219818809179, 0x1080108141890800192, 0x18908089139808901a9, 0x880111012900089c4, 0x8081010ba8880881d7, 0x80081088900801ee, 0x8081020411008109f8, 0x89080212110080210, 0x20080009398a8889a24, 0x100000111110901242, 0x800001020889910253, 0x1080088001264, 0x88000001088081926b, 0x2800000008080101a77, 0x888800028889090283, 0x2a09080011800000a94, 0x801800020081000aa7, 0x1088900000088180ab3, 0x880100800080880ac0, 0x10889008000000012c9, 0x10000100888080092d3, 0x31008018880000012de, 0x3880001008080a8aee, 0x4221000110808800301, 0x1a90000008808019b1a, 0x21a3008080008810b2d, 0x90a980889100018345, 0x18a190a20000001035b, 0x818a8920800000373, 0x1098a12110800008385, 0x800082a900909839c, 0x19880888b18000003b1, 0x18800003919180083c5, 0x29192081919108083db, 0x908081218991903fa, 0x1108809981080802413, 0x880088b0a90880428, 0x1000111b880008c3d, 0x900080911208880c50, 0x1000000021808001463, 0x800928928000c6f, 0x108800890a990108c81]
+def orbitSecondRecords : List ℕ := [0x173ff6bc8ffb14fbda83ff238beda8fff756ffd6d5ff1b0fec8dbfb1b17fda49ff6b23fdacbff3722fcdc2bf9d6ffcccbbf2133fcdc8ff5957f5651fdaf27fec48ff3165fc243ff6b27fc693ffaf33fc642ff3433fc6c8ff, 0x7317fc8d1ff2313fc8cfff2b8ffcdc4bf373efda5bf7f7b7fcdcdff3717fda93ff8b1ffc34bff2389eec4dff733ffec57ff1b4ffdcc3ff6a37fda81ff1b13dedddff0b17fa74bff6567fc645ff1913fe887ff2237fc885ff, 0x1a67fc248de374efeb43ff6b07febcdff0d0ffdacdff374ffc757ffaf17fc8dfff3437fdcd3ffb107fc0c1ff0d0ff89c3ff2307fc8c3fb2337fc143ffa50ffe743ff2317fcdc1bf3736fcdc5bf692efdcc1ff040ff9ac3ff, 0xed27fdd49ff7407fd7c9ff1f33fda99ff75277f949ff1133fdd03ff7413fdd42ff1b67fc34cfe9d33fda53ff6937fca63ff376afebc1ff6907fc84dff742ffdacd7f2f5efc841ff690ffda4fff2117fc84fff130ffc8d3ff, 0x378dfedefbf6b33fc8c3ff370efcde3bf1323fc4c2ff1a27fcdc3ff378ffc2c3ffb10ffc8cbff6607fcdcbbf0b0ff8ccdffe523fec63ffa50bfcdd9bf030be84c9ff1333fedf1ff676ffdadbff77aafcddbbfb12ffc34c7e, 0x5f0fec545ff5e07fc144f65d3fec8e1ff7517fdac5f71f17fcde1bf0d07fdd43ff7513fc141ffa537fc345ff0f37fc785ffd107f5deb3f0d07f8345fe6967fd7c3ff170ffd94fffa517fc8cffb1d3ffe745ff0f13fdad7ff, 0x2a8ffcc59ff2333fd1c1fe3726ff941ff670bfdac2ff3732fcdc9ff7327fc681ff1a37fcdccffb127fdb41ffb133fcd4d7f6a27fc1c1ff1b27fc88cff9507f46daf31337fc4c5ff0f1ffcd4dff210ffc6ccff1313fc54dff, 0x19c9df]
+def orbitSecondBuckets : List ℕ := [0x8908000010000000, 0x89000000008000007, 0x8008000000080000c, 0x80880080088000f, 0x88000009990015, 0x2800001080020, 0x80000a200001008828, 0x8008a8081009036, 0x800008138801080044, 0x80a1880000853, 0x8800000800080005e, 0x8800008a000000062, 0x1080000006a, 0x800000088000086d, 0x71, 0x8800000000000071, 0x88180080008000073, 0x1100800008000007a, 0x808080000000800080, 0x800008188084, 0x1880808000008a, 0x800001100008000090, 0x80008000000000896, 0x800000008000888099, 0x80000114088008009e, 0xb08000000ae, 0x800000a91000800b6, 0x8880000890000000c2, 0x1000008900000008c9, 0x8000000800000000d0, 0x800000001080000d2, 0x1080889100800000d6]
+def orbitThirdRecords : List ℕ := [0xb194fef75ac9fff1448ffef449ff23243fb374c9ff1a4cdffb1442ffb16c3ff77d741f0d243fe73241ff75ac9df23243fa6b243ff77d745f5f1c1fe5e1c1fe77d49bf26343fe75ac2ffe57c1ffe5781ffdf741ff6b9c2f7ef9c1ffefac1ff696c9f777d49ff6b6d9ff3798dbf6b845f7, 0xe9749ffa174cffb12c3ff2b8c8ff6d681ff6b88d7f370c2ba13243ff6b4c9ff374c9bf674c2ff1d641fd19141fd6b4c2ffb1945ef75d0c5f739d9dff5c4bffb18cbfff4bc5ff2d545ff5e1c1ff3764bbf13243fe3164d7f2334c7eb1241ff6b88dff9a541fd65651fdb1745ef193c4fd, 0x22141ff5f6c3fb236c4f35f6c1ff6d655fdb1741efaf241ff3584cff374c8ffb13c4ff2b8e27b5a1c1feb14cdef2388dfb75a83ff1b343fb6ba83f7236cdfb756c3ff21241ff74a41ff338c1ffdb441fd759dbd72b8e2fb6b6c3f735849df75ccbbfb1b4fef5f641fd19544fdb1689ff, 0x6ba59ff1b4c3fbeb943ffb17c5ffeb743ff6b6d3f72b8cfffb7c61bf6a7c3fb9d6c1ff6a7c1ff35885ff378c3bfb7347feb794dff37345fe6b4c8ffb774dfff3441fdf7ae5f7b1b41ef374c8bf6b849ff6a4c3ff6ba8377374c2bff5c43ff25645fff17c4ffb13c5ff334cbbf1b103f2, 0xa5343feb1843ff1f2c1ffa58c3fb23345fee7943ffa374dff278c1ff23103faa58cdffa3743fb6b7c3ff2b8c1ff37341be2b8c5ffb794dbf77d5f9f77d51bff7ae5b71b1c1ff777c3bf216c1fb37341ffa1441fd1a641fd9b541fd77accbf737c3db2388d7b737c1df6b343fe1b4cdff, 0xa5343ff6b343ff6b0c1ff23345ff23143fb378cf7b777de9b37341bf77d44bf37345bf1b547ff696c1f777acc3f34345fe37d4dff77d41ff6ba9377591c1fc7774ffb734c3ff77d45ff378dffb3384dbfaf741eff1981ff378c33f1b4c4f75f643fb0d143feb16ccff0f343fe23341fe, 0x258d1f7374c5ff75ac5ff237c3fb77ac57737d4dbf77d41bf7774fbb2d2c7ef77d45bf696c3f377ac5b7696cdf7359e35f1334bff13103feef441fdf1941eff1a89ff0b1c1fe378cf3bb1141ffb16c9ff9d2c1ff0d0c1fe230c1fb759c5df9d343fff5bc3ff270c1ff23144f623341ff, 0x37d4d3f75bd7bf75a43ffb12c9ff759cd5ff494bff742c5fe6b3437f13143ff234c5ff376dab373b41ff35343ff759c1ff378df3b37d4d7fef7c3fb2d6d5df694cbbfe56c1ff234c4ff374c5bf374c4bf35343fe759c1df75144f675ac1ff358c3fb1d3cdfb23543fb25443f775acdff, 0xf3741ff211c1feb1681ff37243fe35841ff298c1ff35845ff27845f777ac9ff6b4cd7f378ccff3768dbf742c1ff694c3ff2d54bdff17c1fff1781fff3941ffb16c7ef69341fe1b64ffd697c1ffb16c8ffe974dffaf541fd353437f75acd7f358c37b6b4cdffef941ef6b4c5ff13248de, 0xf5749dff1a49ff77d2b3fb184cff75d04dff4943ff77ac97ff1acbff378cc7f75542df6da41ffeb942f7b12c7efb174befb194bef31643ff23243fe37c597f37243bf731c1ff77ac9bf37693bf211c1ffa1741ffa5841ff378ccbf37243ff6b841ff6b84dffe9541fd75a53ff37243be, 0x75245dfb7c53ef3534cfeb12c5fe237c9fb74ac5f7691c1fe353495eb1885ff75d045f9d34c7e1134c7e75349fe378c93f75549df757c9dff5949fff5749ff6b449f76b84d7f75d05df750c2faf5942ffef7c1ff719d97f318d97f656d9ffb16c5ff35349de73641fd37c593ff5949df, 0xa50c2fa2b8d9ffb14c3efb16c1ff3534c7e696d9f775d015f6b653fd13245ff3764dff1b343ff75d055f236cdff236c3fb77d6abf37653bd378e2bb35349ff75241ff376c3bb376cdbf77adbb7752c3feb13cbffb144bff753497ee9741ff77ac8bf1b343fe744c4ff75241df25449f7, 0xb15c3ff232c3fb1b4c3ff25442f76b6d3ff3734bbf756c4f791341fd21641fdb1343fe752c3ffb18c3fb232c3fab19c3ffb18cdff67981d7378e23bf7d71bf1b689f3353497f376d3bf77adb3791341fc744c5ff77ac83f6964ffd2164ffd756ccff6b448f7b17cbff6b6ccf7f1ac3ff, 0xb184fffb1845ff230c1ff23143ff31649ff779d5bf37143bf378c1bf6b34cfe378c5bf779c1ff132c3fe754cbff77acdff77ac1ff374cbbfa58c3ffb7743bfb7943bf378cfbf77acfbf3434bff370c1ff378c1ffa5441f569641fdb12c1ff1a349fe25448f70d2c3feb1343ff2334bff, 0x1d3cdff9d345ff6b9c1fff5744ffa53cdffa5345fe1d3c3fbaf8cdff6b94ff7e57c3ffaf8c3fb2374ffba3745fba3744fb378c17f779c1bf77acdbfb7bcdbf77ac1bf1a4c9fff4c4bff77ac5bf132c3ffa354ff9348c5ff234cbff37248deb78dd3f77acf3faf343fef1a4fff9d345fe, 0x77acd3ff1a4dffad345feb58ddfb6b859fff5b45dff5b44ff35d235f9d144f66b345f677ac53f757c5dff5945fff5745ffeb745f777ac17f77acd7f237c4fbeb945f76b248def5441fd372489e317596f316497ff7b6b3f77adf3f1e341fe0d141feaf343ff757c4df358c3ff2544dff, 0x757c3fb21343ff6b141f7236ccfb6b345f795341fc31648ff754c3ff358c37f31642ff5f4c4ff75341fe757cddff594dff757c1ff1b34cfe27345f621343fe23843fb1f144f61f341ff2384dff25445f7edac5f7757c5ff1f143fb332c9bf6b7c5f73784dbf27889dff3c41ffb7b633f, 0x6ba53ff1f4c5ff75b41df77a53bf6ba89f79d341ff756c9ff316487fa5341ff1b243fb6b6c9f7316427f753417ef5541fd1b681f3757cd5fb574d7f358df5beb94d7775a89df194c9fd0d1c1fe9d341fe756c9dfb1841ffa5341fe1b243fa35341ff15144f6a3741fb35345ff75141ff, 0x6b6c8f777d05ff74a4bbfe7749df9d243feb15c9ff31644ff373c9bf6b0c2fa77d04bff7949ffb134c7e6a4c9ff75cc9df6ba8977f5c49ff1b4c9ff2388c7b1b4ccff6b34577f5c42ff75b41fff5b5adff5c49df2234c7e353417f214c3ff353457f75d1b5ff4c43ff5f4c3fbb16417d, 0xf5bc9dfb18ddeb23241ff74144f623245ff358ccffb10c2faf5941fff5741ff734c9ff77d05bf3568dff316447f891c3fe2a8c3fb358c9df2a8cdffa5243ff09143feeb749ff31645ffeb949ff751c1fe37241bf37245bff1a41ff194c8fd268c1ffa3755fb75681ff37241ffb14c2ef, 0x9d6c3fb757dbdf9d6cdff6b6d1f76b6cff7358cc7f332c1bf2f5c9bfb1347eff174feb75a49df2f641fd2134cfe373c8bfaf34c7eb7c43ff77ad9ff19341fcb194defb174def755c9fff1957ef6b241ff358c9ffb15c8ff3568d7f1b4c8ff751c1ff358c95f316457f69243fe67241df, 0x757d9df33343ff77ad97f37689bf37542bf22345feb14c5ef27881ff1b341ff1b0c1fb23885fb2134c7ea56cdff236c1fbe775bf76b7dbf7251c3efa3441fdb1b4def75a49ff33343feeb748ffb18c3ff338c3fb75acbff77d4bbf359e2dfb7c43bfb14c4efb7c63bf358c97f1b341fe, 0x3774fbf7794fbf6ba8df7356cdff276c3f3316997f756c3fb77d43ff6b4cbff0d2c1fea58e27bf5c44ffb1345fff17c3ff233cbfb694c9ff22345ff756c1ff676c1f75d6cffb6b6cdf76b6c3f36b6c1f7214ccff756c5ff2b8dbf36b6c5f7173cdfdaf94def77ad93f31699ffaf8ddeb, 0x1f2c3fb75ac3ff25443ff9d143ff6b94fffa58c5ff73ac5f76b74fffa3745ff2b8c3fb2b8cdff77d43bfb7745bf37445bf216cdfb5e6c1fbeb441fdf7441bd2f5c8bf255d1f5238817bb1144f6224c5ff9d34bff1f2c3faf5c45ff238857bb754ffdf1ac5f7b15c5ff1b4c5ff75a8dff, 0x23343fbeb94dff6b781ff759c3ff1d3c4fb358dfdf23141ff6b957f7eb745ff6b8cffb37544bfb71c5bf1b699f3777c1ff132c5fe2d743ef777c3fb33841bf75a8d7f75cc1ffb5c4dff6ba8177358e27b23343fa356cd7f759c3df2544bf7730c1ff6b9c3f775cc5ffa53c3ff358db7b, 0x274c3ff734c5ff6b4c3ffb7541fd696d3f7677c1ff358c1ff278c5f7af3cdff374cdff6b7c1ffaf44dff358c5ff1d3c5fb358c4ff237c1ff2b8c5f76b7c5ffe5248de777c1bf777c3bbb1693efb7741ffb5c4d7f377c5bf2b8d3ff75ae37f6b341fe67781df3534bffeb74dffaf345fe, 0x75d0bdfb5b635f13343ff358df5feb74d7f234cdffeb94d7f234c3fb358c47fb7541bd070c1fe77d53bf231c1fe69343fe1b243fea58c1ff6b341ff316d9ff21345fea3741ffb5bcdff677c3fba385dfbf5bc5ff236ccff6b5c5f7b7741bf376c9bf376ccbf371c1ff3534b7f13343fe, 0x77cc9bff19c2ff6d9c1ffaf341ff6dac1ff21341ff6974ffb37547bfb1243fe752c9df316d97f358c17f6b7cd7fb7c49bf6b642ffaf341fe231c1ffa50c1ff21341feb7c49ff9d0c1ff27841ffa584dff6b6c9ffa174dffb168dff77a89bf371c1bf950c1fd77b41ffeb541fd6b85bf3, 0x75243feb16d3ef694cdff75a4d7f671c1fe6b1c1feeb741ffeb941ff77651fd3164b7f771c1be744cbff77447bf376c8bf75243de73ac9ff214c5ff75a4dffad84dff6b9e1f7298cdff75d0b5f771c1fef7941ff37681bfb1243ff0b243fe752c9fff1ac9ff3164bffb5bcd7f6b3417f, 0xb1943efaf243ff9d245fff4745ff37641bd671c1fff5bc1ff6b1c1fff1a83ffd1241fd1b64dfff19dbf76b6d9f775243df653c9ff2364ffdaf243fe6b64ffd65449fff1ac8ff75d03dfefac9ff6b853ff3764fbdb7c48bfb7bc9bfe7741ffe7941ff37641fdb7c42bfb7c48ffb3c4bbf, 0x1934bff33345fe338dfdbeb94bf7270c2fa37644bfb7bc8bf754c9ff318597f1b0c1ffedadbffb7c45ff754c2ff67641fdf7b5bbf6ba9977f3c43ff754c9dfb16c4f7744c3ff6b641fd67655fd6b885f771a59ff2384cff77a49bf3784cbf194cbfd75d035f5f243fab1743ef6b655fd, 0xf1acdff232c1fff1ac5ff372c1bf676c3fb37343fe37ae3bf1b248de0b0c1fe33341fff574bffb13c3ff19143ff333cdffb1443ffb18c5ffb18c4ff95241fdb7c45bf676c1ff6b6cdff6b6c3fb6b6c1ff77a8dbf6b8dbfbf1a4bbf9d241fff5b4bdf1334c7e653c8ffb1103fe752c5fe, 0x6b443f723343ff316536d37ae33f2a8c9ff37343bf378c3bb378cdbf75103fe739c1ff23343fe358cbff77d4cffad8cbff1d3cbfb6b9c3ff6b6cd7f2b8c3ffb1248de77d679fb7b4bbf379c3bfb1853ef77ac3bf31653ed37343ff77d6bff130c2fa378c3fb6d241ff739c1df752c1ff, 0x358cb7fdf441fd378c33bb10c1ff77d6b3f77ad3bff5b43dfb184dff27785d7f5743ff233cdfb757c3dff5943ff779d3ffa53c5ff1d3c5ff378c37b378cd7f77ad3ff651c1ee34343fe75accff491c1fe348c3fb6b64d7fdd441fde5441fdde441fde5241ff77d4cbf77ac33f69643ff, 0x754c4ff13345fe5f4c3ff74acbff661c1fe77d0bbf2544df727141f7750c1ff5f443fb1f343fb23841ffdf743fb9d6ccff75ac5f71f141ff19241fdb7847bf17248de651c1ef234c3ff77ad37f374c3bf27341ff1f343fa75143ffefacdffe57c5ff6b143f7f1949ef37699bfed441fd, 0x354cdfff4c44ffb1942ef754c5ff6b4c5f7f19c1ff1b241ff746c3fb746c1ffed541fddf541fd1b68df35f793db13345ffefacd7f35889dfea749ff07141fee56c9ff5f0c1fbe6741ffaf0c1ff9d141ff2174ffbaf8c1ff210c1ff77a4dbfd51c1fc77a41bfb7bc1bf9d541fd77ad33f, 0x376d9bf2334cfe2b8c9ff74ac3ff77d499f2b8ccff3734cbe77d03bf77d49df1b693f3354cd7f27243df6b243feb1245ffb1b42eff3949fff4c45ff6d7c1ff298cffb3734cfe27243def1948efef949eff1449ff]
+def orbitThirdBuckets : List ℕ := [0x9108818b1081800000, 0x8aa880800000800017, 0x898988810888080026, 0x119010080110800037, 0x881000000810046, 0x8880908800911004d, 0x88081198000811805c, 0x800921a008828a86d, 0x1088888c48891988889, 0x188808a0d10811928ae, 0x80011389890918d3, 0x9108088190081000ec, 0x8981088808000008fc, 0x88081909800000108, 0x808008109208800914, 0x910801091980000123, 0x1189181010000000134, 0x918900808809800943, 0x89901008009800154, 0x10a0890001080880162, 0x1811888012918172, 0x80080b000118801188, 0x1000909210008008199, 0x10000800080011089a9, 0x11000812888011119b3, 0x8808089db8809891ca, 0x101141a800801ec, 0x98000832990080203, 0x910010a9a180008a19, 0x8a9080928808001232, 0x1888880880800000a48, 0x110001008100000a53, 0x211808918110080a5d, 0x110988010110000273, 0x92180080080800282, 0x11888000080010828f, 0x88880a00019119829a, 0x1000198808802218ab0, 0x8000099000009a8ac7, 0x800109a200018a0ad8, 0x200080a2c29009102f0, 0x1000941100888313, 0x109000009c090909b27, 0x20b00811b1109008b42, 0x888808aa808801362, 0x1910008891000801376, 0x8800001180081387, 0x890008810908801391, 0xa9880910888000ba0, 0x990088901108003b3, 0x110080808808003c3, 0x900880000808803cc, 0x10880b10801088903d4, 0x80129000880983e9, 0x18080108880080183f9, 0x1290111081406, 0x38080808a0008900418, 0x9000021a1980008c2b, 0x808800811100880441, 0x91000881a90090044d, 0x10888808a9800200c61, 0x890880809000000c76, 0xa00800008100001c81, 0x80090888890000048d]
 
 abbrev WireRecipe := Fin 8 ⊕ (Bool × Fin 8 × Fin 8)
 
@@ -7086,26 +7098,72 @@ lemma readStock_exact {ws : List W} {labels : List (Fin 64)} (found : readStock 
 
 def labelStock (labels : List (Fin 64)) : Finset ℕ := (labels.map labelSignal).toFinset
 
+-- Number each four-element label orbit consecutively in group order. Each
+-- symmetry then moves its bits with at most two masked shifts.
+def shapeLabel (i : Fin 64) : Fin 64 := Fin.ofNat 64 (0xffe96385fb6ba671c3d73c6f6573cbd32c2e75b38af7cb2aa26141efa34930892281ee7818271a616100df6453554490 >>> (6*i.val))
+def inverseShapeLabel (i : Fin 64) : Fin 64 := Fin.ofNat 64 (0xffe8e26da4501c6cebcaac69c28e61e20ddfd9ef55f14ed3e929cd98cbcbb8a0c2101140b65657b24616d4f749d0e708 >>> (6*i.val))
+def firstShapeMasks : List (ℕ × ℕ × ℕ) := [(0x0, 0x0, 0xffffffffffffffff), (0x15401555515555, 0x2a802aaaa2aaaa, 0xffc03fc0000c0000), (0x154000040000, 0x2a8000080000, 0xffffc03ffff3ffff), (0x15555555555555, 0x2aaaaaaaaaaaaa, 0xffc0000000000000)]
+def secondShapeMasks : ℕ × ℕ × ℕ := (0x3333, 0xcccc, 0xffffffffffff0000)
+
+def slideShape (d : ℕ) (m : ℕ × ℕ × ℕ) (x : ℕ) : ℕ :=
+  (x &&& m.2.2) ||| ((x &&& m.1) <<< d) ||| ((x &&& m.2.1) >>> d)
+
+def turnShape (a : Fin 4) (x : ℕ) : ℕ :=
+  if a.val = 0 then x else
+  let y := slideShape 1 (firstShapeMasks.getD a.val (0,0,0)) x
+  if a.val ≥ 2 then slideShape 2 secondShapeMasks y else y
+
+lemma slideShape_or (d : ℕ) (m : ℕ × ℕ × ℕ) (x y : ℕ) :
+    slideShape d m (x ||| y) = slideShape d m x ||| slideShape d m y := by
+  simp only [slideShape,Nat.and_or_distrib_right,Nat.shiftLeft_or_distrib,Nat.shiftRight_or_distrib]
+  ac_rfl
+
+lemma turnShape_or (a : Fin 4) (x y : ℕ) :
+    turnShape a (x ||| y) = turnShape a x ||| turnShape a y := by
+  unfold turnShape
+  split
+  · rfl
+  · split <;> simp only [slideShape_or]
+
+lemma turnShape_zero (a : Fin 4) : turnShape a 0 = 0 := by fin_cases a <;> decide
+
+lemma shapeLabel_injective : Function.Injective shapeLabel := by
+  have undo : ∀ i : Fin 64, inverseShapeLabel (shapeLabel i) = i := by decide +kernel
+  intro x y h
+  simpa only [undo] using congrArg inverseShapeLabel h
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma shapeRotation_checked : ∀ a : Fin 4, ∀ i : Fin 64,
+    turnShape a (1 <<< (shapeLabel i).val) = 1 <<< (shapeLabel (rotateLabel a i)).val := by decide +kernel
+
+def encodedShape (labels : List (Fin 64)) : ℕ :=
+  labels.foldr (fun i bits => (1 <<< (shapeLabel i).val) ||| bits) 0
+
 def shapeBits (a : Fin 4) (labels : List (Fin 64)) : ℕ :=
-  labels.foldr (fun i bits => (1 <<< (rotateLabel a i).val) ||| bits) 0
+  turnShape a (encodedShape labels)
 
 lemma bitOfShape (a : Fin 4) (labels : List (Fin 64)) (j : Fin 64) :
-    (shapeBits a labels).testBit j.val = true ↔ ∃ i ∈ labels, rotateLabel a i = j := by
+    (shapeBits a labels).testBit (shapeLabel j).val = true ↔ ∃ i ∈ labels, rotateLabel a i = j := by
   induction labels with
-  | nil => simp [shapeBits]
+  | nil => simp [shapeBits,encodedShape,turnShape_zero]
   | cons i rest ih =>
-    simp only [shapeBits, List.foldr_cons, Nat.testBit_or] at ih ⊢
-    simp only [Bool.or_eq_true, ih, List.mem_cons]
-    rw [show (1 <<< (rotateLabel a i).val : ℕ) = 2 ^ (rotateLabel a i).val by
+    change (turnShape a ((1 <<< (shapeLabel i).val) ||| encodedShape rest)).testBit _ = true ↔ _
+    rw [turnShape_or,shapeRotation_checked,Nat.testBit_or,Bool.or_eq_true]
+    change (((1 <<< (shapeLabel (rotateLabel a i)).val : ℕ).testBit (shapeLabel j).val = true) ∨
+      (shapeBits a rest).testBit (shapeLabel j).val = true) ↔ _
+    rw [ih,show (1 <<< (shapeLabel (rotateLabel a i)).val : ℕ) = 2 ^ (shapeLabel (rotateLabel a i)).val by
       rw [Nat.shiftLeft_eq]; simp]
-    simp only [Nat.testBit_two_pow, beq_iff_eq, decide_eq_true_eq]
+    have labelEq : (shapeLabel (rotateLabel a i)).val = (shapeLabel j).val ↔ rotateLabel a i = j :=
+      ⟨fun h => shapeLabel_injective (Fin.ext h),fun h => by rw [h]⟩
+    simp only [Nat.testBit_two_pow,decide_eq_true_eq,labelEq,List.mem_cons]
     constructor
     · rintro (current | ⟨l,hl,eq⟩)
-      · exact ⟨i, Or.inl rfl, Fin.ext current⟩
-      · exact ⟨l, Or.inr hl, eq⟩
-    · rintro ⟨l, mem, eq⟩
+      · exact ⟨i,Or.inl rfl,current⟩
+      · exact ⟨l,Or.inr hl,eq⟩
+    · rintro ⟨l,mem,eq⟩
       rcases mem with rfl | rest
-      · exact Or.inl (congrArg Fin.val eq)
+      · exact Or.inl eq
       · exact Or.inr ⟨l,rest,eq⟩
 
 set_option maxRecDepth 100000 in
@@ -7125,8 +7183,21 @@ lemma equalRotatedShape {a b : Fin 4} {as bs : List (Fin 64)} (same : shapeBits 
     rw [label_rotates, label_rotates, e]
   exact Finset.Subset.antisymm (sub same) (sub same.symm)
 
-def chooseRotation (labels : List (Fin 64)) : Fin 4 :=
-  [1,2,3].foldl (fun best turn => if shapeBits turn labels < shapeBits best labels then turn else best) 0
+def leastShape (labels : List (Fin 64)) : ℕ :=
+  Nat.rec 0 (fun x _ => min (min (turnShape 0 x) (turnShape 1 x))
+    (min (turnShape 2 x) (turnShape 3 x))) (encodedShape labels).succ
+
+lemma leastShape_found (labels : List (Fin 64)) : ∃ a : Fin 4, shapeBits a labels = leastShape labels := by
+  have pick (a b : Fin 4) : ∃ c, shapeBits c labels = min (shapeBits a labels) (shapeBits b labels) := by
+    rcases le_total (shapeBits a labels) (shapeBits b labels) with h | h
+    · exact ⟨a,(min_eq_left h).symm⟩
+    · exact ⟨b,(min_eq_right h).symm⟩
+  obtain ⟨a,ha⟩ := pick 0 1
+  obtain ⟨b,hb⟩ := pick 2 3
+  change ∃ c : Fin 4, shapeBits c labels =
+    min (min (shapeBits 0 labels) (shapeBits 1 labels)) (min (shapeBits 2 labels) (shapeBits 3 labels))
+  rw [← ha,← hb]
+  exact pick a b
 
 structure OrbitRecord where
   retained : List (Fin 8)
@@ -7174,7 +7245,7 @@ def orbitFind (width key : ℕ) : Option ℕ :=
 
 def lookupOrbit (width : ℕ) (ws : List W) : Option ℕ := do
   let labels ← readStock ws
-  orbitFind width (shapeBits (chooseRotation labels) labels)
+  orbitFind width (leastShape labels)
 
 lemma orbitFind_exact {width key i : ℕ} (found : orbitFind width key = some i) :
     i < orbitCount width ∧ (orbitRecordAt width i).key = key := by
@@ -7330,9 +7401,12 @@ lemma orbitProblem {width idx : ℕ} {v : List W} {S : Finset ℕ} {k t : ℕ}
   cases stock : readStock v with
   | none => simp [lookupOrbit,stock] at found
   | some labels =>
-    let a := chooseRotation labels
+    obtain ⟨a,least⟩ := leastShape_found labels
     let o := orbitRecordAt width idx
-    have lookup : orbitFind width (shapeBits a labels) = some idx := by simpa [lookupOrbit,stock,a] using found
+    have lookup : orbitFind width (shapeBits a labels) = some idx := by
+      rw [lookupOrbit,stock] at found
+      change orbitFind width (leastShape labels) = some idx at found
+      simpa only [least] using found
     have repr : S = labelStock labels := by
       dsimp only [labelStock]
       rw [readStock_exact stock, rep.2]
@@ -7419,7 +7493,7 @@ lemma lookupOrbit_bound {width : ℕ} {ws : List W} {idx : ℕ} (found : lookupO
   cases h : readStock ws with
   | none => simp [lookupOrbit,h] at found
   | some labels =>
-    have atIndex : orbitFind width (shapeBits (chooseRotation labels) labels) = some idx := by
+    have atIndex : orbitFind width (leastShape labels) = some idx := by
       simpa [lookupOrbit,h] using found
     exact (orbitFind_exact atIndex).1
 
@@ -7461,90 +7535,90 @@ noncomputable def orbitThirdCheck := orbitCheck ignoreOrbit 3 12 11
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird0 : rangeCheck orbitThirdCheck 0 65 = true := by decide +kernel
+theorem orbitThird0 : rangeCheck orbitThirdCheck 0 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird1 : rangeCheck orbitThirdCheck 65 59 = true := by decide +kernel
+theorem orbitThird1 : rangeCheck orbitThirdCheck 68 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird2 : rangeCheck orbitThirdCheck 124 68 = true := by decide +kernel
+theorem orbitThird2 : rangeCheck orbitThirdCheck 136 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird3 : rangeCheck orbitThirdCheck 192 68 = true := by decide +kernel
+theorem orbitThird3 : rangeCheck orbitThirdCheck 204 52 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird4 : rangeCheck orbitThirdCheck 260 68 = true := by decide +kernel
+theorem orbitThird4 : rangeCheck orbitThirdCheck 256 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird5 : rangeCheck orbitThirdCheck 328 68 = true := by decide +kernel
+theorem orbitThird5 : rangeCheck orbitThirdCheck 324 35 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird6 : rangeCheck orbitThirdCheck 396 68 = true := by decide +kernel
+theorem orbitThird6 : rangeCheck orbitThirdCheck 359 64 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird7 : rangeCheck orbitThirdCheck 464 68 = true := by decide +kernel
+theorem orbitThird7 : rangeCheck orbitThirdCheck 423 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird8 : rangeCheck orbitThirdCheck 532 68 = true := by decide +kernel
+theorem orbitThird8 : rangeCheck orbitThirdCheck 491 48 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird9 : rangeCheck orbitThirdCheck 600 68 = true := by decide +kernel
+theorem orbitThird9 : rangeCheck orbitThirdCheck 539 24 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird10 : rangeCheck orbitThirdCheck 668 55 = true := by decide +kernel
+theorem orbitThird10 : rangeCheck orbitThirdCheck 563 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird11 : rangeCheck orbitThirdCheck 723 52 = true := by decide +kernel
+theorem orbitThird11 : rangeCheck orbitThirdCheck 631 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird12 : rangeCheck orbitThirdCheck 775 66 = true := by decide +kernel
+theorem orbitThird12 : rangeCheck orbitThirdCheck 699 33 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird13 : rangeCheck orbitThirdCheck 841 24 = true := by decide +kernel
+theorem orbitThird13 : rangeCheck orbitThirdCheck 732 46 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird14 : rangeCheck orbitThirdCheck 865 68 = true := by decide +kernel
+theorem orbitThird14 : rangeCheck orbitThirdCheck 778 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird15 : rangeCheck orbitThirdCheck 933 68 = true := by decide +kernel
+theorem orbitThird15 : rangeCheck orbitThirdCheck 846 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird16 : rangeCheck orbitThirdCheck 1001 52 = true := by decide +kernel
+theorem orbitThird16 : rangeCheck orbitThirdCheck 914 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird17 : rangeCheck orbitThirdCheck 1053 68 = true := by decide +kernel
+theorem orbitThird17 : rangeCheck orbitThirdCheck 982 68 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird18 : rangeCheck orbitThirdCheck 1121 37 = true := by decide +kernel
+theorem orbitThird18 : rangeCheck orbitThirdCheck 1050 58 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitThird19 : rangeCheck orbitThirdCheck 1158 18 = true := by decide +kernel
+theorem orbitThird19 : rangeCheck orbitThirdCheck 1108 68 = true := by decide +kernel
 
 abbrev orbitThirdAppend := @rangeAppend orbitThirdCheck
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem orbitThirdAll : rangeCheck orbitThirdCheck 0 1176 = true :=
-  (@orbitThirdAppend 0 668 508 (@orbitThirdAppend 0 328 340 (@orbitThirdAppend 0 124 204 (@orbitThirdAppend 0 65 59 orbitThird0 orbitThird1) (@orbitThirdAppend 124 68 136 orbitThird2 (@orbitThirdAppend 192 68 68 orbitThird3 orbitThird4))) (@orbitThirdAppend 328 136 204 (@orbitThirdAppend 328 68 68 orbitThird5 orbitThird6) (@orbitThirdAppend 464 68 136 orbitThird7 (@orbitThirdAppend 532 68 68 orbitThird8 orbitThird9)))) (@orbitThirdAppend 668 265 243 (@orbitThirdAppend 668 107 158 (@orbitThirdAppend 668 55 52 orbitThird10 orbitThird11) (@orbitThirdAppend 775 66 92 orbitThird12 (@orbitThirdAppend 841 24 68 orbitThird13 orbitThird14))) (@orbitThirdAppend 933 120 123 (@orbitThirdAppend 933 68 52 orbitThird15 orbitThird16) (@orbitThirdAppend 1053 68 55 orbitThird17 (@orbitThirdAppend 1121 37 18 orbitThird18 orbitThird19)))))
+  (@orbitThirdAppend 0 563 613 (@orbitThirdAppend 0 324 239 (@orbitThirdAppend 0 136 188 (@orbitThirdAppend 0 68 68 orbitThird0 orbitThird1) (@orbitThirdAppend 136 68 120 orbitThird2 (@orbitThirdAppend 204 52 68 orbitThird3 orbitThird4))) (@orbitThirdAppend 324 99 140 (@orbitThirdAppend 324 35 64 orbitThird5 orbitThird6) (@orbitThirdAppend 423 68 72 orbitThird7 (@orbitThirdAppend 491 48 24 orbitThird8 orbitThird9)))) (@orbitThirdAppend 563 283 330 (@orbitThirdAppend 563 136 147 (@orbitThirdAppend 563 68 68 orbitThird10 orbitThird11) (@orbitThirdAppend 699 33 114 orbitThird12 (@orbitThirdAppend 732 46 68 orbitThird13 orbitThird14))) (@orbitThirdAppend 846 136 194 (@orbitThirdAppend 846 68 68 orbitThird15 orbitThird16) (@orbitThirdAppend 982 68 126 orbitThird17 (@orbitThirdAppend 1050 58 68 orbitThird18 orbitThird19)))))
 
 lemma rejectThird_sound : RejectSound true (RZ [] 0) (mz 0) (tz 0) rejectThird :=
   rejectOrbit_sound ignoreOrbit_sound (by decide) (by decide) orbitThirdAll
@@ -7553,106 +7627,106 @@ noncomputable def orbitSecondCheck := orbitCheck rejectThird 2 13 12
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond0 : rangeCheck orbitSecondCheck 0 11 = true := by decide +kernel
+theorem orbitSecond0 : rangeCheck orbitSecondCheck 0 14 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond1 : rangeCheck orbitSecondCheck 11 14 = true := by decide +kernel
+theorem orbitSecond1 : rangeCheck orbitSecondCheck 14 9 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond2 : rangeCheck orbitSecondCheck 25 14 = true := by decide +kernel
+theorem orbitSecond2 : rangeCheck orbitSecondCheck 23 4 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond3 : rangeCheck orbitSecondCheck 39 14 = true := by decide +kernel
+theorem orbitSecond3 : rangeCheck orbitSecondCheck 27 14 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond4 : rangeCheck orbitSecondCheck 53 6 = true := by decide +kernel
+theorem orbitSecond4 : rangeCheck orbitSecondCheck 41 14 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond5 : rangeCheck orbitSecondCheck 59 1 = true := by decide +kernel
+theorem orbitSecond5 : rangeCheck orbitSecondCheck 55 10 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond6 : rangeCheck orbitSecondCheck 60 3 = true := by decide +kernel
+theorem orbitSecond6 : rangeCheck orbitSecondCheck 65 5 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond7 : rangeCheck orbitSecondCheck 63 14 = true := by decide +kernel
+theorem orbitSecond7 : rangeCheck orbitSecondCheck 70 7 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond8 : rangeCheck orbitSecondCheck 77 4 = true := by decide +kernel
+theorem orbitSecond8 : rangeCheck orbitSecondCheck 77 3 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond9 : rangeCheck orbitSecondCheck 81 10 = true := by decide +kernel
+theorem orbitSecond9 : rangeCheck orbitSecondCheck 80 14 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond10 : rangeCheck orbitSecondCheck 91 8 = true := by decide +kernel
+theorem orbitSecond10 : rangeCheck orbitSecondCheck 94 1 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond11 : rangeCheck orbitSecondCheck 99 1 = true := by decide +kernel
+theorem orbitSecond11 : rangeCheck orbitSecondCheck 95 14 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond12 : rangeCheck orbitSecondCheck 100 3 = true := by decide +kernel
+theorem orbitSecond12 : rangeCheck orbitSecondCheck 109 9 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond13 : rangeCheck orbitSecondCheck 103 14 = true := by decide +kernel
+theorem orbitSecond13 : rangeCheck orbitSecondCheck 118 10 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond14 : rangeCheck orbitSecondCheck 117 14 = true := by decide +kernel
+theorem orbitSecond14 : rangeCheck orbitSecondCheck 128 12 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond15 : rangeCheck orbitSecondCheck 131 12 = true := by decide +kernel
+theorem orbitSecond15 : rangeCheck orbitSecondCheck 140 14 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond16 : rangeCheck orbitSecondCheck 143 11 = true := by decide +kernel
+theorem orbitSecond16 : rangeCheck orbitSecondCheck 154 14 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond17 : rangeCheck orbitSecondCheck 154 14 = true := by decide +kernel
+theorem orbitSecond17 : rangeCheck orbitSecondCheck 168 4 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond18 : rangeCheck orbitSecondCheck 168 6 = true := by decide +kernel
+theorem orbitSecond18 : rangeCheck orbitSecondCheck 172 1 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond19 : rangeCheck orbitSecondCheck 174 7 = true := by decide +kernel
+theorem orbitSecond19 : rangeCheck orbitSecondCheck 173 12 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond20 : rangeCheck orbitSecondCheck 181 14 = true := by decide +kernel
+theorem orbitSecond20 : rangeCheck orbitSecondCheck 185 5 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond21 : rangeCheck orbitSecondCheck 195 10 = true := by decide +kernel
+theorem orbitSecond21 : rangeCheck orbitSecondCheck 190 14 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond22 : rangeCheck orbitSecondCheck 205 9 = true := by decide +kernel
+theorem orbitSecond22 : rangeCheck orbitSecondCheck 204 7 = true := by decide +kernel
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem orbitSecond23 : rangeCheck orbitSecondCheck 214 11 = true := by decide +kernel
+theorem orbitSecond23 : rangeCheck orbitSecondCheck 211 14 = true := by decide +kernel
 
 abbrev orbitSecondAppend := @rangeAppend orbitSecondCheck
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem orbitSecondAll : rangeCheck orbitSecondCheck 0 225 = true :=
-  (@orbitSecondAppend 0 100 125 (@orbitSecondAppend 0 60 40 (@orbitSecondAppend 0 39 21 (@orbitSecondAppend 0 11 28 orbitSecond0 (@orbitSecondAppend 11 14 14 orbitSecond1 orbitSecond2)) (@orbitSecondAppend 39 14 7 orbitSecond3 (@orbitSecondAppend 53 6 1 orbitSecond4 orbitSecond5))) (@orbitSecondAppend 60 21 19 (@orbitSecondAppend 60 3 18 orbitSecond6 (@orbitSecondAppend 63 14 4 orbitSecond7 orbitSecond8)) (@orbitSecondAppend 81 10 9 orbitSecond9 (@orbitSecondAppend 91 8 1 orbitSecond10 orbitSecond11)))) (@orbitSecondAppend 100 68 57 (@orbitSecondAppend 100 31 37 (@orbitSecondAppend 100 3 28 orbitSecond12 (@orbitSecondAppend 103 14 14 orbitSecond13 orbitSecond14)) (@orbitSecondAppend 131 12 25 orbitSecond15 (@orbitSecondAppend 143 11 14 orbitSecond16 orbitSecond17))) (@orbitSecondAppend 168 27 30 (@orbitSecondAppend 168 6 21 orbitSecond18 (@orbitSecondAppend 174 7 14 orbitSecond19 orbitSecond20)) (@orbitSecondAppend 195 10 20 orbitSecond21 (@orbitSecondAppend 205 9 11 orbitSecond22 orbitSecond23)))))
+  (@orbitSecondAppend 0 109 116 (@orbitSecondAppend 0 65 44 (@orbitSecondAppend 0 27 38 (@orbitSecondAppend 0 14 13 orbitSecond0 (@orbitSecondAppend 14 9 4 orbitSecond1 orbitSecond2)) (@orbitSecondAppend 27 14 24 orbitSecond3 (@orbitSecondAppend 41 14 10 orbitSecond4 orbitSecond5))) (@orbitSecondAppend 65 15 29 (@orbitSecondAppend 65 5 10 orbitSecond6 (@orbitSecondAppend 70 7 3 orbitSecond7 orbitSecond8)) (@orbitSecondAppend 80 14 15 orbitSecond9 (@orbitSecondAppend 94 1 14 orbitSecond10 orbitSecond11)))) (@orbitSecondAppend 109 63 53 (@orbitSecondAppend 109 31 32 (@orbitSecondAppend 109 9 22 orbitSecond12 (@orbitSecondAppend 118 10 12 orbitSecond13 orbitSecond14)) (@orbitSecondAppend 140 14 18 orbitSecond15 (@orbitSecondAppend 154 14 4 orbitSecond16 orbitSecond17))) (@orbitSecondAppend 172 18 35 (@orbitSecondAppend 172 1 17 orbitSecond18 (@orbitSecondAppend 173 12 5 orbitSecond19 orbitSecond20)) (@orbitSecondAppend 190 14 21 orbitSecond21 (@orbitSecondAppend 204 7 14 orbitSecond22 orbitSecond23)))))
 
 lemma rootReject_sound : RejectSound true (RZ [] 0) (mz 0) (tz 0) rootReject := by
   have second : RejectSound true (RZ [] 0) (mz 0) (tz 0) (rejectOrbit 12 2) :=
@@ -7958,14 +8032,6 @@ noncomputable def transitionFromCode (width : ℕ) (parentAt : ℕ → SearchSta
   let dropRight := if entry.testBit (width + 9) then 2 ^ right else 0
   let kept := 2 ^ before.2.length - 1 - dropLeft - dropRight
   secondTransition before left right kept (entry.testBit (width + 10))
-
--- Each block packs parent indices relative to a shared base.
-def relativeTransitionCode (parentWidth block index : ℕ) : ℕ :=
-  let base := block % (1 <<< parentWidth)
-  let width := (block >>> parentWidth) % 16
-  let entry := block >>> (parentWidth + 4 + (11 + width) * index)
-  let parent := base + entry % (1 <<< width)
-  parent + (((entry >>> width) % 2048) <<< parentWidth)
 
 def decodeDeltas (fuel : ℕ) : ℕ → ℕ → List ℕ :=
   Nat.rec (motive := fun _ => ℕ → ℕ → List ℕ) (fun _ _ => [])
