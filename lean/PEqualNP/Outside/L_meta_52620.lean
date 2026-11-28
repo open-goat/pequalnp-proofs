@@ -1,43 +1,26 @@
 import PEqualNP.Defs
 
 namespace PEqualNP.Outside.L_meta_52620
-def bigNat_0 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x3fff) 64) 0xffbfffffbefffffe) 64) 0xfbfffffbfffffbef) 64) 0xffffefffffeeffff) 64) 0xfefffffef7fffff7) 64) 0x7fffff7beb5aadff) 64) 0xf55fff6bffed5fff) 64) 0x7ffdafffb5aafffa) 64) 0xfffafffbffedb5af) 64) 0xffb57ffdfff6db7f) 64) 0xfdbffedb7ffdbffe
-def bigNat_1 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x14a55200) 64) 0xaa000940012a000) 64) 0x800250004a550005) 64) 0x5000400124a50) 64) 0x4a800200092480) 64) 0x240012480024000
-def bigNat_2 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x4000) 64) 0x40000041000001) 64) 0x400000400000410) 64) 0x100000110000) 64) 0x100000108000008) 64) 0x8000008400000000) 64) 0x0) 64) 0x0) 64) 0x0) 64) 0x0) 64) 0x0
-def bigNat_3 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7f) 64) 0xffff000000003fff) 64) 0xff81f00000002800) 64) 0x284009020050016) 64) 0x1400100240025) 64) 0x2800b000100240) 64) 0x8014005804001240) 64) 0xb05802440130108) 64) 0x4a80284a8204112a) 64) 0x81044a81042a820) 64) 0x4112a04111a20411) 64) 0x2a2519ba00208931) 64) 0xa2abb03e0008000) 64) 0x800014000) 64) 0x7ffc000000220000) 64) 0x20003ffe00420) 64) 0x50001fff01800) 64) 0x1bffe1b0001bffe
-def bigNat_4 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7fffff000000000) 64) 0x3fffff83fff) 64) 0xffbc000000009820) 64) 0x118002322013804c) 64) 0x4c040008d0095) 64) 0x9c0260080008c8) 64) 0x804e013021808ac0) 64) 0x4620808ec04a0210) 64) 0x9100509104082244) 64) 0x1020891020851040) 64) 0x82244492ad400822) 64) 0x1408220c10c534e0) 64) 0xc332e7800020000) 64) 0x400000000c5fff) 64) 0x1800002) 64) 0x2fff800003000) 64) 0x317ffc0000c300) 64) 0x18000c37ffd8000
-def bigNat_5 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1f) 64) 0xffffc00000000000) 64) 0x1fffffc000000) 64) 0x7fffff00) 64) 0x3fffffb8000) 64) 0x406445084) 64) 0x45308926844a1128) 64) 0x1222800422492258) 64) 0x2250894040c2449a) 64) 0x122848a100922c09) 64) 0x14681248892c0401) 64) 0x4b5610480004412) 64) 0x2001104a09364800) 64) 0x409200406242148) 64) 0xda004052008626b7) 64) 0x40430020180c00) 64) 0x1000060000d0000) 64) 0x200004080002) 64) 0xfff8000000018180) 64) 0x3400000006037f) 64) 0xfc0000d80001bffe
-def bigNat_6 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7ffff) 64) 0xf00000007fffff7f) 64) 0xffff780000000000) 64) 0x16200) 64) 0x261405c0002c00b0) 64) 0xb080501700160) 64) 0x160058200501700) 64) 0xb002c34c013000) 64) 0x984d017000b00822) 64) 0x2101822108108884) 64) 0x4042221042181085) 64) 0x18ce41084840318c) 64) 0x9c318c9cf10840c0) 64) 0x10840c0800400000) 64) 0x400006bffe00000) 64) 0x300afff8) 64) 0xc01af) 64) 0xff8000000006d800) 64) 0xdb7ffc0000
-def bigNat_7 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7fffff01ff) 64) 0xfffc00000007ffff) 64) 0xf7fffff700000000) 64) 0x0) 64) 0x8010198221) 64) 0xb800360001b006c0) 64) 0xc14c1ad015801580) 64) 0x158056069a019800) 64) 0xcc03302690dc086) 64) 0xe0000d8006c01040) 64) 0x606000610a2f018) 64) 0x2883c6080206006) 64) 0x108f86108f8e4000) 64) 0xe04000e002000702) 64) 0x2000700043002000) 64) 0x55fff0000000000) 64) 0x1800035a00000) 64) 0xdb400) 64) 0x6db7f) 64) 0xfdbffe0000000000
-def bigNat_8 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1ff) 64) 0xfffdfffffdf00000) 64) 0x0) 64) 0x0) 64) 0x120e0000) 64) 0xc000180000c00300) 64) 0x5070000006000600) 64) 0x6001804d280e012) 64) 0x7001c0000060003) 64) 0x60003002084) 64) 0x38180438204300e0) 64) 0x830c3f830c3f83e8) 64) 0x20f00820f000820f) 64) 0x820f0024107800) 64) 0x4107801088002dff) 64) 0xf000000000000000) 64) 0x1afff80000000) 64) 0xdb5af) 64) 0xffb57ffdfff00000) 64) 0x0
-def bigNat_9 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1fffffc0) 64) 0x7fffff7c00) 64) 0x0) 64) 0x0) 64) 0x0) 64) 0x5a940900009) 64) 0x1200009002400) 64) 0x8580129058005800) 64) 0x5801600000050000) 64) 0x2800a00000280014) 64) 0x280014003f07) 64) 0xc02007c00083ff00) 64) 0xf80fc0000fc00100) 64) 0x3f00003f000003f0) 64) 0x3f000401f8004) 64) 0x1f800210b5a8000) 64) 0x0) 64) 0x1afffb5aafffa) 64) 0xfffafffbffe00000) 64) 0x0) 64) 0x0
-def bigNat_10 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1fffffdf) 64) 0xffffdf0000000000) 64) 0x0) 64) 0x0) 64) 0x0) 64) 0x52d44e0008e) 64) 0x21c0048e003800) 64) 0x600000060006000) 64) 0x6001800000060000) 64) 0x3000c00000300018) 64) 0x300018003ff8) 64) 0x3ff8003efc0000) 64) 0x3f00003f000020f) 64) 0xc0000fc00008fc00) 64) 0xfc000087e00000) 64) 0x7e0000420b5aadff) 64) 0xf55fff6bffed5fff) 64) 0x7ffc000000000000) 64) 0x0) 64) 0x0) 64) 0x0
-def bigNat_11 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x3fff) 64) 0xffbfffffbefffffe) 64) 0xfbfffffbfffffbef) 64) 0xffffefffffeeffff) 64) 0xfefffffef7fffff7) 64) 0x7fffff7beb5aadff) 64) 0xf55fff6bffed5fff) 64) 0x7ffdafffb5aafffa) 64) 0xfffafffbffedb5af) 64) 0xffb57ffdfff6db7f) 64) 0xfdbffedb7ffdbffe
-def r64H_0 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7fbfffcf) 64) 0xfff7ffefbffffeff) 64) 0xfffffcfbfffffffd) 64) 0xbf7dffffbffeefbf
-def r64H_1 : Nat := 0x2000040010000
-def r64H_2 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x100) 64) 0x2) 64) 0x40
-def r64H_3 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x10) 64) 0x1000000000) 64) 0x0) 64) 0x4000000000001000
-def r64H_4 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x400000) 64) 0x40000000) 64) 0x10400000000) 64) 0x0
-def r64H_5 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x20) 64) 0x8000000000000) 64) 0x20000000000) 64) 0x80000000000000
-def b64H_0 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7fbfffcf) 64) 0xfff7ffefbbfffeff) 64) 0xfffffcfbff7ffffd) 64) 0xbf7dffffbffeefbf
-def b64H_1 : Nat := 0x2000000000000
-def b64H_2 : Nat := 0x40
-def b64H_3 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x4000000) 64) 0x0) 64) 0x10000
-def b64H_4 : Nat := Nat.lor (Nat.shiftLeft (0x10000000000) 64) 0x40000000
-def b64H_5 : Nat := Nat.lor (Nat.shiftLeft (0x2) 64) 0x1000
-def b64H_6 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x100) 64) 0x0) 64) 0x4000000000000000
-def b64H_7 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1040000000) 64) 0x0) 64) 0x0
-def b64H_8 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x400020) 64) 0x0) 64) 0x0) 64) 0x0
-def b64H_9 : Nat := Nat.lor (Nat.shiftLeft (0x20400000000) 64) 0x0
-def b64H_10 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x10) 64) 0x8000000000000) 64) 0x0) 64) 0x0
-def b64H_11 : Nat := Nat.lor (Nat.shiftLeft (0x800000) 64) 0x80000000000000
-def r0H_0 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7dfdffff) 64) 0xfd7dbfbfffffffef) 64) 0xffffd9fffffffffe) 64) 0xfb7fdf4f6fffdf6f
-def r0H_1 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x2400000000000) 64) 0x20000000000) 64) 0x8010000000
-def r0H_2 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x2020000) 64) 0x280004000000010) 64) 0x240000000001) 64) 0x480203080002090
-def b0H_0 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7dfdffff) 64) 0xfd7dbfbfffffffef) 64) 0xfffdd9effffdfffe) 64) 0xfb7fdf5f6fffdf7f
-def b0H_1 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x400000000000) 64) 0x21000000000) 64) 0x80000000
-def b0H_2 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x2020000) 64) 0x280004000000010) 64) 0x2240000000001) 64) 0x48020a000002000
-def b0H_3 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x2000000000000) 64) 0x20000) 64) 0x10000080
+def bigNat_0 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x3fffffbff) 64) 0xfffbefffffefbfff) 64) 0xffbfffffbefffffe) 64) 0xfffffeefffffefff) 64) 0xffef7fffff77ffff) 64) 0xf7bedb7ffdfff6ff) 64) 0xfb7ffdfff6fffb6f) 64) 0xffbffefffbffedb6) 64) 0xfffb7ffdfff6db7f) 64) 0xfdbffedb7ffdbffe
+def bigNat_1 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1248002000900) 64) 0x480020009000490) 64) 0x40010004001249) 64) 0x4800200092480) 64) 0x240012480024000
+def bigNat_2 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x400000400) 64) 0x4100000104000) 64) 0x40000041000001) 64) 0x11000001000) 64) 0x10800000880000) 64) 0x840000000000000) 64) 0x0) 64) 0x0) 64) 0x0) 64) 0x0
+def bigNat_3 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7fffff000000) 64) 0x3fffff81f00000) 64) 0xa002800240014005) 64) 0x8001400024009002) 64) 0x800b000002400140) 64) 0x58040012400b058) 64) 0x24401301084a802) 64) 0x84a8204112a08104) 64) 0x4a81042a8204112a) 64) 0x4111a204112a251) 64) 0x9ba002089310a2ab) 64) 0xb03e000000000000) 64) 0x1fff0000000) 64) 0x3ffe000) 64) 0x1fff01800) 64) 0x1bffe1b0001bffe
+def bigNat_4 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7fffff000) 64) 0x3ffff) 64) 0xf83fffffbc000002) 64) 0x60118008c804e013) 64) 0x4c1008c025009) 64) 0xc026008008c804e0) 64) 0x13021808ac046208) 64) 0x8ec04a021091005) 64) 0x910408224410208) 64) 0x9102085104082244) 64) 0x492ad40082214082) 64) 0x20c10c534e00c332) 64) 0xe780000000000000) 64) 0x37ffc0000000060) 64) 0xfff8000030) 64) 0x37ffc0000c300) 64) 0x18000c37ffd8000
+def bigNat_5 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1fffffc00000) 64) 0x1fffffc) 64) 0x7f) 64) 0xffff00000003ffff) 64) 0xfb80000000005911) 64) 0x444532249912844a) 64) 0x222802248896225) 64) 0x894043244992284) 64) 0x8a100922c0914681) 64) 0x248892c040104b56) 64) 0x1048000441220011) 64) 0x4a0936480004092) 64) 0x406242148da004) 64) 0x52008626b700404) 64) 0x30021b0000000600) 64) 0x300000000000000) 64) 0x3ffe0000000186) 64) 0x300000006037f) 64) 0xfc0000d80001bffe
+def bigNat_6 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7fffff00000007f) 64) 0xffff7fffff780000) 64) 0x5) 64) 0x80261017000b002c) 64) 0xb080170058016) 64) 0x58201017000b00) 64) 0x2c34c013000984d0) 64) 0x17000b0082221018) 64) 0x2210810888440422) 64) 0x2104218108518ce4) 64) 0x1084840318c9c318) 64) 0xc9cf10840c010840) 64) 0xc0800000000006ff) 64) 0xf80000000000030f) 64) 0xff80000000000c06) 64) 0xfff800000006d800) 64) 0xdb7ffc0000
+def bigNat_7 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x7fff) 64) 0xff01fffffc000000) 64) 0x7fffff7fffff700) 64) 0x0) 64) 0x20066) 64) 0x1b800d8006c01b0) 64) 0x314c1b1580560158) 64) 0x56069819800cc03) 64) 0x302690dc086e0000) 64) 0xd8006c0104006060) 64) 0x610a2f01802883) 64) 0xc6080206006108f8) 64) 0x6108f8e4000e0400) 64) 0xe00200070220007) 64) 0x4c00001fff000) 64) 0x6000360) 64) 0xdb0) 64) 0x6db7f) 64) 0xfdbffe0000000000
+def bigNat_8 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1fffffdfffffd) 64) 0xf000000000000000) 64) 0x0) 64) 0x838) 64) 0xc00060003000c0) 64) 0x1070000600180060) 64) 0x1804d20e0107001) 64) 0xc000006000300000) 64) 0x6000300208438180) 64) 0x438204300e0830c3) 64) 0xf830c3f83e820f00) 64) 0x820f000820f00820) 64) 0xf002410780041078) 64) 0x108037ffc000000) 64) 0x6fff800) 64) 0xdb6) 64) 0xfffb7ffdfff00000) 64) 0x0
+def bigNat_9 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1f) 64) 0xffffc00000007fff) 64) 0xff7c000000000000) 64) 0x0) 64) 0x0) 64) 0x68240) 64) 0x900048002400900) 64) 0x2580125801600580) 64) 0x160000050002800a) 64) 0x28001400002) 64) 0x80014003f07c0200) 64) 0x7c00083ff00f80fc) 64) 0xfc001003f000) 64) 0x3f000003f00003f) 64) 0x401f800401f80) 64) 0x210d80000000000) 64) 0x6fffb6f) 64) 0xffbffefffbffe000) 64) 0x0) 64) 0x0
+def bigNat_10 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x1f) 64) 0xffffdfffffdf0000) 64) 0x0) 64) 0x0) 64) 0x0) 64) 0x4d380) 64) 0xe00270013800e00) 64) 0x600006001800600) 64) 0x180000060003000c) 64) 0x30001800003) 64) 0x18003ff8003ff) 64) 0x8003efc000003f00) 64) 0x3f000020fc0000) 64) 0xfc00008fc0000fc0) 64) 0x87e000007e000) 64) 0x420db7ffdfff6ff) 64) 0xfb7ffdfff0000000) 64) 0x0) 64) 0x0) 64) 0x0
+def bigNat_11 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x3fffffbff) 64) 0xfffbefffffefbfff) 64) 0xffbfffffbefffffe) 64) 0xfffffeefffffefff) 64) 0xffef7fffff77ffff) 64) 0xf7bedb7ffdfff6ff) 64) 0xfb7ffdfff6fffb6f) 64) 0xffbffefffbffedb6) 64) 0xfffb7ffdfff6db7f) 64) 0xfdbffedb7ffdbffe
+def r64H_0 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x420100000800000) 64) 0x0) 64) 0x2000000000000
+def r64H_1 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x8000) 64) 0x100080000) 64) 0x400000080001) 64) 0x0
+def r64H_2 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x200000000400) 64) 0x240) 64) 0x4000000000
+def b64H_0 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x420100000000000) 64) 0x0) 64) 0x0
+def b64H_1 : Nat := Nat.lor (Nat.shiftLeft (0x400000000040) 64) 0x2000000000000
+def b64H_2 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x8000) 64) 0x100000400) 64) 0x80000) 64) 0x0
+def b64H_3 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x880000) 64) 0x200) 64) 0x0
+def b64H_4 : Nat := Nat.lor (Nat.shiftLeft (Nat.lor (Nat.shiftLeft (0x200000000000) 64) 0x1) 64) 0x4000000000
 variable {R : ℕ → ℕ}
 def op (d : Bool) (a b : ℕ) : ℕ := bif d then a ||| b else a &&& b
 lemma op_comm (d : Bool) (a b : ℕ) : op d a b = op d b a := by
@@ -1143,7 +1126,7 @@ structure X where
 structure Cm where
   a : List Nat
   b : List Nat
-def NN : Nat := 655
+def NN : Nat := 611
 def AA : Nat := bigNat_0
 def HX : Nat := bigNat_1
 def HY : Nat := bigNat_2
@@ -1312,8 +1295,8 @@ lemma uq_of {d : Bool} {l i : ℕ} {v : List W} {S : Finset ℕ} (h : Rep v S) {
   have := hp.forall hw hw' (fun e => hne (by rw [e]))
   simp only [sp_bit, hl, hs, Bool.true_and, true_and] at this
   simpa using this
-def segsX : List (ℕ × ℕ) := [(0, 14), (14, 17), (17, 31), (31, 34), (34, 37), (37, 40), (40, 54), (54, 57), (57, 71), (71, 74), (74, 77), (77, 80), (80, 83), (83, 97), (97, 111), (111, 113), (113, 115), (115, 118), (118, 132), (132, 134), (134, 137), (137, 139), (139, 142), (142, 145), (145, 148), (148, 162), (162, 176), (176, 178), (178, 192), (192, 194), (194, 208), (208, 210), (210, 212), (212, 214), (214, 217), (217, 219), (219, 222), (222, 236), (236, 238), (238, 241), (241, 255), (255, 269), (269, 271), (271, 273), (273, 276), (276, 290), (290, 292), (292, 295), (295, 309), (309, 311), (311, 313), (313, 315), (315, 329), (329, 332), (332, 334), (334, 336), (336, 338), (338, 341), (341, 343), (343, 346), (346, 348)]
-def segsY : List (ℕ × ℕ) := [(348, 354), (354, 359), (359, 383), (383, 387), (387, 411), (411, 416), (416, 440), (440, 464), (464, 468), (468, 492), (492, 516), (516, 522), (522, 546), (546, 570), (570, 576), (576, 600), (600, 606), (606, 630), (630, 654)]
+def segsX : List (ℕ × ℕ) := [(0, 14), (14, 17), (17, 31), (31, 34), (34, 37), (37, 40), (40, 54), (54, 57), (57, 71), (71, 74), (74, 77), (77, 80), (80, 83), (83, 97), (97, 111), (111, 114), (114, 128), (128, 131), (131, 134), (134, 137), (137, 140), (140, 154), (154, 168), (168, 182), (182, 196), (196, 199), (199, 202), (202, 216), (216, 219), (219, 233), (233, 247), (247, 250), (250, 264), (264, 267), (267, 281), (281, 295), (295, 298), (298, 301), (301, 304)]
+def segsY : List (ℕ × ℕ) := [(304, 310), (310, 315), (315, 339), (339, 343), (343, 367), (367, 372), (372, 396), (396, 420), (420, 424), (424, 448), (448, 472), (472, 478), (478, 502), (502, 526), (526, 532), (532, 556), (556, 562), (562, 586), (586, 610)]
 def segOk (s : ℕ × ℕ) : Bool := decide (s.1 < s.2) && decide (AA % 2 ^ s.2 + 2 ^ (s.1 + 1) = 2 ^ s.2 + AA % 2 ^ s.1) &&
   !AA.testBit s.1 && !AA.testBit s.2
 set_option maxRecDepth 100000 in
@@ -3490,7 +3473,7 @@ def anySub (d : Bool) (l : ℕ) (v : List W) : ℕ → (List W → Bool) → Boo
   (fun w t ih c h => Bool.rec (motive := fun _ => Bool) (Bool.rec (motive := fun _ => Bool) false (ih c h) (Nat.beq (Nat.lor c (cov d l t)) l)) true
     (st (Nat.lor c (sp d l w.s)) fun c => ih c fun r => h (w :: r))) v
 def sumc (v : List W) : ℕ := List.rec (motive := fun _ => ℕ) 0 (fun w _ ih => Nat.add w.c ih) v
-def MM : ℕ := 223
+def MM : ℕ := 211
 def hb (H x : ℕ) : Bool := Nat.beq (Nat.land (Nat.shiftRight H (Nat.mod x MM)) 1) 1
 def pairsC (H : ℕ) (h : X → X → Bool) (xs : List X) : Bool :=
   List.rec (motive := fun _ => Bool) false (fun a r ih => Bool.rec (motive := fun _ => Bool) ih true
@@ -4127,47 +4110,78 @@ theorem impB_onePartition {Q : List (ℕ × ℕ)} {Z L : ℕ} (hp : pOk Z Q = tr
     obtain rfl : L = k + 1 := by omega
     exact imp_of_live (L := k + 1 + 1) (Or.inl rfl) hp (by omega) hI (by omega) hS hl hA (Or.inr hc)
 
+def rt6 : List (ℕ × ℕ) := [(95, 1), (111, 1), (119, 1), (125, 1), (126, 1), (159, 1), (183, 1), (187, 1), (189, 1), (190, 1), (215, 1), (221, 1), (222, 1), (235, 1), (238, 1), (245, 1), (250, 1)]
+def rt5 : List (ℕ × ℕ) := [(31, 2), (47, 1), (55, 2), (59, 1), (61, 2), (62, 2), (79, 2), (87, 4), (91, 1), (93, 4), (94, 4), (103, 2), (107, 2), (109, 2), (110, 4), (115, 1), (117, 4), (118, 2), (121, 1), (122, 2), (124, 2), (143, 1), (151, 4), (155, 2), (157, 4), (158, 4), (167, 1), (171, 2), (173, 1), (174, 2), (179, 2), (181, 4), (182, 2), (185, 2), (186, 4), (188, 2), (199, 1), (203, 1), (205, 1), (206, 2), (211, 1), (213, 4), (214, 2), (217, 1), (218, 2), (220, 2), (227, 1), (229, 1), (230, 1), (233, 1), (234, 4), (236, 1), (241, 1), (242, 1), (244, 1), (248, 1)]
+def rt4 : List (ℕ × ℕ) := [(15, 4), (23, 5), (27, 4), (29, 5), (30, 5), (39, 4), (43, 4), (45, 4), (46, 5), (51, 4), (53, 5), (54, 3), (57, 4), (58, 5), (60, 3), (71, 5), (75, 4), (77, 5), (78, 5), (83, 4), (85, 7), (86, 5), (89, 4), (90, 5), (92, 5), (99, 4), (101, 5), (102, 5), (105, 4), (106, 5), (108, 5), (113, 4), (114, 4), (116, 5), (120, 4), (135, 4), (139, 4), (141, 4), (142, 5), (147, 5), (149, 7), (150, 5), (153, 5), (154, 5), (156, 5), (163, 4), (165, 4), (166, 4), (169, 4), (170, 5), (172, 4), (177, 5), (178, 5), (180, 5), (184, 5), (195, 3), (197, 4), (198, 4), (201, 3), (202, 5), (204, 4), (209, 4), (210, 4), (212, 5), (216, 4), (225, 3), (226, 4), (228, 3), (232, 4), (240, 3)]
 def rt3 : List (ℕ × ℕ) := [(7, 7), (11, 7), (13, 7), (14, 7), (19, 7), (21, 8), (22, 6), (25, 7), (26, 7), (28, 6), (35, 7), (37, 7), (38, 6), (41, 7), (42, 7), (44, 6), (49, 7), (50, 6), (52, 6), (56, 6), (67, 7), (69, 8), (70, 7), (73, 7), (74, 7), (76, 7), (81, 7), (82, 7), (84, 8), (88, 7), (97, 7), (98, 7), (100, 8), (104, 7), (112, 7), (131, 7), (133, 7), (134, 7), (137, 7), (138, 7), (140, 7), (145, 8), (146, 7), (148, 8), (152, 7), (161, 7), (162, 7), (164, 7), (168, 7), (176, 8), (193, 6), (194, 7), (196, 7), (200, 7), (208, 7), (224, 6)]
-def rt2a : List (ℕ × ℕ) := [(3, 10), (5, 10), (6, 9), (9, 10), (10, 10), (12, 9), (17, 10), (18, 9), (20, 9), (24, 9), (33, 10), (34, 10), (36, 9), (40, 10)]
-def rt2b : List (ℕ × ℕ) := [(48, 9), (65, 10), (66, 10), (68, 10), (72, 10), (80, 10), (96, 10), (129, 10), (130, 10), (132, 10), (136, 10), (144, 10), (160, 10), (192, 10)]
+def rt2a : List (ℕ × ℕ) := [(3, 10), (5, 10), (6, 9), (9, 10), (12, 9), (17, 10), (18, 9), (20, 9), (24, 9), (33, 10), (34, 10), (36, 9), (40, 10), (48, 9), (65, 10), (66, 10), (68, 10), (72, 10), (80, 10), (96, 10), (129, 10), (130, 10), (132, 10), (136, 10), (144, 10), (160, 10), (192, 10)]
+def rt2b : List (ℕ × ℕ) := [(10, 11)]
 def rt2 : List (ℕ × ℕ) := rt2a ++ rt2b
 def rt1L : List (ℕ × ℕ) := [(1, 12), (2, 12), (4, 12), (8, 12), (16, 12), (32, 12)]
 def rt1 : List (ℕ × ℕ) := rt1L ++ [(64, 13), (128, 13)]
-def rt : List (ℕ × ℕ) := rt1 ++ rt2 ++ rt3
-def rt_b : List (ℕ × ℕ) := up rt rt
-def keepZ0B : List ℕ := [4, 16, 64, 128, 3, 5, 6, 9, 10, 12, 17, 18, 24, 33, 34, 40, 7, 11, 13, 14, 19, 21, 22, 25, 26, 28, 35, 37, 38, 41, 42, 44, 49, 50, 52, 56]
-def rt0b : List (ℕ × ℕ) := rt_b.filter (fun e => keepZ0B.any (fun z => Nat.beq z e.1))
+def rt56 : List (ℕ × ℕ) := rt5 ++ rt6
+def rt456 : List (ℕ × ℕ) := rt4 ++ rt56
+def rt3456 : List (ℕ × ℕ) := rt3 ++ rt456
+def rt23456 : List (ℕ × ℕ) := rt2 ++ rt3456
+def rtAll : List (ℕ × ℕ) := rt1 ++ rt23456
+def keepQ64 : List ℕ := [65, 66, 67, 72, 73, 80, 85, 87, 93, 94, 96, 97, 100, 110, 117, 192, 194, 200, 208, 213, 234]
+def keepQ0 : List ℕ := [3, 4, 6, 7, 9, 10, 12, 13, 16, 17, 18, 19, 23, 24, 25, 29, 33, 34, 39, 40, 45, 51, 53, 54, 57, 60, 64, 100, 102, 108, 128, 149, 176, 178, 184]
+def Q64 : List (ℕ × ℕ) := rt23456.filter (fun e => keepQ64.any (fun z => Nat.beq z e.1))
+def Q64b : List (ℕ × ℕ) := up rt23456 Q64
+def Q0 : List (ℕ × ℕ) := rtAll.filter (fun e => keepQ0.any (fun z => Nat.beq z e.1))
+def Q0b : List (ℕ × ℕ) := up rtAll Q0
 
-section sym
-def pbit : List ℕ := [0, 41, 42, 46, 47, 44, 48, 43, 45, 50, 49, 52, 51, 53, 14, 55, 56, 17, 18, 19, 24, 21, 22, 25, 20, 23, 27, 26, 29, 28, 30, 31, 32, 33, 34, 75, 76, 37, 78, 79, 40, 1, 2, 7, 5, 8, 3, 4, 6, 10, 9, 12, 11, 13, 54, 15, 16, 57, 58, 63, 64, 61, 65, 59, 60, 62, 67, 66, 69, 68, 70, 71, 73, 72, 74, 35, 36, 77, 38, 39, 80, 82, 81, 83, 84, 85, 89, 87, 90, 86, 88, 91, 93, 92, 95, 94, 96, 97, 98, 99, 103, 101, 104, 100, 102, 105, 107, 106, 109, 108, 110, 111, 112, 113, 138, 115, 140, 141, 118, 119, 124, 121, 122, 125, 120, 123, 126, 128, 127, 130, 129, 131, 132, 133, 134, 146, 147, 137, 114, 139, 116, 117, 142, 144, 143, 145, 135, 136, 148, 242, 243, 247, 245, 248, 244, 246, 250, 249, 252, 253, 251, 254, 162, 256, 257, 261, 259, 262, 258, 260, 264, 263, 266, 267, 265, 268, 176, 270, 178, 296, 300, 301, 298, 302, 297, 299, 304, 303, 306, 307, 305, 308, 192, 310, 194, 277, 282, 279, 280, 283, 278, 281, 285, 284, 287, 288, 286, 289, 208, 291, 210, 314, 212, 272, 214, 274, 275, 217, 312, 219, 293, 294, 222, 316, 320, 318, 321, 317, 319, 322, 324, 323, 326, 327, 325, 328, 236, 333, 238, 330, 331, 241, 149, 150, 154, 152, 155, 151, 153, 157, 156, 160, 158, 159, 161, 255, 163, 164, 168, 166, 169, 165, 167, 171, 170, 174, 172, 173, 175, 269, 177, 271, 213, 273, 215, 216, 276, 195, 200, 197, 198, 201, 196, 199, 203, 202, 206, 204, 205, 207, 290, 209, 292, 220, 221, 295, 179, 184, 182, 185, 180, 181, 183, 187, 186, 190, 188, 189, 191, 309, 193, 311, 218, 313, 211, 315, 223, 227, 225, 228, 224, 226, 229, 231, 230, 234, 232, 233, 235, 329, 239, 240, 332, 237, 334, 335, 336, 337, 338, 344, 345, 341, 342, 343, 339, 340, 346, 347, 348, 350, 349, 351, 353, 352, 354, 355, 356, 358, 357, 359, 364, 365, 362, 363, 360, 361, 366, 367, 368, 369, 370, 377, 378, 379, 381, 380, 382, 371, 372, 373, 375, 374, 376, 383, 465, 466, 467, 387, 471, 472, 470, 475, 469, 473, 474, 476, 477, 479, 478, 486, 487, 489, 490, 488, 491, 480, 481, 484, 483, 482, 485, 411, 412, 413, 415, 414, 416, 421, 418, 419, 423, 417, 422, 420, 424, 425, 426, 427, 434, 435, 438, 436, 437, 439, 428, 429, 431, 432, 430, 433, 440, 495, 494, 497, 498, 493, 496, 499, 500, 501, 502, 503, 510, 511, 513, 512, 514, 515, 504, 505, 507, 508, 506, 509, 464, 384, 385, 386, 468, 392, 390, 388, 389, 393, 394, 391, 395, 396, 398, 397, 405, 406, 409, 408, 407, 410, 399, 400, 403, 401, 402, 404, 492, 445, 442, 441, 446, 443, 444, 447, 448, 449, 450, 451, 458, 459, 462, 460, 461, 463, 452, 453, 455, 454, 456, 457, 516, 517, 518, 519, 521, 520, 522, 549, 548, 547, 550, 551, 552, 554, 555, 553, 557, 556, 564, 565, 567, 566, 568, 569, 558, 559, 561, 560, 562, 563, 546, 525, 524, 523, 526, 527, 528, 531, 529, 530, 533, 532, 540, 541, 543, 542, 544, 545, 534, 535, 537, 536, 538, 539, 570, 601, 602, 604, 603, 605, 576, 609, 608, 607, 610, 611, 612, 613, 619, 620, 625, 623, 621, 622, 626, 624, 627, 628, 614, 615, 617, 616, 618, 629, 600, 571, 572, 574, 573, 575, 606, 579, 578, 577, 580, 581, 582, 583, 594, 595, 597, 596, 598, 584, 585, 588, 589, 587, 591, 586, 590, 592, 593, 599, 630, 633, 632, 631, 634, 635, 636, 637, 643, 644, 646, 645, 647, 638, 639, 641, 640, 642, 648, 649, 652, 651, 650, 653, 654]
-def sigL : List ℕ := [0, 1, 4, 3, 2, 5, 7, 6]
-def perm (k : ℕ) : ℕ :=
-  if k < NN then pbit.getD k NN
-  else if k < 2 * NN then NN + pbit.getD (k - NN) NN
+section twinSym
+def pbSig : List ℕ := [0, 1, 5, 3, 6, 2, 4, 8, 7, 9, 10, 11, 12, 13, 14, 35, 36, 17, 21, 22, 23, 18, 19, 20, 25, 24, 26, 27, 28, 29, 30, 31, 33, 32, 34, 15, 16, 37, 39, 38, 40, 41, 44, 45, 42, 43, 46, 48, 47, 49, 50, 51, 52, 53, 54, 75, 76, 57, 61, 59, 62, 58, 60, 63, 65, 64, 66, 67, 68, 69, 70, 71, 81, 82, 74, 55, 56, 77, 79, 78, 80, 72, 73, 83, 84, 87, 88, 85, 86, 90, 89, 91, 92, 93, 94, 95, 96, 97, 117, 118, 119, 115, 116, 121, 120, 122, 123, 124, 125, 126, 127, 111, 129, 130, 114, 101, 102, 98, 99, 100, 104, 103, 105, 106, 107, 108, 109, 110, 128, 112, 113, 131, 138, 139, 134, 135, 136, 137, 132, 133, 140, 141, 144, 145, 142, 143, 147, 146, 148, 149, 150, 151, 152, 153, 154, 185, 186, 187, 183, 184, 189, 188, 190, 191, 192, 193, 194, 195, 168, 172, 170, 173, 169, 171, 175, 174, 176, 177, 178, 179, 180, 181, 182, 158, 159, 155, 156, 157, 161, 160, 162, 163, 164, 165, 166, 167, 196, 200, 201, 199, 197, 198, 202, 205, 206, 203, 204, 208, 207, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 223, 224, 221, 222, 226, 225, 227, 228, 229, 230, 231, 232, 233, 253, 254, 255, 251, 252, 257, 256, 258, 259, 260, 261, 262, 263, 247, 265, 266, 250, 237, 238, 234, 235, 236, 240, 239, 241, 242, 243, 244, 245, 246, 264, 248, 249, 267, 270, 271, 268, 269, 272, 274, 273, 275, 276, 277, 278, 279, 280, 281, 284, 285, 282, 283, 287, 286, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 368, 369, 370, 371, 315, 373, 376, 374, 375, 377, 379, 378, 380, 382, 383, 381, 384, 387, 388, 386, 385, 389, 390, 392, 393, 391, 394, 395, 339, 340, 341, 342, 343, 397, 399, 398, 400, 401, 402, 403, 404, 406, 407, 405, 408, 411, 410, 412, 409, 413, 414, 416, 417, 415, 418, 419, 367, 311, 312, 313, 314, 372, 316, 318, 319, 317, 320, 322, 321, 323, 326, 324, 325, 327, 331, 330, 328, 329, 332, 333, 336, 334, 335, 337, 338, 396, 344, 346, 345, 347, 348, 349, 350, 351, 354, 352, 353, 355, 359, 357, 356, 358, 360, 361, 364, 362, 363, 365, 366, 420, 421, 422, 423, 424, 449, 450, 451, 453, 452, 455, 454, 456, 458, 457, 459, 460, 463, 462, 461, 464, 465, 466, 468, 467, 469, 470, 471, 448, 425, 426, 427, 429, 428, 431, 430, 432, 434, 433, 435, 436, 439, 438, 437, 440, 441, 442, 444, 443, 445, 446, 447, 472, 473, 475, 474, 476, 477, 478, 479, 480, 481, 482, 483, 487, 485, 488, 484, 486, 489, 490, 493, 492, 491, 494, 495, 496, 498, 497, 499, 500, 501, 502, 503, 504, 505, 506, 507, 509, 508, 510, 513, 512, 511, 514, 517, 516, 515, 518, 519, 520, 522, 521, 523, 524, 525, 526, 527, 530, 529, 528, 531, 532, 533, 534, 535, 536, 537, 539, 538, 540, 543, 542, 541, 544, 547, 546, 545, 548, 549, 550, 552, 551, 553, 554, 555, 556, 557, 559, 558, 560, 561, 562, 563, 564, 565, 566, 567, 569, 568, 570, 573, 572, 571, 574, 575, 579, 577, 580, 576, 578, 581, 582, 583, 584, 585, 586, 587, 588, 589, 590, 591, 593, 592, 594, 597, 596, 595, 598, 599, 601, 600, 602, 603, 604, 607, 606, 605, 608, 609, 610]
+def pbTau : List ℕ := [0, 41, 42, 46, 47, 44, 48, 43, 45, 50, 49, 52, 51, 53, 14, 55, 56, 17, 18, 19, 24, 21, 22, 25, 20, 23, 27, 26, 29, 28, 30, 31, 32, 33, 34, 75, 76, 37, 78, 79, 40, 1, 2, 7, 5, 8, 3, 4, 6, 10, 9, 12, 11, 13, 54, 15, 16, 57, 58, 63, 64, 61, 65, 59, 60, 62, 67, 66, 69, 68, 70, 71, 73, 72, 74, 35, 36, 77, 38, 39, 80, 82, 81, 83, 84, 85, 89, 87, 90, 86, 88, 91, 93, 92, 95, 94, 96, 97, 98, 99, 103, 101, 104, 100, 102, 105, 107, 106, 109, 108, 110, 111, 132, 133, 114, 115, 120, 117, 118, 121, 116, 119, 122, 124, 123, 126, 125, 127, 128, 138, 139, 131, 112, 113, 134, 136, 135, 137, 129, 130, 140, 220, 221, 225, 223, 226, 222, 224, 228, 227, 230, 231, 229, 232, 154, 234, 235, 239, 237, 240, 236, 238, 242, 241, 244, 245, 243, 246, 168, 268, 272, 273, 270, 274, 269, 271, 276, 275, 278, 279, 277, 280, 182, 251, 256, 253, 254, 257, 252, 255, 259, 258, 261, 262, 260, 263, 196, 248, 249, 199, 265, 266, 202, 282, 286, 284, 287, 283, 285, 288, 290, 289, 292, 293, 291, 294, 216, 296, 297, 219, 141, 142, 146, 144, 147, 143, 145, 149, 148, 152, 150, 151, 153, 233, 155, 156, 160, 158, 161, 157, 159, 163, 162, 166, 164, 165, 167, 247, 197, 198, 250, 183, 188, 185, 186, 189, 184, 187, 191, 190, 194, 192, 193, 195, 264, 200, 201, 267, 169, 174, 172, 175, 170, 171, 173, 177, 176, 180, 178, 179, 181, 281, 203, 207, 205, 208, 204, 206, 209, 211, 210, 214, 212, 213, 215, 295, 217, 218, 298, 302, 303, 301, 299, 300, 304, 306, 305, 307, 309, 308, 310, 311, 312, 314, 313, 315, 320, 321, 318, 319, 316, 317, 322, 323, 324, 325, 326, 333, 334, 335, 337, 336, 338, 327, 328, 329, 331, 330, 332, 339, 421, 422, 423, 343, 427, 428, 426, 431, 425, 429, 430, 432, 433, 435, 434, 442, 443, 445, 446, 444, 447, 436, 437, 440, 439, 438, 441, 367, 368, 369, 371, 370, 372, 377, 374, 375, 379, 373, 378, 376, 380, 381, 382, 383, 390, 391, 394, 392, 393, 395, 384, 385, 387, 388, 386, 389, 396, 451, 450, 453, 454, 449, 452, 455, 456, 457, 458, 459, 466, 467, 469, 468, 470, 471, 460, 461, 463, 464, 462, 465, 420, 340, 341, 342, 424, 348, 346, 344, 345, 349, 350, 347, 351, 352, 354, 353, 361, 362, 365, 364, 363, 366, 355, 356, 359, 357, 358, 360, 448, 401, 398, 397, 402, 399, 400, 403, 404, 405, 406, 407, 414, 415, 418, 416, 417, 419, 408, 409, 411, 410, 412, 413, 472, 473, 474, 475, 477, 476, 478, 505, 504, 503, 506, 507, 508, 510, 511, 509, 513, 512, 520, 521, 523, 522, 524, 525, 514, 515, 517, 516, 518, 519, 502, 481, 480, 479, 482, 483, 484, 487, 485, 486, 489, 488, 496, 497, 499, 498, 500, 501, 490, 491, 493, 492, 494, 495, 526, 557, 558, 560, 559, 561, 532, 565, 564, 563, 566, 567, 568, 569, 575, 576, 581, 579, 577, 578, 582, 580, 583, 584, 570, 571, 573, 572, 574, 585, 556, 527, 528, 530, 529, 531, 562, 535, 534, 533, 536, 537, 538, 539, 550, 551, 553, 552, 554, 540, 541, 544, 545, 543, 547, 542, 546, 548, 549, 555, 586, 589, 588, 587, 590, 591, 592, 593, 599, 600, 602, 601, 603, 594, 595, 597, 596, 598, 604, 605, 608, 607, 606, 609, 610]
+def sigS : List ℕ := [0, 3, 2, 1, 4, 5, 6, 7]
+def sigT : List ℕ := [0, 1, 4, 3, 2, 5, 7, 6]
+def w4Z (Z : ℕ) : ℕ := Nat.land (rawP.getD 1 0) (mz Z)
+def w5Z (Z : ℕ) : ℕ := Nat.land (rawP.getD 3 0) (mz Z)
+
+def pbitOk (pb : List ℕ) : Bool :=
+  (List.range NN).all (fun k => Nat.beq (pb.getD (pb.getD k NN) NN) k && Nat.ble (pb.getD k NN + 1) NN)
+def sigOk (sg : List ℕ) : Bool :=
+  (List.range 8).all (fun i => Nat.ble (sg.getD i 0 + 1) 8)
+def perm (pb : List ℕ) (k : ℕ) : ℕ :=
+  if k < NN then pb.getD k NN
+  else if k < 2 * NN then NN + pb.getD (k - NN) NN
   else k
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma pbit_ok : (List.range NN).all (fun k => Nat.beq (pbit.getD (pbit.getD k NN) NN) k && Nat.ble (pbit.getD k NN + 1) NN) = true := by decide +kernel
-lemma pbit_spec {k : ℕ} (hk : k < NN) : pbit.getD (pbit.getD k NN) NN = k ∧ pbit.getD k NN < NN := by
-  have h := List.all_eq_true.1 pbit_ok k (List.mem_range.2 hk)
+lemma pbit_spec {pb : List ℕ} (hp : pbitOk pb = true) {k : ℕ} (hk : k < NN) :
+    pb.getD (pb.getD k NN) NN = k ∧ pb.getD k NN < NN := by
+  have h := List.all_eq_true.1 hp k (List.mem_range.2 hk)
   simp only [Bool.and_eq_true, Nat.beq_eq] at h
   exact ⟨h.1, Nat.le_of_ble_eq_true h.2⟩
-lemma perm_ge {k : ℕ} (hk : 2 * NN ≤ k) : perm k = k := by
+lemma perm_ge (pb : List ℕ) {k : ℕ} (hk : 2 * NN ≤ k) : perm pb k = k := by
   unfold perm
   have h1 : ¬ (k < NN) := by omega
   have h2 : ¬ (k < 2 * NN) := by omega
   simp [h1, h2]
-def phiN_aux (x : ℕ) : ℕ → ℕ
+lemma perm_inv {pb : List ℕ} (hp : pbitOk pb = true) (k : ℕ) : perm pb (perm pb k) = k := by
+  by_cases h1 : k < NN
+  · obtain ⟨hinv, hlt⟩ := pbit_spec hp h1
+    have hpk : perm pb k = pb.getD k NN := if_pos h1
+    rw [hpk]; unfold perm; rw [if_pos hlt]; exact hinv
+  · by_cases h2 : k < 2 * NN
+    · obtain ⟨hinv, hlt⟩ := pbit_spec hp (show k - NN < NN by omega)
+      have hpk : perm pb k = NN + pb.getD (k - NN) NN := by unfold perm; rw [if_neg h1, if_pos h2]
+      rw [hpk]; unfold perm
+      have h3 : ¬ (NN + pb.getD (k - NN) NN < NN) := by omega
+      have h4 : NN + pb.getD (k - NN) NN < 2 * NN := by omega
+      rw [if_neg h3, if_pos h4, show NN + pb.getD (k - NN) NN - NN = pb.getD (k - NN) NN by omega, hinv]
+      omega
+    · have hpk : perm pb k = k := perm_ge pb (by omega); rw [hpk, hpk]
+def phiN_aux (pb : List ℕ) (x : ℕ) : ℕ → ℕ
   | 0 => 0
-  | n + 1 => if x.testBit (perm n) then phiN_aux x n ||| (1 <<< n) else phiN_aux x n
-def phiN (x : ℕ) : ℕ := phiN_aux x (2 * NN)
-def phiFull (x : ℕ) : ℕ := phiN x ||| ((x >>> (2 * NN)) <<< (2 * NN))
-lemma phiN_aux_bit (x : ℕ) : ∀ n k, (phiN_aux x n).testBit k = (decide (k < n) && x.testBit (perm k))
+  | n + 1 => if x.testBit (perm pb n) then phiN_aux pb x n ||| (1 <<< n) else phiN_aux pb x n
+def phiN (pb : List ℕ) (x : ℕ) : ℕ := phiN_aux pb x (2 * NN)
+def phiFull (pb : List ℕ) (x : ℕ) : ℕ := phiN pb x ||| ((x >>> (2 * NN)) <<< (2 * NN))
+lemma phiN_aux_bit (pb : List ℕ) (x : ℕ) : ∀ n k, (phiN_aux pb x n).testBit k = (decide (k < n) && x.testBit (perm pb k))
   | 0, k => by simp [phiN_aux]
   | n + 1, k => by
     simp only [phiN_aux]
     split_ifs with h
-    · rw [Nat.testBit_or, phiN_aux_bit x n k, Nat.testBit_shiftLeft]
+    · rw [Nat.testBit_or, phiN_aux_bit pb x n k, Nat.testBit_shiftLeft]
       by_cases hk : k = n
       · subst hk; simp [h]
       · by_cases hlt : k < n
@@ -4181,13 +4195,13 @@ lemma phiN_aux_bit (x : ℕ) : ∀ n k, (phiN_aux x n).testBit k = (decide (k < 
             | zero => exact absurd hkn h2
             | succ m => simp [Nat.testBit_succ]
           simp [h1, hlt, h3, h4]
-    · rw [phiN_aux_bit x n k]
+    · rw [phiN_aux_bit pb x n k]
       by_cases hk : k = n
       · subst hk; simp [h]
       · by_cases hlt : k < n
         · simp [hlt, show k < n + 1 by omega]
         · simp [hlt, show ¬ (k < n + 1) by omega]
-lemma phiFull_bit (x k : ℕ) : (phiFull x).testBit k = x.testBit (perm k) := by
+lemma phiFull_bit (pb : List ℕ) (x k : ℕ) : (phiFull pb x).testBit k = x.testBit (perm pb k) := by
   unfold phiFull phiN
   rw [Nat.testBit_or, phiN_aux_bit, Nat.testBit_shiftLeft, Nat.testBit_shiftRight]
   by_cases hk : k < 2 * NN
@@ -4195,155 +4209,1057 @@ lemma phiFull_bit (x k : ℕ) : (phiFull x).testBit k = x.testBit (perm k) := by
     simp [hk, h1]
   · have h1 : 2 * NN ≤ k := by omega
     rw [decide_eq_false hk, Bool.false_and, Bool.false_or, decide_eq_true h1, Bool.true_and,
-      show 2 * NN + (k - 2 * NN) = k by omega, perm_ge h1]
-lemma phiFull_and (a b : ℕ) : phiFull (a &&& b) = phiFull a &&& phiFull b := by
+      show 2 * NN + (k - 2 * NN) = k by omega, perm_ge pb h1]
+lemma phiFull_inv {pb : List ℕ} (hp : pbitOk pb = true) (x : ℕ) : phiFull pb (phiFull pb x) = x := by
+  apply Nat.eq_of_testBit_eq; intro k; rw [phiFull_bit, phiFull_bit, perm_inv hp]
+lemma phiFull_inj {pb : List ℕ} (hp : pbitOk pb = true) {a b : ℕ} (h : phiFull pb a = phiFull pb b) : a = b := by
+  have := congrArg (phiFull pb) h; rwa [phiFull_inv hp, phiFull_inv hp] at this
+lemma phiFull_and (pb : List ℕ) (a b : ℕ) : phiFull pb (a &&& b) = phiFull pb a &&& phiFull pb b := by
   apply Nat.eq_of_testBit_eq; intro k; simp only [Nat.testBit_and, phiFull_bit]
-lemma phiFull_or (a b : ℕ) : phiFull (a ||| b) = phiFull a ||| phiFull b := by
+lemma phiFull_or (pb : List ℕ) (a b : ℕ) : phiFull pb (a ||| b) = phiFull pb a ||| phiFull pb b := by
   apply Nat.eq_of_testBit_eq; intro k; simp only [Nat.testBit_or, phiFull_bit]
-lemma phiFull_xor (a b : ℕ) : phiFull (a ^^^ b) = phiFull a ^^^ phiFull b := by
+lemma phiFull_xor (pb : List ℕ) (a b : ℕ) : phiFull pb (a ^^^ b) = phiFull pb a ^^^ phiFull pb b := by
   apply Nat.eq_of_testBit_eq; intro k; simp only [Nat.testBit_xor, phiFull_bit]
-lemma phiFull_op (d : Bool) (a b : ℕ) : phiFull (op d a b) = op d (phiFull a) (phiFull b) := by
+lemma phiFull_op (pb : List ℕ) (d : Bool) (a b : ℕ) : phiFull pb (op d a b) = op d (phiFull pb a) (phiFull pb b) := by
   cases d <;> simp [op, phiFull_and, phiFull_or]
-lemma phiFull_zero : phiFull 0 = 0 := by
+lemma phiFull_zero (pb : List ℕ) : phiFull pb 0 = 0 := by
   apply Nat.eq_of_testBit_eq; intro k; rw [phiFull_bit]; simp
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma phiFull_mz128 : phiFull (mz 128) = mz 64 := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma phiFull_tz128 : phiFull (tz 128) = tz 64 := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma phiFull_rawP128 : (List.range 8).all (fun i => Nat.beq (phiFull (rawP.getD i 0 &&& mz 128)) (rawP.getD (sigL.getD i 0) 0 &&& mz 64)) = true := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma sigL_lt : (List.range 8).all (fun i => Nat.ble (sigL.getD i 0 + 1) 8) = true := by decide +kernel
-lemma phiFull_WZ128 {x : ℕ} (hx : x ∈ WZ [] 128) : phiFull x ∈ WZ [] 64 := by
+
+def rawOk2 (pb sg : List ℕ) (Z1 Z2 : ℕ) : Bool :=
+  (List.range 8).all (fun i => Nat.beq (phiFull pb (rawP.getD i 0 &&& mz Z1)) (rawP.getD (sg.getD i 0) 0 &&& mz Z2))
+def rawOk (pb sg : List ℕ) (Z : ℕ) : Bool := rawOk2 pb sg Z Z
+
+lemma phiFull_WZ2 {pb sg : List ℕ} {Z1 Z2 : ℕ} (hr : rawOk2 pb sg Z1 Z2 = true) (hs : sigOk sg = true)
+    {x : ℕ} (hx : x ∈ WZ [] Z1) : phiFull pb x ∈ WZ [] Z2 := by
   obtain ⟨w, hw, rfl⟩ := hx
   simp only [rawL, List.map_nil, List.append_nil] at hw
   obtain ⟨i, hi, hwi⟩ := List.mem_iff_getElem.1 hw
   have hi8 : i < 8 := by simpa [rawP] using hi
-  have h1 := List.all_eq_true.1 phiFull_rawP128 i (List.mem_range.2 hi8)
-  have h2 := List.all_eq_true.1 sigL_lt i (List.mem_range.2 hi8)
+  have h1 := List.all_eq_true.1 hr i (List.mem_range.2 hi8)
+  have h2 := List.all_eq_true.1 hs i (List.mem_range.2 hi8)
   have ei : w = rawP.getD i 0 := hwi.symm.trans (by simp [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi])
   rw [ei, Nat.eq_of_beq_eq_true h1]
-  have hs8 : sigL.getD i 0 < rawP.length := by have := Nat.le_of_ble_eq_true h2; simpa [rawP] using this
-  refine ⟨rawP[sigL.getD i 0], by simp [rawL], ?_⟩
+  have hs8 : sg.getD i 0 < rawP.length := by have := Nat.le_of_ble_eq_true h2; simpa [rawP] using this
+  refine ⟨rawP[sg.getD i 0], by simp [rawL], ?_⟩
   rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hs8]; rfl
-lemma phiFull_C128 {x : ℕ} (hx : x ∈ C (mz 128) (WZ [] 128)) : phiFull x ∈ C (mz 64) (WZ [] 64) := by
+
+lemma phiFull_C2 {pb sg : List ℕ} {Z1 Z2 : ℕ} (hr : rawOk2 pb sg Z1 Z2 = true) (hs : sigOk sg = true)
+    (hmz : phiFull pb (mz Z1) = mz Z2) {x : ℕ} (hx : x ∈ C (mz Z1) (WZ [] Z1)) : phiFull pb x ∈ C (mz Z2) (WZ [] Z2) := by
   rcases hx with h | h
-  · exact Or.inl (phiFull_WZ128 h)
+  · exact Or.inl (phiFull_WZ2 hr hs h)
   · simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at h
     rcases h with h0 | h1
     · rw [h0, phiFull_zero]; exact Or.inr (Set.mem_insert _ _)
-    · rw [h1, phiFull_mz128]; exact Or.inr (Set.mem_insert_of_mem _ rfl)
-lemma Sol.map_phi {m m' T q : ℕ} {S S' : Set ℕ} (hm : phiFull m = m')
-    (h : Sol Z0 m T q S) (hS : ∀ x ∈ S, phiFull x ∈ S') : Sol Z0 m' (phiFull T) q S' := by
-  induction h generalizing S' with
-  | done ht => exact .done (hS _ ht)
-  | @un _ _ a ha _ ih =>
-    refine .un (hS _ ha) (ih (S' := insert (phiFull a ^^^ m') S') fun x hx => ?_)
+    · rw [h1, hmz]; exact Or.inr (Set.mem_insert_of_mem _ rfl)
+
+lemma Sol.map_phi {pb : List ℕ} {m1 m2 T1 T2 q : ℕ} {S : Set ℕ}
+    (hm : phiFull pb m1 = m2) (hT : phiFull pb T1 = T2)
+    (h : Sol Z0 m1 T1 q S) : Sol Z0 m2 T2 q (phiFull pb '' S) := by
+  induction h with
+  | done ht => exact .done ⟨T1, ht, hT⟩
+  | un ha _ ih =>
+    refine .un ⟨_, ha, rfl⟩ ?_
+    rw [Set.image_insert_eq, phiFull_xor, hm] at ih; exact ih
+  | @bi q S d a b ha hb _ _ ih =>
+    refine .bi (d := d) ⟨_, ha, rfl⟩ ⟨_, hb, rfl⟩ (al0 _ _ _) ?_
+    rw [Set.image_insert_eq, phiFull_op] at ih; exact ih
+
+lemma SolB.map_phi {pb : List ℕ} {m1 m2 T1 T2 q u : ℕ} {S : Set ℕ}
+    (hm : phiFull pb m1 = m2) (hT : phiFull pb T1 = T2)
+    (h : SolB m1 T1 q u S) : SolB m2 T2 q u (phiFull pb '' S) := by
+  induction h with
+  | done ht => exact .done ⟨T1, ht, hT⟩
+  | un ha _ ih =>
+    refine .un ⟨_, ha, rfl⟩ ?_
+    rw [Set.image_insert_eq, phiFull_xor, hm] at ih; exact ih
+  | @bi q u S d a b ha hb _ ih =>
+    refine .bi (d := d) ⟨_, ha, rfl⟩ ⟨_, hb, rfl⟩ ?_
+    rw [Set.image_insert_eq, phiFull_op] at ih; exact ih
+
+lemma imp_transfer {pb sg : List ℕ} {Z1 Z2 L : ℕ}
+    (hs : sigOk sg = true) (hr : rawOk2 pb sg Z1 Z2 = true)
+    (hmz : phiFull pb (mz Z1) = mz Z2) (htz : phiFull pb (tz Z1) = tz Z2)
+    (h : Imp [] Z2 L) : Imp [] Z1 L := by
+  intro q hq hsol
+  exact h q hq ((hsol.map_phi hmz htz).mono le_rfl (fun y ⟨x, hx, heq⟩ => heq ▸ phiFull_C2 hr hs hmz hx))
+
+lemma impB_transfer {pb sg : List ℕ} {Z1 Z2 L t : ℕ}
+    (hs : sigOk sg = true) (hr : rawOk2 pb sg Z1 Z2 = true)
+    (hmz : phiFull pb (mz Z1) = mz Z2) (htz : phiFull pb (tz Z1) = tz Z2)
+    (h : ImpB [] Z2 L t) : ImpB [] Z1 L t := by
+  intro q hq hsol
+  exact h q hq ((hsol.map_phi hmz htz).mono le_rfl le_rfl (fun y ⟨x, hx, heq⟩ => heq ▸ phiFull_C2 hr hs hmz hx))
+
+lemma RZ_phi {pb sg : List ℕ} {Z : ℕ} (hpb : pbitOk pb = true) (hsg : sigOk sg = true)
+    (hr : rawOk pb sg Z = true) (x : ℕ) : RZ [] Z (phiFull pb x) = RZ [] Z x := by
+  unfold RZ
+  by_cases hx : x ∈ WZ [] Z
+  · rw [if_pos hx, if_pos (phiFull_WZ2 hr hsg hx)]
+  · rw [if_neg hx, if_neg (fun h => hx (by rw [← phiFull_inv hpb x]; exact phiFull_WZ2 hr hsg h))]
+
+lemma Live.map_phi_R {R : ℕ → ℕ} {pb : List ℕ} (hp : pbitOk pb = true) (hR : ∀ x, R (phiFull pb x) = R x)
+    {m T : ℕ} (hm : phiFull pb m = m) (hT : phiFull pb T = T)
+    {k t : ℕ} {S : Finset ℕ} (hl : Live R m T k t S) :
+    Live R m T k t (S.image (phiFull pb)) := by
+  induction hl with
+  | stop => rw [Finset.image_singleton, hT]; exact .stop
+  | @un k t a U _ ih =>
+    rw [Finset.image_insert] at ih ⊢; rw [phiFull_xor, hm] at ih; exact .un ih
+  | @bi k t d a b U hab hal _ ih =>
+    rw [Finset.image_insert] at ih; rw [phiFull_op] at ih
+    rw [Finset.image_insert, Finset.image_insert]
+    exact .bi (fun h => hab (phiFull_inj hp h)) (by unfold Al at hal ⊢; rwa [hR, hR]) ih
+
+lemma Bi.map_phi_R {R : ℕ → ℕ} {pb : List ℕ} (hp : pbitOk pb = true) (hR : ∀ x, R (phiFull pb x) = R x)
+    {d : Bool} {a b : ℕ} {S S1 : Finset ℕ} (hb : Bi R d a b S S1) :
+    Bi R d (phiFull pb a) (phiFull pb b) (S.image (phiFull pb)) (S1.image (phiFull pb)) := by
+  obtain ⟨hab, U, rfl, rfl, hal⟩ := hb
+  refine ⟨fun h => hab (phiFull_inj hp h), U.image (phiFull pb), ?_, ?_, by unfold Al at hal ⊢; rwa [hR, hR]⟩
+  · simp [Finset.image_insert]
+  · simp [Finset.image_insert, phiFull_op]
+
+lemma Un.map_phi {pb : List ℕ} {m a : ℕ} {S S1 : Finset ℕ} (hm : phiFull pb m = m) (hu : Un m a S S1) :
+    Un m (phiFull pb a) (S.image (phiFull pb)) (S1.image (phiFull pb)) := by
+  obtain ⟨U, rfl, rfl⟩ := hu
+  refine ⟨U.image (phiFull pb), ?_, ?_⟩
+  · simp [Finset.image_insert]
+  · simp [Finset.image_insert, phiFull_xor, hm]
+
+def TwinSpec (pb : List ℕ) (w4 w5 : ℕ) : Prop :=
+  pbitOk pb = true ∧ phiFull pb w4 = w5 ∧ phiFull pb w5 = w4 ∧ w4 ≠ w5
+
+def Inv (pb : List ℕ) (w4 w5 : ℕ) (S : Finset ℕ) : Prop :=
+  (w4 ∈ S ↔ w5 ∈ S) ∧ ∀ x ∈ S, x ≠ w4 → x ≠ w5 → phiFull pb x = x
+
+lemma Inv.image_eq {pb : List ℕ} {w4 w5 : ℕ} {S : Finset ℕ} (ht : TwinSpec pb w4 w5) (hI : Inv pb w4 w5 S) :
+    S.image (phiFull pb) = S := by
+  ext y; simp only [Finset.mem_image]; constructor
+  · rintro ⟨x, hx, rfl⟩
+    by_cases h4 : x = w4
+    · rw [h4, ht.2.1]; exact hI.1.1 (h4 ▸ hx)
+    · by_cases h5 : x = w5
+      · rw [h5, ht.2.2.1]; exact hI.1.2 (h5 ▸ hx)
+      · rw [hI.2 x hx h4 h5]; exact hx
+  · intro hy
+    by_cases h4 : y = w4
+    · exact ⟨w5, hI.1.1 (h4 ▸ hy), h4 ▸ ht.2.2.1⟩
+    · by_cases h5 : y = w5
+      · exact ⟨w4, hI.1.2 (h5 ▸ hy), h5 ▸ ht.2.1⟩
+      · exact ⟨y, hy, hI.2 y hy h4 h5⟩
+
+lemma Inv.after_fixed_bi {R : ℕ → ℕ} {pb : List ℕ} {w4 w5 : ℕ} {d : Bool} {a b : ℕ} {S S1 : Finset ℕ}
+    (ht : TwinSpec pb w4 w5) (hI : Inv pb w4 w5 S) (hb : Bi R d a b S S1)
+    (ha4 : a ≠ w4) (ha5 : a ≠ w5) (hb4 : b ≠ w4) (hb5 : b ≠ w5) : Inv pb w4 w5 S1 := by
+  have hfa : phiFull pb a = a := hI.2 a hb.sub.1 ha4 ha5
+  have hfb : phiFull pb b = b := hI.2 b hb.sub.2.1 hb4 hb5
+  have hfo : phiFull pb (op d a b) = op d a b := by rw [phiFull_op, hfa, hfb]
+  have ho4 : op d a b ≠ w4 := fun e => ht.2.2.2 (by rw [← e, ← hfo, e, ht.2.1])
+  have ho5 : op d a b ≠ w5 := fun e => ht.2.2.2 (by rw [← ht.2.2.1, ← e, hfo, e])
+  obtain ⟨_, U, rfl, rfl, _⟩ := hb
+  refine ⟨?_, ?_⟩
+  · constructor <;> intro h
+    · simp only [Finset.mem_insert] at h
+      have hw5 := hI.1.1 (show w4 ∈ insert a (insert b U) by simp [h.resolve_left ho4.symm])
+      simp only [Finset.mem_insert] at hw5 ⊢
+      rcases hw5 with h1 | h1 | h1
+      · exact absurd h1.symm ha5
+      · exact absurd h1.symm hb5
+      · exact Or.inr h1
+    · simp only [Finset.mem_insert] at h
+      have hw4 := hI.1.2 (show w5 ∈ insert a (insert b U) by simp [h.resolve_left ho5.symm])
+      simp only [Finset.mem_insert] at hw4 ⊢
+      rcases hw4 with h1 | h1 | h1
+      · exact absurd h1.symm ha4
+      · exact absurd h1.symm hb4
+      · exact Or.inr h1
+  · intro x hx hx4 hx5
+    simp only [Finset.mem_insert] at hx
     rcases hx with rfl | hx
-    · rw [phiFull_xor, hm]; exact Set.mem_insert _ _
-    · exact Set.mem_insert_of_mem _ (hS _ hx)
-  | @bi _ _ d a b ha hb _ _ ih =>
-    refine .bi (d := d) (hS _ ha) (hS _ hb) (al0 _ _ _) (ih (S' := insert (op d (phiFull a) (phiFull b)) S') fun x hx => ?_)
+    · exact hfo
+    · exact hI.2 x (by simp [hx]) hx4 hx5
+
+lemma Inv.after_fixed_un {pb : List ℕ} {w4 w5 m a : ℕ} {S S1 : Finset ℕ}
+    (ht : TwinSpec pb w4 w5) (hm : phiFull pb m = m) (hI : Inv pb w4 w5 S) (hu : Un m a S S1)
+    (ha4 : a ≠ w4) (ha5 : a ≠ w5) : Inv pb w4 w5 S1 := by
+  have hfa : phiFull pb a = a := hI.2 a hu.sub.1 ha4 ha5
+  have hfo : phiFull pb (a ^^^ m) = a ^^^ m := by rw [phiFull_xor, hfa, hm]
+  have ho4 : a ^^^ m ≠ w4 := fun e => ht.2.2.2 (by rw [← e, ← hfo, e, ht.2.1])
+  have ho5 : a ^^^ m ≠ w5 := fun e => ht.2.2.2 (by rw [← ht.2.2.1, ← e, hfo, e])
+  obtain ⟨U, rfl, rfl⟩ := hu
+  refine ⟨?_, ?_⟩
+  · constructor <;> intro h
+    · simp only [Finset.mem_insert] at h
+      have hw5 := hI.1.1 (show w4 ∈ insert a U by simp [h.resolve_left ho4.symm])
+      simp only [Finset.mem_insert] at hw5 ⊢
+      exact Or.inr (hw5.resolve_left (Ne.symm ha5))
+    · simp only [Finset.mem_insert] at h
+      have hw4 := hI.1.2 (show w5 ∈ insert a U by simp [h.resolve_left ho5.symm])
+      simp only [Finset.mem_insert] at hw4 ⊢
+      exact Or.inr (hw4.resolve_left (Ne.symm ha4))
+  · intro x hx hx4 hx5
+    simp only [Finset.mem_insert] at hx
     rcases hx with rfl | hx
-    · rw [phiFull_op]; exact Set.mem_insert _ _
-    · exact Set.mem_insert_of_mem _ (hS _ hx)
-lemma SolB.map_phi {m m' T q u : ℕ} {S S' : Set ℕ} (hm : phiFull m = m')
-    (h : SolB m T q u S) (hS : ∀ x ∈ S, phiFull x ∈ S') : SolB m' (phiFull T) q u S' := by
-  induction h generalizing S' with
-  | done ht => exact .done (hS _ ht)
-  | @un _ _ _ a ha _ ih =>
-    refine .un (hS _ ha) (ih (S' := insert (phiFull a ^^^ m') S') fun x hx => ?_)
-    rcases hx with rfl | hx
-    · rw [phiFull_xor, hm]; exact Set.mem_insert _ _
-    · exact Set.mem_insert_of_mem _ (hS _ hx)
-  | @bi _ _ _ d a b ha hb _ ih =>
-    refine .bi (d := d) (hS _ ha) (hS _ hb) (ih (S' := insert (op d (phiFull a) (phiFull b)) S') fun x hx => ?_)
-    rcases hx with rfl | hx
-    · rw [phiFull_op]; exact Set.mem_insert _ _
-    · exact Set.mem_insert_of_mem _ (hS _ hx)
-end sym
+    · exact hfo
+    · exact hI.2 x (by simp [hx]) hx4 hx5
+
+lemma WZ_fix_other {Z : ℕ} (hr : rawOk pbSig sigS Z = true) {x : ℕ} (hx : x ∈ WZ [] Z)
+    (h4 : x ≠ w4Z Z) (h5 : x ≠ w5Z Z) : phiFull pbSig x = x := by
+  obtain ⟨w, hw, rfl⟩ := hx
+  simp only [rawL, List.map_nil, List.append_nil] at hw
+  obtain ⟨i, hi, hwi⟩ := List.mem_iff_getElem.1 hw
+  have hi8 : i < 8 := by simpa [rawP] using hi
+  have ei : w = rawP.getD i 0 := hwi.symm.trans (by simp [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi])
+  have h1 := Nat.eq_of_beq_eq_true (List.all_eq_true.1 hr i (List.mem_range.2 hi8))
+  rw [ei] at h4 h5 ⊢
+  rw [h1]
+  have hi4 : i ≠ 1 := fun e => h4 (by subst e; rfl)
+  have hi5 : i ≠ 3 := fun e => h5 (by subst e; rfl)
+  have hsi : sigS.getD i 0 = i := by interval_cases i <;> first | rfl | contradiction
+  rw [hsi]
+
+lemma TwinSpec_sig {Z : ℕ} (hpb : pbitOk pbSig = true) (hr : rawOk pbSig sigS Z = true) (hne : w4Z Z ≠ w5Z Z) :
+    TwinSpec pbSig (w4Z Z) (w5Z Z) := by
+  refine ⟨hpb, ?_, ?_, hne⟩
+  · exact Nat.eq_of_beq_eq_true (List.all_eq_true.1 hr 1 (List.mem_range.2 (by omega)))
+  · exact Nat.eq_of_beq_eq_true (List.all_eq_true.1 hr 3 (List.mem_range.2 (by omega)))
+
+def mTwin (Z : ℕ) (M : List (ℕ × ℕ)) : Bool :=
+  (List.range 8).all (fun i => (List.range 8).all (fun j =>
+    let wi := Nat.land (rawP.getD i 0) (mz Z)
+    let wj := Nat.land (rawP.getD j 0) (mz Z)
+    Nat.beq i j || Nat.beq wi 0 || Nat.beq wi (mz Z) || Nat.beq wj 0 || Nat.beq wj (mz Z) ||
+    (Nat.beq wi (w5Z Z) && !Nat.beq wj (w4Z Z)) ||
+    (Nat.beq wj (w5Z Z) && !Nat.beq wi (w4Z Z)) ||
+    M.any (fun p => hb p.1 (Nat.add wi wj)))) &&
+  M.any (fun p => Nat.beq p.2 1)
+
+lemma mTwin_cover {Z : ℕ} {M : List (ℕ × ℕ)} (hM : mTwin Z M = true) (hne45 : w4Z Z ≠ w5Z Z)
+    {a b : ℕ} (ha : a ∈ WZ [] Z) (hbW : b ∈ WZ [] Z) (hne : a ≠ b)
+    (ha0 : a ≠ 0) (ha1 : a ≠ mz Z) (hb0 : b ≠ 0) (hb1 : b ≠ mz Z)
+    (htwin : (a ≠ w5Z Z ∧ b ≠ w5Z Z) ∨ a = w4Z Z ∨ b = w4Z Z) :
+    ∃ p ∈ M, hb p.1 (a + b) = true := by
+  simp only [mTwin, Bool.and_eq_true, List.all_eq_true, List.mem_range, Bool.or_eq_true, List.any_eq_true] at hM
+  obtain ⟨wa, hwa, rfl⟩ := ha
+  obtain ⟨wb, hwb, rfl⟩ := hbW
+  simp only [rawL, List.map_nil, List.append_nil] at hwa hwb
+  obtain ⟨i, hi, hwi⟩ := List.mem_iff_getElem.1 hwa
+  obtain ⟨j, hj, hwj⟩ := List.mem_iff_getElem.1 hwb
+  have hi8 : i < 8 := by simpa [rawP] using hi
+  have hj8 : j < 8 := by simpa [rawP] using hj
+  have ei : wa = rawP.getD i 0 := hwi.symm.trans (by simp [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi])
+  have ej : wb = rawP.getD j 0 := hwj.symm.trans (by simp [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hj])
+  have hij : i ≠ j := fun e => by subst e; exact hne (by rw [← hwi, ← hwj])
+  have h := hM.1 i hi8 j hj8
+  rcases h with ((((((h | h) | h) | h) | h) | ⟨h5a, h4b⟩) | ⟨h5b, h4a⟩) | ⟨p, hp, hpb⟩
+  · exact absurd (Nat.eq_of_beq_eq_true h) hij
+  · exact absurd (by rw [ei]; exact Nat.eq_of_beq_eq_true h) ha0
+  · exact absurd (by rw [ei]; exact Nat.eq_of_beq_eq_true h) ha1
+  · exact absurd (by rw [ej]; exact Nat.eq_of_beq_eq_true h) hb0
+  · exact absurd (by rw [ej]; exact Nat.eq_of_beq_eq_true h) hb1
+  · exfalso
+    have ea : wa &&& mz Z = w5Z Z := by rw [ei]; exact Nat.eq_of_beq_eq_true h5a
+    have neb : wb &&& mz Z ≠ w4Z Z := fun e => by rw [ej] at e; simp only [nl] at h4b; rw [e, Nat.beq_refl] at h4b; simp at h4b
+    rcases htwin with ⟨h1, _⟩ | h1 | h1
+    · exact h1 ea
+    · exact hne45 (h1.symm.trans ea)
+    · exact neb h1
+  · exfalso
+    have eb : wb &&& mz Z = w5Z Z := by rw [ej]; exact Nat.eq_of_beq_eq_true h5b
+    have nea : wa &&& mz Z ≠ w4Z Z := fun e => by rw [ei] at e; simp only [nl] at h4a; rw [e, Nat.beq_refl] at h4a; simp at h4a
+    rcases htwin with ⟨_, h1⟩ | h1 | h1
+    · exact h1 eb
+    · exact nea h1
+    · exact hne45 (h1.symm.trans eb)
+  · refine ⟨p, hp, ?_⟩; rw [ei, ej]; exact hpb
+
+noncomputable section twinCore
+def is45 (w4 w5 s : Nat) : Bool := Nat.beq s w4 || Nat.beq s w5
+def gFix (w4 w5 : Nat) (go : (X → X → Bool) → List X → Bool) (h : X → X → Bool) (xs : List X) : Bool :=
+  go (fun a c => Bool.rec (motive := fun _ => Bool) false (h a c) (!is45 w4 w5 a.s && !is45 w4 w5 c.s)) xs
+def gBrk (w4 : Nat) (go : (X → X → Bool) → List X → Bool) (h : X → X → Bool) (xs : List X) : Bool :=
+  go (fun a c => Bool.rec (motive := fun _ => Bool) false (h a c) (Nat.beq a.s w4 || Nat.beq c.s w4)) xs
+def filtFix (w4 w5 : Nat) (v : List W) : List W :=
+  List.rec (motive := fun _ => List W) [] (fun w _ ih => Bool.rec (motive := fun _ => List W) (w :: ih) ih (is45 w4 w5 w.s)) v
+def filt4 (w4 : Nat) (v : List W) : List W :=
+  List.rec (motive := fun _ => List W) [] (fun w _ ih => Bool.rec (motive := fun _ => List W) ih (w :: ih) (Nat.beq w.s w4)) v
+def nodeSym (w4 w5 : Nat) (fSym fFree : Nat → List W → Bool) (d : Bool) (l m g e n z : Nat) (v : List W)
+    (go : (X → X → Bool) → List X → Bool) : Bool :=
+  Bool.rec (motive := fun _ => Bool) (node fFree d l m g e n z v (gBrk w4 go)) true (node fSym d l m g e n z v (gFix w4 w5 go))
+def mvSym (w4 w5 : Nat) (FSym FFree : Nat → Nat → Nat → List W → Bool) (l m g k t z : Nat) (v : List W) (y : Nat) : Bool :=
+  (fun n => Bool.rec (motive := fun _ => Bool)
+    (prd t (fun s =>
+      Bool.rec (motive := fun _ => Bool)
+        (nots (fun q z v => cv (pos s) l v (tst (pos s) l (Nat.sub k s) v (fun y =>
+          node (FFree (Nat.sub k 2) s) (pos s) l m g (Nat.sub (Nat.sub (Nat.sub k 1) s) y) v.length z v (pairsP q))))
+          m g (Nat.sub (Nat.sub k s) y) n z 0 v (filt4 w4 v))
+        true
+        (nots (fun q z v => cv (pos s) l v (tst (pos s) l (Nat.sub k s) v (fun y =>
+          nodeSym w4 w5 (FSym (Nat.sub k 2) s) (FFree (Nat.sub k 2) s) (pos s) l m g (Nat.sub (Nat.sub (Nat.sub k 1) s) y) v.length z v (pairsP q))))
+          m g (Nat.sub (Nat.sub k s) y) n z 0 v (filtFix w4 w5 v))))
+    true
+    (nodeSym w4 w5 (FSym (Nat.sub k 1) t) (FFree (Nat.sub k 1) t) (pos t) l m g (Nat.sub (Nat.sub k t) y) n z v pairsN)) v.length
+def lookSym (w4 w5 l m g : Nat) (fuel : Nat) : Nat → Nat → Nat → List W → Bool :=
+  Nat.rec (motive := fun _ => Nat → Nat → Nat → List W → Bool) (fun _ _ _ _ => true)
+    (fun f ih k t z v => Bool.rec (motive := fun _ => Bool)
+      (tst (pos t) l (Nat.sub (Nat.succ k) t) v (fun y => mvSym w4 w5 ih (look l m g f) l m g k t z v y))
+      true (Nat.ble v.length 1)) fuel
+def look1Sym (w4 w5 l m g K : Nat) (fuel : Nat) : Nat → Nat → Nat → List W → Bool :=
+  Nat.rec (motive := fun _ => Nat → Nat → Nat → List W → Bool) (fun _ _ _ _ => true)
+    (fun f ih k t z v => Bool.rec (motive := fun _ => Bool)
+      (tst (pos t) l (Nat.sub (Nat.succ k) t) v (fun y =>
+        Bool.rec (motive := fun _ => Bool)
+          (mvSym w4 w5 (lookSym w4 w5 l m g K) (look l m g K) l m g k t z v y)
+          true
+          (nodeSym w4 w5 (ih (Nat.sub k 1) t) (look1 l m g K f (Nat.sub k 1) t) (pos t) l m g (Nat.sub (Nat.sub k t) y) v.length z v pairsS)))
+      true (Nat.ble v.length 1)) fuel
+def hasW (w : Nat) (v : List W) : Bool :=
+  List.rec (motive := fun _ => Bool) false (fun a _ ih => Bool.rec (motive := fun _ => Bool) ih true (Nat.beq a.s w)) v
+def topSym (w4 w5 l m g K H ph k t z : Nat) (v : List W) : Bool :=
+  Bool.rec (motive := fun _ => Bool)
+    (topC l m g K H ph k t z v)
+    (Bool.rec (motive := fun _ => Bool)
+      false
+      (Bool.rec (motive := fun _ => Bool)
+        (tst (pos t) l (Nat.sub (Nat.succ k) t) v (fun y =>
+          Bool.rec (motive := fun _ => Bool)
+            (Bool.rec (motive := fun _ => Bool) false (mvSym w4 w5 (lookSym w4 w5 l m g K) (look l m g K) l m g k t z v y) (Nat.beq ph 1))
+            true
+            (nodeSym w4 w5 (look1Sym w4 w5 l m g K K (Nat.sub k 1) t) (look1 l m g K K (Nat.sub k 1) t)
+              (pos t) l m g (Nat.sub (Nat.sub k t) y) v.length z v (fun h xs => pairsC H h (fs xs)))))
+        true (Nat.ble v.length 1))
+      (hasW w4 v))
+    (hasW w5 v)
+def startvSym (w4 w5 l m g B K t p H ph : Nat) (v : List W) : Bool :=
+  Bool.rec (motive := fun _ => Bool) false (Bool.rec (motive := fun _ => Bool) false
+    (child (fun z r => topSym w4 w5 l m g K H ph K t z r) g (fun h => h v) (Nat.sub B (sumc v)))
+    (Nat.ble v.length (Nat.sub (Nat.succ K) t))) (hasP p v)
+def chkSym (w4 w5 : Nat) (E : List (Nat × Nat)) (Q : List (Nat × Nat)) (Z K t H ph : Nat) : Bool :=
+  (fun l m g B => frc (avl (PZ Q) m (rawL E)) (fun v => anySub (pos t) l v 0 (startvSym w4 w5 l m g B K t (pwr E Z) H ph)))
+    (lz Z) (mz Z) (pL (Q.map fun _ => 16)) (pL (Q.map fun e => 16 + (K - e.2)))
+end twinCore
+
+lemma hasW_iff (w : ℕ) (v : List W) : hasW w v = true ↔ ∃ a ∈ v, a.s = w := by
+  induction v with
+  | nil => simp [hasW]
+  | cons a t ih =>
+    change (Bool.rec (motive := fun _ => Bool) (hasW w t) true (Nat.beq a.s w) : Bool) = true ↔ _
+    rw [bR]; cases h : Nat.beq a.s w with
+    | true => simp [Nat.eq_of_beq_eq_true h]
+    | false =>
+      have hne : a.s ≠ w := fun e => by rw [e, Nat.beq_refl] at h; simp at h
+      simp [ih, hne]
+
+lemma filtFix_mem {w4 w5 : ℕ} {v : List W} {a : W} (ha : a ∈ v) (h4 : a.s ≠ w4) (h5 : a.s ≠ w5) :
+    a ∈ filtFix w4 w5 v := by
+  induction v with
+  | nil => simp at ha
+  | cons w t ih =>
+    change a ∈ Bool.rec (motive := fun _ => List W) (w :: filtFix w4 w5 t) (filtFix w4 w5 t) (is45 w4 w5 w.s)
+    simp only [List.mem_cons] at ha
+    rcases ha with rfl | ha
+    · have hi : is45 w4 w5 a.s = false := by simp [is45, beq_f h4, beq_f h5]
+      rw [hi]; simp
+    · cases is45 w4 w5 w.s
+      · exact List.mem_cons_of_mem _ (ih ha)
+      · exact ih ha
+
+lemma filt4_mem {w4 : ℕ} {v : List W} {a : W} (ha : a ∈ v) (h4 : a.s = w4) : a ∈ filt4 w4 v := by
+  induction v with
+  | nil => simp at ha
+  | cons w t ih =>
+    change a ∈ Bool.rec (motive := fun _ => List W) (filt4 w4 t) (w :: filt4 w4 t) (Nat.beq w.s w4)
+    simp only [List.mem_cons] at ha
+    rcases ha with rfl | ha
+    · rw [h4, Nat.beq_refl]; simp
+    · cases Nat.beq w.s w4
+      · exact ih ha
+      · exact List.mem_cons_of_mem _ (ih ha)
+
+lemma gFix_false {w4 w5 : ℕ} {go : (X → X → Bool) → List X → Bool} {h : X → X → Bool} {xs : List X}
+    {a c : X} (hgo : ∀ h', go h' xs = false → h' a c = false ∨ h' c a = false)
+    (hp : gFix w4 w5 go h xs = false) (ha4 : a.s ≠ w4) (ha5 : a.s ≠ w5) (hc4 : c.s ≠ w4) (hc5 : c.s ≠ w5) :
+    h a c = false ∨ h c a = false := by
+  have ha : is45 w4 w5 a.s = false := by simp [is45, beq_f ha4, beq_f ha5]
+  have hc : is45 w4 w5 c.s = false := by simp [is45, beq_f hc4, beq_f hc5]
+  rcases hgo _ hp with h1 | h1 <;> simp only [ha, hc, Bool.not_false, Bool.and_self] at h1
+  · exact Or.inl h1
+  · exact Or.inr h1
+
+lemma gBrk_false {w4 : ℕ} {go : (X → X → Bool) → List X → Bool} {h : X → X → Bool} {xs : List X}
+    {a c : X} (hgo : ∀ h', go h' xs = false → h' a c = false ∨ h' c a = false)
+    (hp : gBrk w4 go h xs = false) (h4 : a.s = w4 ∨ c.s = w4) :
+    h a c = false ∨ h c a = false := by
+  have h1 : (Nat.beq a.s w4 || Nat.beq c.s w4) = true := by rcases h4 with h4 | h4 <;> simp [h4]
+  have h2 : (Nat.beq c.s w4 || Nat.beq a.s w4) = true := by rcases h4 with h4 | h4 <;> simp [h4]
+  rcases hgo _ hp with hr | hr
+  · rw [h1] at hr; exact Or.inl hr
+  · rw [h2] at hr; exact Or.inr hr
+
+section twinSound
+variable {P : List ℕ} {l m g T : ℕ} (X : Ctx P l m g T)
+include X
+
+lemma nodeSym_bi {R : ℕ → ℕ} {pb : List ℕ} {w4 w5 : ℕ}
+    (ht : TwinSpec pb w4 w5) (hR : ∀ x, R (phiFull pb x) = R x) (hm_phi : phiFull pb m = m) (hT_phi : phiFull pb T = T)
+    {fSym fFree : ℕ → List W → Bool} {d : Bool} {e n z t k k' : ℕ} {v : List W} {S S' : Finset ℕ} {x y : ℕ} {d' : Bool}
+    {go : (L_meta_52620.X → L_meta_52620.X → Bool) → List L_meta_52620.X → Bool}
+    (hs : StOk P T l (k + 1) t z v S) (hm : Min R m T (k' + 1) t S) (hI : Inv pb w4 w5 S) (hk : k' ≤ k)
+    (hd : d = pos' t) (hn : n = v.length) (hSe : S'.card ≤ e) (he : n ≤ e → e = k + 1 - t)
+    (hb : Bi R d' x y S S') (hl : Live R m T k' t S')
+    (hgo0 : (x ≠ w5 ∧ y ≠ w5) ∨ x = w4 ∨ y = w4 → ∀ h xs, go h xs = false → ∀ a c : W, a ∈ v → c ∈ v → a.s = x → c.s = y →
+      xs = v.map (mkx d l (wst d l v)) →
+      h (mkx d l (wst d l v) a) (mkx d l (wst d l v) c) = false ∨ h (mkx d l (wst d l v) c) (mkx d l (wst d l v) a) = false)
+    (hgo1 : (x = w5 ∧ y ≠ w4) ∨ (y = w5 ∧ x ≠ w4) → ∀ h xs, go h xs = false → ∀ a c : W, a ∈ v → c ∈ v → a.s = phiFull pb x → c.s = phiFull pb y →
+      xs = v.map (mkx d l (wst d l v)) →
+      h (mkx d l (wst d l v) a) (mkx d l (wst d l v) c) = false ∨ h (mkx d l (wst d l v) c) (mkx d l (wst d l v) a) = false)
+    (hp : nodeSym w4 w5 fSym fFree d l m g e n z v go = false) :
+    (∃ z' r, fSym z' r = false ∧ StOk P T l k t z' r S' ∧ Inv pb w4 w5 S' ∧
+      (∀ w ∈ r, (w.s = op d' x y ∧ w.r = 0) ∨ w ∈ v)) ∨
+    (∃ S'' x'' y'' z' r, Bi R d' x'' y'' S S'' ∧ Live R m T k' t S'' ∧
+      fFree z' r = false ∧ StOk P T l k t z' r S'' ∧
+      (∀ w ∈ r, (w.s = op d' x'' y'' ∧ w.r = 0) ∨ w ∈ v)) := by
+  obtain ⟨hpFix, hpBrk⟩ := or_false' X hp
+  by_cases hx4 : x = w4
+  · obtain ⟨z', r, hf, hst, hmem⟩ := node_bi X hs hm hk hd hn hSe he hb hl
+      (fun h xs hgp a c ha hc hax hcy hxs => gBrk_false (fun h' h'p => hgo0 (Or.inr (Or.inl hx4)) h' xs h'p a c ha hc hax hcy hxs) hgp (Or.inl (hax.trans hx4))) hpBrk
+    exact Or.inr ⟨S', x, y, z', r, hb, hl, hf, hst, hmem⟩
+  · by_cases hy4 : y = w4
+    · obtain ⟨z', r, hf, hst, hmem⟩ := node_bi X hs hm hk hd hn hSe he hb hl
+        (fun h xs hgp a c ha hc hax hcy hxs => gBrk_false (fun h' h'p => hgo0 (Or.inr (Or.inr hy4)) h' xs h'p a c ha hc hax hcy hxs) hgp (Or.inr (hcy.trans hy4))) hpBrk
+      exact Or.inr ⟨S', x, y, z', r, hb, hl, hf, hst, hmem⟩
+    · by_cases hx5 : x = w5
+      · have hb' : Bi R d' (phiFull pb x) (phiFull pb y) S (S'.image (phiFull pb)) := by
+          have := hb.map_phi_R ht.1 hR; rwa [hI.image_eq ht] at this
+        have hl' : Live R m T k' t (S'.image (phiFull pb)) := hl.map_phi_R ht.1 hR hm_phi hT_phi
+        have hcard' : (S'.image (phiFull pb)).card ≤ e := by
+          rw [Finset.card_image_of_injective _ (fun _ _ h => phiFull_inj ht.1 h)]; exact hSe
+        have hpx4 : phiFull pb x = w4 := hx5 ▸ ht.2.2.1
+        obtain ⟨z', r, hf, hst, hmem⟩ := node_bi X hs hm hk hd hn hcard' he hb' hl'
+          (fun h xs hgp a c ha hc hax hcy hxs => gBrk_false (fun h' h'p => hgo1 (Or.inl ⟨hx5, hy4⟩) h' xs h'p a c ha hc hax hcy hxs) hgp (Or.inl (hax.trans hpx4))) hpBrk
+        exact Or.inr ⟨S'.image (phiFull pb), phiFull pb x, phiFull pb y, z', r, hb', hl', hf, hst, hmem⟩
+      · by_cases hy5 : y = w5
+        · have hb' : Bi R d' (phiFull pb x) (phiFull pb y) S (S'.image (phiFull pb)) := by
+            have := hb.map_phi_R ht.1 hR; rwa [hI.image_eq ht] at this
+          have hl' : Live R m T k' t (S'.image (phiFull pb)) := hl.map_phi_R ht.1 hR hm_phi hT_phi
+          have hcard' : (S'.image (phiFull pb)).card ≤ e := by
+            rw [Finset.card_image_of_injective _ (fun _ _ h => phiFull_inj ht.1 h)]; exact hSe
+          have hpy4 : phiFull pb y = w4 := hy5 ▸ ht.2.2.1
+          obtain ⟨z', r, hf, hst, hmem⟩ := node_bi X hs hm hk hd hn hcard' he hb' hl'
+            (fun h xs hgp a c ha hc hax hcy hxs => gBrk_false (fun h' h'p => hgo1 (Or.inr ⟨hy5, hx4⟩) h' xs h'p a c ha hc hax hcy hxs) hgp (Or.inr (hcy.trans hpy4))) hpBrk
+          exact Or.inr ⟨S'.image (phiFull pb), phiFull pb x, phiFull pb y, z', r, hb', hl', hf, hst, hmem⟩
+        · obtain ⟨z', r, hf, hst, hmem⟩ := node_bi X hs hm hk hd hn hSe he hb hl
+            (fun h xs hgp a c ha hc hax hcy hxs => gFix_false (fun h' h'p => hgo0 (Or.inl ⟨hx5, hy5⟩) h' xs h'p a c ha hc hax hcy hxs) hgp (hax.trans_ne hx4) (hax.trans_ne hx5) (hcy.trans_ne hy4) (hcy.trans_ne hy5)) hpFix
+          exact Or.inl ⟨z', r, hf, hst, hI.after_fixed_bi ht hb hx4 hx5 hy4 hy5, hmem⟩
+
+lemma mvSym_sound {R : ℕ → ℕ} {pb : List ℕ} {w4 w5 : ℕ}
+    (ht : TwinSpec pb w4 w5) (hR : RR R) (hRphi : ∀ x, R (phiFull pb x) = R x)
+    (hm_phi : phiFull pb m = m) (hT_phi : phiFull pb T = T)
+    {FSym FFree : ℕ → ℕ → ℕ → List W → Bool}
+    (hFS : ∀ (k t z : ℕ) (v : List W) (S : Finset ℕ), t ≤ 1 → FSym k t z v = false → StOk P T l k t z v S → Cod R v → Inv pb w4 w5 S →
+      ∀ k' ≤ k, ¬ Min R m T k' t S)
+    (hFF : ∀ (k t z : ℕ) (v : List W) (S : Finset ℕ), FFree k t z v = false → StOk P T l k t z v S → Cod R v →
+      ∀ k' ≤ k, ¬ Min R m T k' t S)
+    {k t z y : ℕ} {v : List W} {S : Finset ℕ} (ht1 : t ≤ 1)
+    (hs : StOk P T l k t z v S) (hcod : Cod R v) (hI : Inv pb w4 w5 S) (hlen : 2 ≤ v.length)
+    (h : mvSym w4 w5 FSym FFree l m g k t z v y = false) {k' : ℕ} (hk : k' ≤ k) (hm : Min R m T k' t S)
+    (hy : y = 0 ∨ (y = 1 ∧ v.length + t = k ∧ NK R m T k' t S)) : False := by
+  have hcard := hs.rep.card
+  obtain ⟨hA, hNall⟩ := or_false' X h
+  have codB : ∀ {v r : List W} {o : ℕ}, Cod R v → (∀ w ∈ r, (w.s = o ∧ w.r = 0) ∨ w ∈ v) → Cod R r := fun hv hr w hw =>
+    (hr w hw).elim (fun h => Or.inl h.2) (hv w)
+  have codU : ∀ {v r : List W} {o : W}, Cod R v → (∀ w ∈ r, w = notW m o ∨ w ∈ v) → Cod R r := fun hv hr w hw =>
+    (hr w hw).elim (fun h => Or.inl (by rw [h]; rfl)) (hv w)
+  rcases first_move k' t S hm (by omega) with
+    ⟨k0, d, a, b, S1, rfl, hb, hl⟩ | ⟨k0, t0, a, d, c, S1, S2, rfl, rfl, hu, hb, hl⟩ |
+    ⟨k0, t0, a, a', d, S1, S2, S3, rfl, rfl, hu, hne, hu', hb, hl⟩
+  · obtain ⟨k, rfl⟩ : ∃ j, k = j + 1 := ⟨k - 1, by omega⟩
+    rw [pos_eq] at hA
+    have hpn : ∀ {x' y' : ℕ} {S' : Finset ℕ}, Bi R d x' y' S S' →
+        ∀ h' xs, pairsN h' xs = false → ∀ a' c' : W, a' ∈ v → c' ∈ v → a'.s = x' → c'.s = y' →
+        xs = v.map (mkx (pos' t) l (wst (pos' t) l v)) →
+        h' (mkx (pos' t) l (wst (pos' t) l v) a') (mkx (pos' t) l (wst (pos' t) l v) c') = false ∨
+        h' (mkx (pos' t) l (wst (pos' t) l v) c') (mkx (pos' t) l (wst (pos' t) l v) a') = false := by
+      intro x' y' S' hb' h' xs hp a' c' ha' hc' hax hcy hxs
+      subst hxs
+      refine pairsN_false hp (List.mem_map_of_mem ha') (List.mem_map_of_mem hc') (fun e => hb'.1 (by rw [← hax, ← hcy]; exact congrArg L_meta_52620.X.s e)) ?_
+      by_contra hc''; push Not at hc''
+      obtain ⟨_, _, _, _, hal⟩ := hb'
+      have h1 : a'.r = R a'.s := (hcod a' ha').resolve_left hc''.1
+      have h2 : c'.r = R c'.s := (hcod c' hc').resolve_left hc''.2
+      rw [← hax, ← hcy] at hal
+      exact hR _ _ _ (by rw [← h1]; exact hc''.1) (by rw [← h2]; exact hc''.2) hal
+    have hb_phi : Bi R d (phiFull pb a) (phiFull pb b) S (S1.image (phiFull pb)) := by
+      have := hb.map_phi_R ht.1 hRphi; rwa [hI.image_eq ht] at this
+    rcases nodeSym_bi X ht hRphi hm_phi hT_phi hs hm hI (by omega) rfl rfl (NK.sizeB hcard hm hk hb hl hy) (eN_of hy) hb hl
+      (fun _ => hpn hb) (fun _ => hpn hb_phi) hA with
+      ⟨z', r, hf, hst, hI', hmem⟩ | ⟨S'', x'', y'', z', r, hb'', hl'', hf, hst, hmem⟩
+    · exact hFS _ _ _ _ _ ht1 hf hst (codB hcod hmem) hI' k0 (by simpa using hk) (hb.min hl hm.2)
+    · exact hFF _ _ _ _ _ hf hst (codB hcod hmem) k0 (by simpa using hk) (hb''.min hl'' hm.2)
+  · obtain rfl : t0 = 0 := by omega
+    obtain ⟨k, rfl⟩ : ∃ j, k = j + 2 := ⟨k - 2, by omega⟩
+    have hl1 := hb.live hl
+    obtain ⟨hNfix, hN4⟩ := or_false' X hNall
+    by_cases ha4 : a = w4
+    · obtain ⟨wa, hwa, hwas⟩ := hs.rep.mem.1 hu.sub.1
+      have hwa4 : wa.s = w4 := hwas.trans ha4
+      obtain ⟨z1, r1, hf1, hst1, hmem1⟩ := nots_sound X (k := k + 1) hs hm (by omega) rfl (NK.sizeU hcard hm hk hu hl1 hy) (hwas ▸ hu) hl1 hwa (by omega) (filt4_mem hwa hwa4) hN4
+      have hm1 := hu.min hl1 hm.2
+      have hf1 := cv_ok X hst1 hl1 (by simpa [pos_eq] using hf1)
+      obtain ⟨y1, hF1, hy1⟩ := tst_sound X hst1 hm1 (by omega)
+      have hf1 := (hF1 _).symm.trans hf1; beta_reduce at hf1
+      obtain ⟨z', r, hf, hst, hmem⟩ := node_bi X hst1 hm1 (by omega) rfl rfl (NK.sizeB hst1.rep.card hm1 (by omega) hb hl hy1) (eN_of hy1) (hwas ▸ hb) hl
+        (fun h' xs hp a' c' ha' hc' hax hcy hxs => by subst hxs; exact Or.inl (pairsP_false hp (List.mem_map_of_mem ha') hax (List.mem_map_of_mem hc') (fun e => hb.1 (by change c'.s = _ at e; rw [← hwas, ← e, hcy])))) hf1
+      exact hFF _ _ _ _ _ hf hst (codB (codU hcod hmem1) hmem) k0 (by simpa using hk) (hb.min hl hm1.2)
+    · by_cases ha5 : a = w5
+      · have hu' : Un m w4 S (S1.image (phiFull pb)) := by
+          have := hu.map_phi hm_phi; rwa [hI.image_eq ht, ha5, ht.2.2.1] at this
+        have hb' : Bi R d (w4 ^^^ m) (phiFull pb c) (S1.image (phiFull pb)) (S2.image (phiFull pb)) := by
+          have := hb.map_phi_R ht.1 hRphi; rwa [phiFull_xor, hm_phi, ha5, ht.2.2.1] at this
+        have hl' : Live R m T k0 0 (S2.image (phiFull pb)) := hl.map_phi_R ht.1 hRphi hm_phi hT_phi
+        have hl1' : Live R m T (k0 + 1) 0 (S1.image (phiFull pb)) := hb'.live hl'
+        obtain ⟨wa, hwa, hwas⟩ := hs.rep.mem.1 hu'.sub.1
+        obtain ⟨z1, r1, hf1, hst1, hmem1⟩ := nots_sound X (k := k + 1) hs hm (by omega) rfl (NK.sizeU hcard hm hk hu' hl1' hy) (hwas ▸ hu') hl1' hwa (by omega) (filt4_mem hwa hwas) hN4
+        have hm1 := hu'.min hl1' hm.2
+        have hf1 := cv_ok X hst1 hl1' (by simpa [pos_eq] using hf1)
+        obtain ⟨y1, hF1, hy1⟩ := tst_sound X hst1 hm1 (by omega)
+        have hf1 := (hF1 _).symm.trans hf1; beta_reduce at hf1
+        obtain ⟨z', r, hf, hst, hmem⟩ := node_bi X hst1 hm1 (by omega) rfl rfl (NK.sizeB hst1.rep.card hm1 (by omega) hb' hl' hy1) (eN_of hy1) (hwas ▸ hb') hl'
+          (fun h' xs hp a' c' ha' hc' hax hcy hxs => by subst hxs; exact Or.inl (pairsP_false hp (List.mem_map_of_mem ha') hax (List.mem_map_of_mem hc') (fun e => hb'.1 (by change c'.s = _ at e; rw [← hwas, ← e, hcy])))) hf1
+        exact hFF _ _ _ _ _ hf hst (codB (codU hcod hmem1) hmem) k0 (by simpa using hk) (hb'.min hl' hm1.2)
+      · obtain ⟨wa, hwa, hwas⟩ := hs.rep.mem.1 hu.sub.1
+        obtain ⟨z1, r1, hf1, hst1, hmem1⟩ := nots_sound X (k := k + 1) hs hm (by omega) rfl (NK.sizeU hcard hm hk hu hl1 hy) (hwas ▸ hu) hl1 hwa (by omega) (filtFix_mem hwa (hwas.trans_ne ha4) (hwas.trans_ne ha5)) hNfix
+        have hm1 := hu.min hl1 hm.2
+        have hI1 := hI.after_fixed_un ht hm_phi hu ha4 ha5
+        have hf1 := cv_ok X hst1 hl1 (by simpa [pos_eq] using hf1)
+        obtain ⟨y1, hF1, hy1⟩ := tst_sound X hst1 hm1 (by omega)
+        have hf1 := (hF1 _).symm.trans hf1; beta_reduce at hf1
+        have hfa : phiFull pb (wa.s ^^^ m) = wa.s ^^^ m := by rw [phiFull_xor, hwas, hI.2 a hu.sub.1 ha4 ha5, hm_phi]
+        rcases nodeSym_bi X ht hRphi hm_phi hT_phi hst1 hm1 hI1 (by omega) rfl rfl (NK.sizeB hst1.rep.card hm1 (by omega) hb hl hy1) (eN_of hy1) (hwas ▸ hb) hl
+          (fun _ h' xs hp a' c' ha' hc' hax hcy hxs => by
+            subst hxs
+            exact Or.inl (pairsP_false hp (List.mem_map_of_mem ha') hax (List.mem_map_of_mem hc') (fun e => hb.1 (by change c'.s = _ at e; rw [← hwas, ← e, hcy]))))
+          (fun _ h' xs hp a' c' ha' hc' hax hcy hxs => by
+            subst hxs
+            exact Or.inl (pairsP_false hp (List.mem_map_of_mem ha') (hax.trans hfa) (List.mem_map_of_mem hc') (fun e => hb.1 (phiFull_inj ht.1 (by change c'.s = _ at e; rw [← hwas, hfa, ← e, hcy]))))) hf1 with
+          ⟨z', r, hf, hst, hI2, hmem⟩ | ⟨S'', x'', y'', z', r, hb'', hl'', hf, hst, hmem⟩
+        · exact hFS _ _ _ _ _ (by omega) hf hst (codB (codU hcod hmem1) hmem) hI2 k0 (by simpa using hk) (hb.min hl hm1.2)
+        · exact hFF _ _ _ _ _ hf hst (codB (codU hcod hmem1) hmem) k0 (by simpa using hk) (hb''.min hl'' hm1.2)
+  · omega
+
+theorem lookSym_sound {R : ℕ → ℕ} {pb : List ℕ} {w4 w5 : ℕ}
+    (ht : TwinSpec pb w4 w5) (hR : RR R) (hRphi : ∀ x, R (phiFull pb x) = R x)
+    (hm_phi : phiFull pb m = m) (hT_phi : phiFull pb T = T) :
+    ∀ (fuel k t z : ℕ) (v : List W) (S : Finset ℕ), t ≤ 1 → lookSym w4 w5 l m g fuel k t z v = false →
+      StOk P T l k t z v S → Cod R v → Inv pb w4 w5 S → ∀ k' ≤ k, ¬ Min R m T k' t S := by
+  intro fuel
+  induction fuel with
+  | zero => intro k t z v S _ h; simp [lookSym] at h
+  | succ fuel ih =>
+    intro k t z v S ht1 h hs hcod hI k' hk hm
+    change (Bool.rec (motive := fun _ => Bool) (tst (pos t) l (k + 1 - t) v (fun y => mvSym w4 w5 (lookSym w4 w5 l m g fuel) (look l m g fuel) l m g k t z v y)) true (Nat.ble v.length 1) : Bool) = false at h
+    rw [bR, pos_eq] at h
+    cases h0 : Nat.ble v.length 1 with
+    | true => rw [h0] at h; simp at h
+    | false =>
+      rw [h0, cond_false] at h
+      have hlen : 2 ≤ v.length := by by_contra hc; rw [Nat.ble_eq_true_of_le (by omega)] at h0; simp at h0
+      obtain ⟨y, hFy, hyk⟩ := tst_sound X hs hm hk
+      have hy := (hFy _).symm.trans h; beta_reduce at hy
+      exact mvSym_sound X ht hR hRphi hm_phi hT_phi ih (look_sound X hR fuel) ht1 hs hcod hI hlen hy hk hm hyk
+
+theorem look1Sym_sound {R : ℕ → ℕ} {pb : List ℕ} {w4 w5 : ℕ}
+    (ht : TwinSpec pb w4 w5) (hR : RR R) (hR2 : ∀ d a b, (R a = 0 ∨ R b = 0) → Al R d a b)
+    (hRphi : ∀ x, R (phiFull pb x) = R x) (hm_phi : phiFull pb m = m) (hT_phi : phiFull pb T = T) {K : ℕ} :
+    ∀ (fuel k t z : ℕ) (v : List W) (S : Finset ℕ), t ≤ 1 → look1Sym w4 w5 l m g K fuel k t z v = false →
+      StOk P T l k t z v S → (∀ w ∈ v, w.r = R w.s) → Inv pb w4 w5 S →
+      ∀ k' ≤ k, Live Z0 m T k' t S → (∀ q < k', ¬ Sol Z0 m T q (C m ({x | R x ≠ 0} ∪ (S : Set ℕ)))) → False := by
+  intro fuel
+  induction fuel with
+  | zero => intro k t z v S _ h; simp [look1Sym] at h
+  | succ fuel ih =>
+    intro k t z v S ht1 h hs hcod hI k' hk hl hmW
+    change (Bool.rec (motive := fun _ => Bool) (tst (pos t) l (k + 1 - t) v (fun y =>
+      Bool.rec (motive := fun _ => Bool) (mvSym w4 w5 (lookSym w4 w5 l m g K) (look l m g K) l m g k t z v y) true
+        (nodeSym w4 w5 (look1Sym w4 w5 l m g K fuel (k - 1) t) (look1 l m g K fuel (k - 1) t) (pos t) l m g (k - t - y) v.length z v pairsS))) true (Nat.ble v.length 1) : Bool) = false at h
+    rw [bR, pos_eq] at h
+    cases h0 : Nat.ble v.length 1 with
+    | true => rw [h0] at h; simp at h
+    | false =>
+      rw [h0, cond_false] at h
+      have hlen : 2 ≤ v.length := by by_contra hc; rw [Nat.ble_eq_true_of_le (by omega)] at h0; simp at h0
+      have hmin : Min Z0 m T k' t S := ⟨hl, fun q hq hs => hmW q hq (hs.mono le_rfl (C_mono Set.subset_union_right))⟩
+      obtain ⟨y, hFy, hyk⟩ := tst_sound X hs hmin hk
+      have hy := (hFy _).symm.trans h; beta_reduce at hy
+      obtain ⟨hy1, hy2⟩ := or_false' X hy
+      rcases front hR2 hl hmW with hlR | ⟨k0, d, a, b, S1, rfl, ha, hb', hb, hl1⟩
+      · exact mvSym_sound X ht hR hRphi hm_phi hT_phi (lookSym_sound X ht hR hRphi hm_phi hT_phi K) (look_sound X hR K)
+          ht1 hs (fun w hw => Or.inr (hcod w hw)) hI hlen hy2 hk ⟨hlR, hmin.2⟩ (hyk.imp id fun ⟨q1, q2, q3⟩ => ⟨q1, q2, q3.toR⟩)
+      · obtain ⟨k, rfl⟩ : ∃ j, k = j + 1 := ⟨k - 1, by omega⟩
+        have hR0 : ∀ x, Z0 (phiFull pb x) = Z0 x := fun _ => rfl
+        have hcod' : ∀ {x'' y'' : ℕ} {S'' : Finset ℕ} {r : List W}, Bi Z0 d x'' y'' S S'' → Live Z0 m T k0 t S'' →
+            (∀ w ∈ r, (w.s = op d x'' y'' ∧ w.r = 0) ∨ w ∈ v) → (∀ w ∈ r, w.r = R w.s) ∧
+            (∀ q < k0, ¬ Sol Z0 m T q (C m ({x | R x ≠ 0} ∪ (S'' : Set ℕ)))) := by
+          intro x'' y'' S'' r hb'' hl'' hmem
+          have hfr : R (op d x'' y'') = 0 := by
+            by_contra hne
+            refine hmW k0 (by omega) (hl''.sol.mono le_rfl fun x hx => ?_)
+            have hx' := hb''.sub.2.2 hx; simp only [Finset.mem_insert] at hx'
+            rcases hx' with rfl | hx'; exact Or.inl (Or.inl hne); exact Or.inl (Or.inr hx')
+          refine ⟨fun w hw => (hmem w hw).elim (fun ⟨e1, e2⟩ => by rw [e1, e2, hfr]) (hcod w), fun q hq hs' => ?_⟩
+          refine hmW (q + 1) (by omega) (.bi (d := d) (a := x'') (b := y'') (Or.inl (Or.inr hb''.sub.1)) (Or.inl (Or.inr hb''.sub.2.1)) (al0 _ _ _) (hs'.mono le_rfl ?_))
+          rintro x ((hx | hx) | hx)
+          · exact Or.inr (Or.inl (Or.inl hx))
+          · have hx' := hb''.sub.2.2 hx; simp only [Finset.mem_insert] at hx'
+            rcases hx' with rfl | hx'; exact Or.inl rfl; exact Or.inr (Or.inl (Or.inr hx'))
+          · exact Or.inr (Or.inr hx)
+        rcases nodeSym_bi X ht hR0 hm_phi hT_phi hs hmin hI (by omega) rfl rfl (NK.sizeB hs.rep.card hmin hk hb hl1 hyk) (eN_of hyk) hb hl1
+          (fun _ h' xs hp a' c' ha' hc' hax hcy hxs => by
+            subst hxs
+            exact pairs_any hp (fs_mem (List.mem_map_of_mem ha') (by change a'.r ≠ 0; rw [hcod a' ha', hax]; exact ha))
+              (fs_mem (List.mem_map_of_mem hc') (by change c'.r ≠ 0; rw [hcod c' hc', hcy]; exact hb'))
+              (fun e => hb.1 (by rw [← hax, ← hcy]; exact congrArg L_meta_52620.X.s e)))
+          (fun _ h' xs hp a' c' ha' hc' hax hcy hxs => by
+            subst hxs
+            exact pairs_any hp (fs_mem (List.mem_map_of_mem ha') (by change a'.r ≠ 0; rw [hcod a' ha', hax, hRphi]; exact ha))
+              (fs_mem (List.mem_map_of_mem hc') (by change c'.r ≠ 0; rw [hcod c' hc', hcy, hRphi]; exact hb'))
+              (fun e => hb.1 (phiFull_inj ht.1 (by rw [← hax, ← hcy]; exact congrArg L_meta_52620.X.s e)))) hy1 with
+          ⟨z', r, hf, hst, hI', hmem⟩ | ⟨S'', x'', y'', z', r, hb'', hl'', hf, hst, hmem⟩
+        · obtain ⟨hc1, hm1⟩ := hcod' hb hl1 hmem
+          exact ih _ _ _ _ _ ht1 hf hst hc1 hI' k0 (by simpa using hk) hl1 hm1
+        · obtain ⟨hc1, hm1⟩ := hcod' hb'' hl'' hmem
+          exact look1_sound X hR hR2 fuel _ _ _ _ _ hf hst hc1 k0 (by simpa using hk) hl'' hm1
+end twinSound
+
+lemma imp_of_live_twin_no5 {Q M : List (ℕ × ℕ)} {Z L k t : ℕ} {S : Finset ℕ}
+    (hpb : pbitOk pbSig = true) (hsg : sigOk sigS = true) (hr : rawOk pbSig sigS Z = true)
+    (hmz : phiFull pbSig (mz Z) = mz Z) (htz : phiFull pbSig (tz Z) = tz Z) (hne : w4Z Z ≠ w5Z Z)
+    (hp : pOk Z Q = true) (hL : L ≤ 16) (ht1 : t ≤ 1) (hI : ∀ e ∈ Q, ImpB [] e.1 e.2 t)
+    (hk : k < L) (hS : (S : Set ℕ) ⊆ C (mz Z) (WZ [] Z)) (hl : Live Z0 (mz Z) (tz Z) k t S)
+    (hmin : ∀ q < k, ¬ Sol Z0 (mz Z) (tz Z) q (C (mz Z) (WZ [] Z)))
+    (hM : mTwin Z M = true) (hchk : ∀ p ∈ M, chkSym (w4Z Z) (w5Z Z) [] Q Z (L - 1) t p.1 p.2 = false)
+    (h5 : w5Z Z ∈ S → w4Z Z ∈ S) : False := by
+  have hp' := hp
+  simp only [pOk, Bool.and_eq_true, Bool.not_eq_true', List.all_eq_true] at hp'
+  obtain ⟨⟨hp0, hp1⟩, hp2⟩ := hp'
+  have nb : ∀ {x y : ℕ}, Nat.beq x y = false → x ≠ y := fun h e => by rw [e, Nat.beq_refl] at h; simp at h
+  have hT : tz Z &&& mz Z = tz Z := by simp only [tz, nl, Nat.and_assoc, Nat.and_self]
+  classical
+  have hCS : C (mz Z) (S : Set ℕ) ⊆ C (mz Z) (WZ [] Z) := fun x hx => hx.elim (fun h => hS h) Or.inr
+  have hm : Min Z0 (mz Z) (tz Z) k t S := ⟨hl, fun q' hq' hs => hmin q' hq' (hs.mono le_rfl hCS)⟩
+  have hbd : ∀ x ∈ S, x &&& mz Z = x := by
+    intro x hx; rcases hS hx with ⟨w, _, rfl⟩ | h
+    · rw [Nat.and_assoc, Nat.and_self]
+    · simp at h; rcases h with rfl | rfl <;> simp
+  obtain ⟨h0, h1⟩ := hm.proper hT (nb hp0) (nb hp1) hbd
+  have hSW : (S : Set ℕ) ⊆ WZ [] Z := by
+    intro x hx; rcases hS hx with h | h; exact h
+    simp at h; rcases h with rfl | rfl; exact absurd hx h0; exact absurd hx h1
+  have hproj : ∀ e ∈ Q, mz e.1 &&& mz Z = mz e.1 ∧ tz e.1 ≠ 0 ∧ tz e.1 ≠ mz e.1 := fun e he => by
+    obtain ⟨⟨a, b⟩, c⟩ := hp2 e he; exact ⟨Nat.eq_of_beq_eq_true a, nb b, nb c⟩
+  have hno : ∀ e ∈ Q, ∀ q, q + t < e.2 → ¬ SolB (mz e.1) (tz Z &&& mz e.1) q t (C (mz e.1) (Im (mz e.1) S)) := fun e he q hq hs => by
+    have h3 := (hproj e he).1; rw [tz_sub h3] at hs
+    exact hI e he q hq (hs.mono le_rfl le_rfl (C_mono (Im_WZ h3 hSW)))
+  have htk := hm.size.2
+  obtain ⟨a1, a2, a3⟩ := avl_spec (PZ Q) (mz Z) (rawL [])
+  set v := (avl (PZ Q) (mz Z) (rawL [])).filter (fun w => decide (w.s ∈ S)) with hv
+  have hsub : v.Sublist (avl (PZ Q) (mz Z) (rawL [])) := List.filter_sublist
+  have hnd : (v.map W.s).Nodup := by rw [List.Nodup, List.pairwise_map]; exact (a1.sublist hsub).imp fun h => Nat.ne_of_gt h
+  have hrep : Rep v S := by
+    refine ⟨hnd, Finset.ext fun x => ?_⟩
+    rw [List.mem_toFinset, List.mem_map]; constructor
+    · rintro ⟨w, hw, rfl⟩; rw [hv, List.mem_filter] at hw; simpa using hw.2
+    · intro hx; obtain ⟨w, hw, rfl⟩ := hSW hx
+      obtain ⟨w', hw', e⟩ := a3 w hw (fun e => h0 (e ▸ hx)) (fun e => h1 (e ▸ hx))
+      exact ⟨w', by rw [hv, List.mem_filter]; exact ⟨hw', by simpa [e] using hx⟩, e⟩
+  have hwok : ∀ w ∈ v, WOk (PZ Q) w := fun w hw => by obtain ⟨x, _, rfl⟩ := a2 w (hsub.subset hw); exact mkW_ok _ _
+  have hcod : ∀ w ∈ v, w.r = RZ [] Z w.s := fun w hw => by
+    obtain ⟨x, hx, rfl⟩ := a2 w (hsub.subset hw)
+    have : x &&& mz Z ∈ WZ [] Z := ⟨x, hx, rfl⟩
+    change 3 = RZ [] Z (x &&& mz Z); rw [RZ, if_pos this]
+  have hgood : ∀ w ∈ v, Good (lz Z) w.s := fun w hw => by obtain ⟨x, hx, rfl⟩ := a2 w (hsub.subset hw); exact wire_good (rawL_sub (by simp) hx) Z
+  have hPlen : (PZ Q).length = Q.length := by simp [PZ]
+  have hPget : ∀ j < (PZ Q).length, (PZ Q).getD j 0 = mz (Q.getD j (0, L - 1)).1 ∧ Q.getD j (0, L - 1) ∈ Q := fun j hj => by
+    rw [hPlen] at hj; simp [PZ, List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_eq_getElem hj]
+  have X : Ctx (PZ Q) (lz Z) (mz Z) (pL (Q.map fun _ => 16)) (tz Z) := by
+    refine ⟨fun i hi => lz_lg Z i hi, fun j hj => ?_, ?_⟩
+    · obtain ⟨e1, e2⟩ := hPget j hj; have h3 := hproj _ e2; rw [e1, tz_sub h3.1]; exact h3
+    · rw [pL_pk, List.length_map, hPlen]; refine pk_congr fun j hj => ?_
+      rw [List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_eq_getElem hj]; rfl
+  have hcl : Cl (PZ Q) (tz Z) (L - 1) t (fun j => L - 1 - (Q.getD j (0, L - 1)).2) S := fun j hj q hq => by
+    obtain ⟨e1, e2⟩ := hPget j hj; have hq' : q + t + (L - 1 - (Q.getD j (0, L - 1)).2) < L - 1 := hq
+    rw [e1]; exact hno _ e2 q (by omega)
+  have hle := cnt_le X hrep hwok hcl hm (by omega)
+  have hst : StOk (PZ Q) (tz Z) (lz Z) (L - 1) t (pL (Q.map fun e => 16 + (L - 1 - e.2)) - sumc v) v S := by
+    refine ⟨hrep, hwok, hgood, _, fun j _ => by omega, hcl, ?_⟩
+    rw [sumc_eq hwok, pk16, pk_sub]; intro j hj; have := hle j hj; omega
+  have hcov : ∀ i, (lz Z).testBit i = true → (0 : ℕ).testBit i = true ∨ (cov (pos t) (lz Z) v).testBit i = true := fun i hli => by
+    right; rw [cov_bit]; obtain ⟨⟨m1, m2, t1, t2⟩, _⟩ := lz_lg Z i hli
+    obtain ⟨w, hw, hs⟩ := hl.cov m1 m2 t1 t2; obtain ⟨w', hw', rfl⟩ := hrep.mem.1 hw
+    exact ⟨w', hw', by rw [sp_bit, hli, pos_eq, hs]; rfl⟩
+  have hsz := hm.size.1
+  have hcard := hrep.card
+  have hble : Nat.ble v.length (Nat.sub (Nat.succ (L - 1)) t) = true := Nat.ble_eq_true_of_le (by change v.length ≤ L - 1 + 1 - t; omega)
+  have hhas : hasP (pwr [] Z) v = true := hasP_ok (Or.inl rfl)
+  have htop_of : ∀ p ∈ M, topSym (w4Z Z) (w5Z Z) (lz Z) (mz Z) (pL (Q.map fun _ => 16)) (L - 1) p.1 p.2 (L - 1) t (pL (Q.map fun e => 16 + (L - 1 - e.2)) - sumc v) v = false := by
+    intro p hpM
+    have hc := hchk p hpM
+    simp only [chkSym, frc_eq] at hc
+    have h3 := anySub_false (by simp) hc v hsub hcov
+    simp only [startvSym, hhas, hble] at h3
+    exact child_sound X (f := fun z r => topSym (w4Z Z) (w5Z Z) (lz Z) (mz Z) _ (L - 1) p.1 p.2 (L - 1) t z r) (fun _ => rfl) hst hm (by omega) h3
+  have hmW : ∀ q < k, ¬ Sol Z0 (mz Z) (tz Z) q (C (mz Z) ({x | RZ [] Z x ≠ 0} ∪ (S : Set ℕ))) := fun q hq hs => by
+    rw [RZ_set] at hs; refine hmin q hq (hs.mono le_rfl ?_)
+    rintro x ((hx | hx) | hx); exact Or.inl hx; exact Or.inl (hSW hx); exact Or.inr hx
+  have hM2 : M.any (fun p => Nat.beq p.2 1) = true := by simp only [mTwin, Bool.and_eq_true] at hM; exact hM.2
+  by_cases hw5 : hasW (w5Z Z) v = true
+  · have h5S : w5Z Z ∈ S := by obtain ⟨w, hw, he⟩ := (hasW_iff _ _).1 hw5; exact hrep.mem.2 ⟨w, hw, he⟩
+    have h4S : w4Z Z ∈ S := h5 h5S
+    have hw4 : hasW (w4Z Z) v = true := (hasW_iff _ _).2 (hrep.mem.1 h4S)
+    have hInv : Inv pbSig (w4Z Z) (w5Z Z) S := ⟨⟨fun _ => h5S, fun _ => h4S⟩, fun x hx hx4 hx5 => WZ_fix_other hr (hSW hx) hx4 hx5⟩
+    have hts := TwinSpec_sig hpb hr hne
+    have hRZphi := RZ_phi hpb hsg hr
+    have hR0 : ∀ x, Z0 (phiFull pbSig x) = Z0 x := fun _ => rfl
+    set g0 := pL (Q.map fun _ => 16)
+    set z0 := pL (Q.map fun e => 16 + (L - 1 - e.2)) - sumc v
+    have htop2 : ∀ p ∈ M, (Bool.rec (motive := fun _ => Bool) (tst (pos t) (lz Z) (L - 1 + 1 - t) v (fun y =>
+        Bool.rec (motive := fun _ => Bool) (Bool.rec (motive := fun _ => Bool) false (mvSym (w4Z Z) (w5Z Z) (lookSym (w4Z Z) (w5Z Z) (lz Z) (mz Z) g0 (L - 1)) (look (lz Z) (mz Z) g0 (L - 1)) (lz Z) (mz Z) g0 (L - 1) t z0 v y) (Nat.beq p.2 1)) true
+        (nodeSym (w4Z Z) (w5Z Z) (look1Sym (w4Z Z) (w5Z Z) (lz Z) (mz Z) g0 (L - 1) (L - 1) (L - 1 - 1) t) (look1 (lz Z) (mz Z) g0 (L - 1) (L - 1) (L - 1 - 1) t) (pos t) (lz Z) (mz Z) g0 (L - 1 - t - y) v.length z0 v (fun h xs => pairsC p.1 h (fs xs))))) true (Nat.ble v.length 1) : Bool) = false := by
+      intro p hpM; have h := htop_of p hpM; simp only [topSym, hw5, hw4] at h; exact h
+    cases hlen0 : Nat.ble v.length 1 with
+    | true =>
+      obtain ⟨p0, hp0M, _⟩ := List.any_eq_true.1 hM2
+      have := htop2 p0 hp0M; rw [bR, hlen0] at this; simp at this
+    | false =>
+      have hlen : 2 ≤ v.length := by by_contra hc; rw [Nat.ble_eq_true_of_le (by omega)] at hlen0; simp at hlen0
+      obtain ⟨y, hFy, hyk⟩ := tst_sound X hst hm (by omega)
+      rcases front (RZ_R2 [] Z) hl hmW with hlR | ⟨k0, d, a, b, S1, rfl, ha, hb', hbi, hl1⟩
+      · obtain ⟨p0, hp0M, hp01⟩ := List.any_eq_true.1 hM2
+        have h := htop2 p0 hp0M; rw [bR, pos_eq, hlen0, Bool.cond_false] at h
+        have hboth := or_false' X ((hFy _).symm.trans h)
+        have hmv := hboth.2; rw [bR, Nat.eq_of_beq_eq_true hp01, Nat.beq_refl, Bool.cond_true] at hmv
+        exact mvSym_sound X hts (RZ_R [] Z) hRZphi hmz htz (lookSym_sound X hts (RZ_R [] Z) hRZphi hmz htz (L - 1)) (look_sound X (RZ_R [] Z) (L - 1))
+          ht1 hst (fun w hw => Or.inr (hcod w hw)) hInv hlen hmv (by omega) ⟨hlR, hm.2⟩ (hyk.imp id fun ⟨q1, q2, q3⟩ => ⟨q1, q2, q3.toR⟩)
+      · have haW : a ∈ WZ [] Z := by rw [← RZ_set]; exact ha
+        have hbW : b ∈ WZ [] Z := by rw [← RZ_set]; exact hb'
+        have ha0 : a ≠ 0 := fun e => h0 (e ▸ hbi.sub.1)
+        have ha1 : a ≠ mz Z := fun e => h1 (e ▸ hbi.sub.1)
+        have hb0 : b ≠ 0 := fun e => h0 (e ▸ hbi.sub.2.1)
+        have hb1 : b ≠ mz Z := fun e => h1 (e ▸ hbi.sub.2.1)
+        obtain ⟨p, hpM, hpH⟩ : ∃ p ∈ M,
+            (((a ≠ w5Z Z ∧ b ≠ w5Z Z) ∨ a = w4Z Z ∨ b = w4Z Z) → hb p.1 (a + b) = true) ∧
+            (((a = w5Z Z ∧ b ≠ w4Z Z) ∨ (b = w5Z Z ∧ a ≠ w4Z Z)) → hb p.1 (phiFull pbSig a + phiFull pbSig b) = true) := by
+          by_cases hcase : (a ≠ w5Z Z ∧ b ≠ w5Z Z) ∨ a = w4Z Z ∨ b = w4Z Z
+          · obtain ⟨p, hpM, hpb'⟩ := mTwin_cover hM hne haW hbW hbi.1 ha0 ha1 hb0 hb1 hcase
+            exact ⟨p, hpM, fun _ => hpb', fun hc => by exfalso; rcases hc with ⟨rfl, hnb4⟩ | ⟨rfl, hna4⟩ <;> rcases hcase with ⟨h1, h2⟩ | h1 | h1 <;> first | exact h1 rfl | exact h2 rfl | exact hne h1.symm | exact hnb4 h1 | exact hna4 h1⟩
+          · have hphi_case : (a = w5Z Z ∧ b ≠ w4Z Z) ∨ (b = w5Z Z ∧ a ≠ w4Z Z) := by
+              by_cases ha5 : a = w5Z Z
+              · exact Or.inl ⟨ha5, fun e => hcase (Or.inr (Or.inr e))⟩
+              · by_cases hb5 : b = w5Z Z
+                · exact Or.inr ⟨hb5, fun e => hcase (Or.inr (Or.inl e))⟩
+                · exact (hcase (Or.inl ⟨ha5, hb5⟩)).elim
+            have hpaW : phiFull pbSig a ∈ WZ [] Z := phiFull_WZ2 hr hsg haW
+            have hpbW : phiFull pbSig b ∈ WZ [] Z := phiFull_WZ2 hr hsg hbW
+            have hpne : phiFull pbSig a ≠ phiFull pbSig b := fun e => hbi.1 (phiFull_inj hpb e)
+            have hpa0 : phiFull pbSig a ≠ 0 := fun e => ha0 (phiFull_inj hpb (e.trans (phiFull_zero pbSig).symm))
+            have hpa1 : phiFull pbSig a ≠ mz Z := fun e => ha1 (phiFull_inj hpb (e.trans hmz.symm))
+            have hpb0 : phiFull pbSig b ≠ 0 := fun e => hb0 (phiFull_inj hpb (e.trans (phiFull_zero pbSig).symm))
+            have hpb1 : phiFull pbSig b ≠ mz Z := fun e => hb1 (phiFull_inj hpb (e.trans hmz.symm))
+            have htw' : (phiFull pbSig a ≠ w5Z Z ∧ phiFull pbSig b ≠ w5Z Z) ∨ phiFull pbSig a = w4Z Z ∨ phiFull pbSig b = w4Z Z := by
+              rcases hphi_case with ⟨rfl, _⟩ | ⟨rfl, _⟩
+              · exact Or.inr (Or.inl hts.2.2.1)
+              · exact Or.inr (Or.inr hts.2.2.1)
+            obtain ⟨p, hpM, hpb'⟩ := mTwin_cover hM hne hpaW hpbW hpne hpa0 hpa1 hpb0 hpb1 htw'
+            exact ⟨p, hpM, fun hc => (hcase hc).elim, fun _ => hpb'⟩
+        have h := htop2 p hpM; rw [bR, pos_eq, hlen0, Bool.cond_false] at h
+        have hun := (or_false' X ((hFy _).symm.trans h)).1
+        generalize hK : L - 1 = K at hst hun hyk
+        obtain ⟨j, rfl⟩ : ∃ j, K = j + 1 := ⟨K - 1, by omega⟩
+        have hcod' : ∀ {x'' y'' : ℕ} {S'' : Finset ℕ} {r : List W}, Bi Z0 d x'' y'' S S'' → Live Z0 (mz Z) (tz Z) k0 t S'' →
+            (∀ w ∈ r, (w.s = op d x'' y'' ∧ w.r = 0) ∨ w ∈ v) → (∀ w ∈ r, w.r = RZ [] Z w.s) ∧
+            (∀ q < k0, ¬ Sol Z0 (mz Z) (tz Z) q (C (mz Z) ({x | RZ [] Z x ≠ 0} ∪ (S'' : Set ℕ)))) := by
+          intro x'' y'' S'' r hb'' hl'' hmem
+          have hfr : RZ [] Z (op d x'' y'') = 0 := by
+            by_contra hne'
+            refine hmW k0 (by omega) (hl''.sol.mono le_rfl fun x hx => ?_)
+            have hx' := hb''.sub.2.2 hx; simp only [Finset.mem_insert] at hx'
+            rcases hx' with rfl | hx'; exact Or.inl (Or.inl hne'); exact Or.inl (Or.inr hx')
+          refine ⟨fun w hw => (hmem w hw).elim (fun ⟨e1, e2⟩ => by rw [e1, e2, hfr]) (hcod w), fun q hq hs' => ?_⟩
+          refine hmW (q + 1) (by omega) (.bi (d := d) (a := x'') (b := y'') (Or.inl (Or.inr hb''.sub.1)) (Or.inl (Or.inr hb''.sub.2.1)) (al0 _ _ _) (hs'.mono le_rfl ?_))
+          rintro x ((hx | hx) | hx)
+          · exact Or.inr (Or.inl (Or.inl hx))
+          · have hx' := hb''.sub.2.2 hx; simp only [Finset.mem_insert] at hx'
+            rcases hx' with rfl | hx'; exact Or.inl rfl; exact Or.inr (Or.inl (Or.inr hx'))
+          · exact Or.inr (Or.inr hx)
+        have hpc : ∀ {x' y' : ℕ}, x' ≠ y' → RZ [] Z x' ≠ 0 → RZ [] Z y' ≠ 0 → hb p.1 (x' + y') = true →
+            ∀ h' xs, pairsC p.1 h' (fs xs) = false → ∀ a' c' : W, a' ∈ v → c' ∈ v → a'.s = x' → c'.s = y' →
+            xs = v.map (mkx (pos' t) (lz Z) (wst (pos' t) (lz Z) v)) →
+            h' (mkx (pos' t) (lz Z) (wst (pos' t) (lz Z) v) a') (mkx (pos' t) (lz Z) (wst (pos' t) (lz Z) v) c') = false ∨
+            h' (mkx (pos' t) (lz Z) (wst (pos' t) (lz Z) v) c') (mkx (pos' t) (lz Z) (wst (pos' t) (lz Z) v) a') = false := by
+          intro x' y' hxy hrx hry hpb' h' xs hp' a' c' ha' hc' hax hcy hxs
+          subst hxs
+          have hpw := pairsC_false hp'
+          have : Std.Symm (fun u w : L_meta_52620.X => hb p.1 (u.s + w.s) = true → (h' u w = false ∨ h' w u = false)) :=
+            ⟨fun u w h1 e => (h1 (by rw [Nat.add_comm]; exact e)).symm⟩
+          exact (hpw.imp (S := fun u w => hb p.1 (u.s + w.s) = true → (h' u w = false ∨ h' w u = false)) fun h1 e => Or.inl (h1 e)).forall
+            (fs_mem (List.mem_map_of_mem ha') (by change a'.r ≠ 0; rw [hcod a' ha', hax]; exact hrx))
+            (fs_mem (List.mem_map_of_mem hc') (by change c'.r ≠ 0; rw [hcod c' hc', hcy]; exact hry))
+            (fun e => hxy (by rw [← hax, ← hcy]; exact congrArg L_meta_52620.X.s e)) (by change hb p.1 (a'.s + c'.s) = true; rw [hax, hcy]; exact hpb')
+        rcases nodeSym_bi X hts hR0 hmz htz hst hm hInv (by omega) rfl rfl (NK.sizeB hcard hm (by omega) hbi hl1 hyk) (eN_of hyk) hbi hl1
+          (fun hc => hpc hbi.1 ha hb' (hpH.1 hc))
+          (fun hc => hpc (fun e => hbi.1 (phiFull_inj hpb e)) (by rw [hRZphi]; exact ha) (by rw [hRZphi]; exact hb') (hpH.2 hc)) hun with
+          ⟨z', r, hf, hst', hInv', hmem⟩ | ⟨S'', x'', y'', z', r, hb'', hl'', hf, hst', hmem⟩
+        · obtain ⟨hc1, hm1⟩ := hcod' hbi hl1 hmem
+          exact look1Sym_sound X hts (RZ_R [] Z) (RZ_R2 [] Z) hRZphi hmz htz (j + 1) _ _ _ _ _ ht1 hf hst' hc1 hInv' k0 (by change k0 ≤ j + 1 - 1; omega) hl1 hm1
+        · obtain ⟨hc1, hm1⟩ := hcod' hb'' hl'' hmem
+          exact look1_sound X (RZ_R [] Z) (RZ_R2 [] Z) (j + 1) _ _ _ _ _ hf hst' hc1 k0 (by change k0 ≤ j + 1 - 1; omega) hl'' hm1
+  · have hw5f : hasW (w5Z Z) v = false := Bool.eq_false_iff.2 hw5
+    have h5notS : w5Z Z ∉ S := fun h => hw5 ((hasW_iff _ _).2 (hrep.mem.1 h))
+    have htopC : ∀ p ∈ M, topC (lz Z) (mz Z) (pL (Q.map fun _ => 16)) (L - 1) p.1 p.2 (L - 1) t (pL (Q.map fun e => 16 + (L - 1 - e.2)) - sumc v) v = false := by
+      intro p hpM; have h := htop_of p hpM; simp only [topSym, hw5f] at h; exact h
+    cases hlen0 : Nat.ble v.length 1 with
+    | true =>
+      obtain ⟨p0, hp0M, _⟩ := List.any_eq_true.1 hM2
+      have h := htopC p0 hp0M; unfold topC at h; rw [bR, hlen0] at h; simp at h
+    | false =>
+      have hlen : 2 ≤ v.length := by by_contra hc; rw [Nat.ble_eq_true_of_le (by omega)] at hlen0; simp at hlen0
+      obtain ⟨y, hFy, hyk⟩ := tst_sound X hst hm (by omega)
+      rcases front (RZ_R2 [] Z) hl hmW with hlR | ⟨k0, d, a, b, S1, rfl, ha, hb', hbi, hl1⟩
+      · obtain ⟨p0, hp0M, hp01⟩ := List.any_eq_true.1 hM2
+        have h := htopC p0 hp0M; unfold topC at h; rw [bR, pos_eq, hlen0, Bool.cond_false] at h
+        have hboth := or_false' X ((hFy _).symm.trans h)
+        have hmv := hboth.2; rw [bR, Nat.eq_of_beq_eq_true hp01, Nat.beq_refl, Bool.cond_true] at hmv
+        exact mv_sound X (RZ_R [] Z) (look_sound X (RZ_R [] Z) (L - 1)) hst (fun w hw => Or.inr (hcod w hw)) hlen hmv k (by omega) ⟨hlR, hm.2⟩ (hyk.imp id fun ⟨q1, q2, q3⟩ => ⟨q1, q2, q3.toR⟩)
+      · have haW : a ∈ WZ [] Z := by rw [← RZ_set]; exact ha
+        have hbW : b ∈ WZ [] Z := by rw [← RZ_set]; exact hb'
+        have ha0 : a ≠ 0 := fun e => h0 (e ▸ hbi.sub.1)
+        have ha1 : a ≠ mz Z := fun e => h1 (e ▸ hbi.sub.1)
+        have hb0 : b ≠ 0 := fun e => h0 (e ▸ hbi.sub.2.1)
+        have hb1 : b ≠ mz Z := fun e => h1 (e ▸ hbi.sub.2.1)
+        have ha5 : a ≠ w5Z Z := fun e => h5notS (e ▸ hbi.sub.1)
+        have hb5 : b ≠ w5Z Z := fun e => h5notS (e ▸ hbi.sub.2.1)
+        obtain ⟨p, hpM, hpb'⟩ := mTwin_cover hM hne haW hbW hbi.1 ha0 ha1 hb0 hb1 (Or.inl ⟨ha5, hb5⟩)
+        have h := htopC p hpM; unfold topC at h; rw [bR, pos_eq, hlen0, Bool.cond_false] at h
+        have hun := (or_false' X ((hFy _).symm.trans h)).1
+        generalize hK : L - 1 = K at hst hun hyk
+        obtain ⟨j, rfl⟩ : ∃ j, K = j + 1 := ⟨K - 1, by omega⟩
+        obtain ⟨wa, hwa, rfl⟩ := hrep.mem.1 hbi.sub.1
+        obtain ⟨wb, hwb, rfl⟩ := hrep.mem.1 hbi.sub.2.1
+        obtain ⟨z', r, hf, hst', hmem⟩ := node_bi X hst hm (by omega) rfl rfl (NK.sizeB hcard hm (by omega) hbi hl1 hyk) (eN_of hyk) hbi hl1 (fun h' xs hp' a' c' ha' hc' hax hcy hxs => by
+          subst hxs; rw [hrep.inj ha' hwa hax, hrep.inj hc' hwb hcy]
+          have hpw := pairsC_false hp'
+          have : Std.Symm (fun u w : L_meta_52620.X => hb p.1 (u.s + w.s) = true → (h' u w = false ∨ h' w u = false)) :=
+            ⟨fun u w h1 e => (h1 (by rw [Nat.add_comm]; exact e)).symm⟩
+          exact (hpw.imp (S := fun u w => hb p.1 (u.s + w.s) = true → (h' u w = false ∨ h' w u = false)) fun h1 e => Or.inl (h1 e)).forall
+            (fs_mem (List.mem_map_of_mem hwa) (by change wa.r ≠ 0; rw [hcod wa hwa]; exact ha))
+            (fs_mem (List.mem_map_of_mem hwb) (by change wb.r ≠ 0; rw [hcod wb hwb]; exact hb'))
+            (fun e => hbi.1 (congrArg L_meta_52620.X.s e)) hpb') hun
+        have hfr : RZ [] Z (op d wa.s wb.s) = 0 := by
+          by_contra hne'
+          refine hmW k0 (by omega) (hl1.sol.mono le_rfl fun x hx => ?_)
+          have hx' := hbi.sub.2.2 hx; simp only [Finset.mem_insert] at hx'
+          rcases hx' with rfl | hx'; exact Or.inl (Or.inl hne'); exact Or.inl (Or.inr hx')
+        refine look1_sound X (RZ_R [] Z) (RZ_R2 [] Z) (j + 1) _ _ _ _ _ hf hst' ?_ k0 (by change k0 ≤ j + 1 - 1; omega) hl1 ?_
+        · intro w hw; rcases hmem w hw with ⟨e1, e2⟩ | h; rw [e1, e2, hfr]; exact hcod w h
+        · intro q hq hs'
+          refine hmW (q + 1) (by omega) (.bi (d := d) (a := wa.s) (b := wb.s) (Or.inl (Or.inr hbi.sub.1)) (Or.inl (Or.inr hbi.sub.2.1)) (al0 _ _ _) (hs'.mono le_rfl ?_))
+          rintro x ((hx | hx) | hx)
+          · exact Or.inr (Or.inl (Or.inl hx))
+          · have hx' := hbi.sub.2.2 hx; simp only [Finset.mem_insert] at hx'
+            rcases hx' with rfl | hx'; exact Or.inl rfl; exact Or.inr (Or.inl (Or.inr hx'))
+          · exact Or.inr (Or.inr hx)
+
+lemma imp_of_live_twin {Q M : List (ℕ × ℕ)} {Z L k t : ℕ} {S : Finset ℕ}
+    (hpb : pbitOk pbSig = true) (hsg : sigOk sigS = true) (hr : rawOk pbSig sigS Z = true)
+    (hmz : phiFull pbSig (mz Z) = mz Z) (htz : phiFull pbSig (tz Z) = tz Z) (hne : w4Z Z ≠ w5Z Z)
+    (hp : pOk Z Q = true) (hL : L ≤ 16) (ht1 : t ≤ 1) (hI : ∀ e ∈ Q, ImpB [] e.1 e.2 t)
+    (hk : k < L) (hS : (S : Set ℕ) ⊆ C (mz Z) (WZ [] Z)) (hl : Live Z0 (mz Z) (tz Z) k t S)
+    (hmin : ∀ q < k, ¬ Sol Z0 (mz Z) (tz Z) q (C (mz Z) (WZ [] Z)))
+    (hM : mTwin Z M = true) (hchk : ∀ p ∈ M, chkSym (w4Z Z) (w5Z Z) [] Q Z (L - 1) t p.1 p.2 = false) : False := by
+  by_cases h5 : w5Z Z ∈ S → w4Z Z ∈ S
+  · exact imp_of_live_twin_no5 hpb hsg hr hmz htz hne hp hL ht1 hI hk hS hl hmin hM hchk h5
+  · push Not at h5
+    have hts := TwinSpec_sig hpb hr hne
+    have hS' : ((S.image (phiFull pbSig) : Finset ℕ) : Set ℕ) ⊆ C (mz Z) (WZ [] Z) := by
+      intro x hx; simp only [Finset.coe_image, Set.mem_image, Finset.mem_coe] at hx
+      obtain ⟨y, hy, rfl⟩ := hx; exact phiFull_C2 hr hsg hmz (hS hy)
+    have h5' : w5Z Z ∈ S.image (phiFull pbSig) → w4Z Z ∈ S.image (phiFull pbSig) := by
+      intro hmem; simp only [Finset.mem_image] at hmem
+      obtain ⟨y, hy, hy5⟩ := hmem
+      have hy4 : y = w4Z Z := phiFull_inj hpb (hy5.trans hts.2.1.symm)
+      exact absurd (hy4 ▸ hy) h5.2
+    exact imp_of_live_twin_no5 hpb hsg hr hmz htz hne hp hL ht1 hI hk hS'
+      (hl.map_phi_R hpb (fun _ => rfl) hmz htz) hmin hM hchk h5'
+
+theorem imp_of_twin {Q M0 : List (ℕ × ℕ)} {Z L : ℕ}
+    (hpb : pbitOk pbSig = true) (hsg : sigOk sigS = true) (hr : rawOk pbSig sigS Z = true)
+    (hmz : phiFull pbSig (mz Z) = mz Z) (htz : phiFull pbSig (tz Z) = tz Z) (hne : w4Z Z ≠ w5Z Z)
+    (hp : pOk Z Q = true) (hL : L ≤ 15) (hI : ∀ e ∈ Q, Imp [] e.1 e.2)
+    (hM0 : mTwin Z M0 = true) (hchk0 : ∀ p ∈ M0, chkSym (w4Z Z) (w5Z Z) [] Q Z (L - 1) 0 p.1 p.2 = false)
+    (hM1 : mTwin Z [(FF, 1)] = true)
+    (hchk1 : chkSym (w4Z Z) (w5Z Z) [] Q Z (L - 1) 1 FF 1 = false)
+    (hpos : ∀ t, 2 ≤ t → t < L → chk [] Q Z (L - 1) t FF 1 = false) : Imp [] Z L := by
+  intro q hq hsol
+  classical
+  have hex : ∃ q, Sol Z0 (mz Z) (tz Z) q (C (mz Z) (WZ [] Z)) := ⟨q, hsol⟩
+  have hqL : Nat.find hex < L := lt_of_le_of_lt (Nat.find_min' hex hsol) hq
+  obtain ⟨k, hk, t, S, hS, hl⟩ := (Nat.find_spec hex).live
+  have hkeq : k = Nat.find hex := le_antisymm hk (Nat.find_min' hex (hl.sol.mono le_rfl hS))
+  have hmin : ∀ q' < k, ¬ Sol Z0 (mz Z) (tz Z) q' (C (mz Z) (WZ [] Z)) := fun q' hq' => Nat.find_min hex (by omega)
+  have htk : t ≤ k := (Min.size ⟨hl, fun q' hq' hs => hmin q' hq' (hs.mono le_rfl (fun x hx => hx.elim (fun h => hS h) Or.inr))⟩).2
+  cases t with
+  | zero =>
+    exact imp_of_live_twin (L := L) hpb hsg hr hmz htz hne hp (by omega) (by omega) (fun e he => (hI e he).toB 0) (by omega) hS hl hmin hM0 hchk0
+  | succ t' =>
+    cases t' with
+    | zero =>
+      exact imp_of_live_twin (L := L) hpb hsg hr hmz htz hne hp (by omega) (by omega) (fun e he => (hI e he).toB 1) (by omega) hS hl hmin hM1
+        (fun p hp' => by simp only [List.mem_singleton] at hp'; rw [hp']; exact hchk1)
+    | succ t'' =>
+      exact imp_of_live (L := L) (Or.inl rfl) hp (by omega) (fun e he => (hI e he).toB (t'' + 2)) (by omega) hS hl hmin
+        (Or.inr (one1 (hpos (t'' + 2) (by omega) (by omega))))
+
+theorem impB_oneTwin {Q M : List (ℕ × ℕ)} {Z L : ℕ}
+    (hpb : pbitOk pbSig = true) (hsg : sigOk sigS = true) (hr : rawOk pbSig sigS Z = true)
+    (hmz : phiFull pbSig (mz Z) = mz Z) (htz : phiFull pbSig (tz Z) = tz Z) (hne : w4Z Z ≠ w5Z Z)
+    (hp : pOk Z Q = true) (hL : L + 1 ≤ 16) (hA : Imp [] Z L)
+    (hI : ∀ e ∈ Q, ImpB [] e.1 e.2 1)
+    (hM : mTwin Z M = true) (hchk : ∀ p ∈ M, chkSym (w4Z Z) (w5Z Z) [] Q Z L 1 p.1 p.2 = false) : ImpB [] Z (L + 1) 1 := by
+  intro q hq hs
+  obtain ⟨k, hk, t, ht, S, hS, hl⟩ := hs.live
+  by_cases hkt : k + t < L
+  · exact hA (k + t) hkt (hl.sol.mono le_rfl hS)
+  · obtain rfl : t = 1 := by omega
+    obtain rfl : L = k + 1 := by omega
+    exact imp_of_live_twin (L := k + 1 + 1) hpb hsg hr hmz htz hne hp (by omega) (by omega) hI (by omega) hS hl hA hM hchk
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r3 : rt3.all (fun e => okE [] (pr [] e.1) e) = true := by decide +kernel
-lemma i3 : ∀ e ∈ rt3, Imp [] e.1 e.2 := okAll (T := []) r3 (by simp)
+lemma pbSig_ok : pbitOk pbSig = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r2a : rt2a.all (fun e => okE [] (pr rt3 e.1) e) = true := by decide +kernel
+lemma sigS_ok : sigOk sigS = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r2b : rt2b.all (fun e => okE [] (pr rt3 e.1) e) = true := by decide +kernel
-lemma i2 : ∀ e ∈ rt2, Imp [] e.1 e.2 := apI (okAll r2a i3) (okAll r2b i3)
-lemma i23 : ∀ e ∈ rt2 ++ rt3, Imp [] e.1 e.2 := apI i2 i3
+lemma sigT_ok : sigOk sigT = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r1L_ok : rt1L.all (fun e => okE [] (pr (rt2 ++ rt3) e.1) e) = true := by decide +kernel
-lemma i1L : ∀ e ∈ rt1L, Imp [] e.1 e.2 := okAll r1L_ok i23
+lemma rawSig_64 : rawOk pbSig sigS 64 = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem p64_ok : pOk 64 (pr (rt2 ++ rt3) 64) = true := by decide +kernel
+lemma mzSig_64 : phiFull pbSig (mz 64) = mz 64 := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r64_0_0 : chk [] (pr (rt2 ++ rt3) 64) 64 12 0 r64H_0 1 = false := by decide +kernel
+lemma tzSig_64 : phiFull pbSig (tz 64) = tz 64 := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r64_0_1 : chk [] (pr (rt2 ++ rt3) 64) 64 12 0 r64H_1 0 = false := by decide +kernel
+lemma ne45_64 : w4Z 64 ≠ w5Z 64 := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r64_0_2 : chk [] (pr (rt2 ++ rt3) 64) 64 12 0 r64H_2 0 = false := by decide +kernel
+lemma rawSig_0 : rawOk pbSig sigS 0 = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r64_0_3 : chk [] (pr (rt2 ++ rt3) 64) 64 12 0 r64H_3 0 = false := by decide +kernel
+lemma mzSig_0 : phiFull pbSig (mz 0) = mz 0 := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r64_0_4 : chk [] (pr (rt2 ++ rt3) 64) 64 12 0 r64H_4 0 = false := by decide +kernel
+lemma tzSig_0 : phiFull pbSig (tz 0) = tz 0 := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r64_0_5 : chk [] (pr (rt2 ++ rt3) 64) 64 12 0 r64H_5 0 = false := by decide +kernel
-def r64_0_M : List (ℕ × ℕ) := [(r64H_0, 1), (r64H_1, 0), (r64H_2, 0), (r64H_3, 0), (r64H_4, 0), (r64H_5, 0)]
+lemma ne45_0 : w4Z 0 ≠ w5Z 0 := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma r64_0_full : mFull r64_0_M = true := by decide +kernel
-lemma r64_0_ex : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] (pr (rt2 ++ rt3) 64) 64 12 0 p.1 p.2 = false := by
-  refine ⟨r64_0_M, r64_0_full, fun p hp => ?_⟩
+lemma rawTau_128_64 : rawOk2 pbTau sigT 128 64 = true := by decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma mzTau_128_64 : phiFull pbTau (mz 128) = mz 64 := by decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma tzTau_128_64 : phiFull pbTau (tz 128) = tz 64 := by decide +kernel
+end twinSym
+
+
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r6 : rt6.all (fun e => okE [] (pr [] e.1) e) = true := by decide +kernel
+lemma i6 : ∀ e ∈ rt6, Imp [] e.1 e.2 := okAll (T := []) r6 (by simp)
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r5 : rt5.all (fun e => okE [] (pr rt6 e.1) e) = true := by decide +kernel
+lemma i5 : ∀ e ∈ rt5, Imp [] e.1 e.2 := okAll r5 i6
+lemma i56 : ∀ e ∈ rt56, Imp [] e.1 e.2 := apI i5 i6
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r4 : rt4.all (fun e => okE [] (pr rt56 e.1) e) = true := by decide +kernel
+lemma i4 : ∀ e ∈ rt4, Imp [] e.1 e.2 := okAll r4 i56
+lemma i456 : ∀ e ∈ rt456, Imp [] e.1 e.2 := apI i4 i56
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r3 : rt3.all (fun e => okE [] (pr rt456 e.1) e) = true := by decide +kernel
+lemma i3 : ∀ e ∈ rt3, Imp [] e.1 e.2 := okAll r3 i456
+lemma i3456 : ∀ e ∈ rt3456, Imp [] e.1 e.2 := apI i3 i456
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r2a : rt2a.all (fun e => okE [] (pr rt3456 e.1) e) = true := by decide +kernel
+lemma i2a : ∀ e ∈ rt2a, Imp [] e.1 e.2 := okAll r2a i3456
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r2b : rt2b.all (fun e => okE [] (pr rt3456 e.1) e) = true := by decide +kernel
+lemma i2b : ∀ e ∈ rt2b, Imp [] e.1 e.2 := okAll r2b i3456
+lemma i2 : ∀ e ∈ rt2, Imp [] e.1 e.2 := apI i2a i2b
+lemma i23456 : ∀ e ∈ rt23456, Imp [] e.1 e.2 := apI i2 i3456
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r1L_ok : rt1L.all (fun e => okE [] (pr rt23456 e.1) e) = true := by decide +kernel
+lemma i1L : ∀ e ∈ rt1L, Imp [] e.1 e.2 := okAll r1L_ok i23456
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem p64_ok : pOk 64 Q64 = true := by decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r64_0_0 : chkSym (w4Z 64) (w5Z 64) [] Q64 64 12 0 r64H_0 1 = false := by decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r64_0_1 : chkSym (w4Z 64) (w5Z 64) [] Q64 64 12 0 r64H_1 0 = false := by decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem r64_0_2 : chkSym (w4Z 64) (w5Z 64) [] Q64 64 12 0 r64H_2 0 = false := by decide +kernel
+def r64_0_M : List (ℕ × ℕ) := [(r64H_0, 1), (r64H_1, 0), (r64H_2, 0)]
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma r64_0_twin : mTwin 64 r64_0_M = true := by decide +kernel
+lemma r64_0_all : ∀ p ∈ r64_0_M, chkSym (w4Z 64) (w5Z 64) [] Q64 64 12 0 p.1 p.2 = false := by
+  intro p hp
   simp only [r64_0_M, List.mem_cons, List.not_mem_nil, or_false] at hp
-  rcases hp with rfl | rfl | rfl | rfl | rfl | rfl
+  rcases hp with rfl | rfl | rfl
   · exact r64_0_0
   · exact r64_0_1
   · exact r64_0_2
-  · exact r64_0_3
-  · exact r64_0_4
-  · exact r64_0_5
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r64_1 : chk [] (pr (rt2 ++ rt3) 64) 64 12 1 FF 1 = false := by decide +kernel
+theorem r64_1 : chkSym (w4Z 64) (w5Z 64) [] Q64 64 12 1 FF 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r64_hi : okT [] (pr (rt2 ++ rt3) 64) 64 13 [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] = true := by decide +kernel
-lemma ir1_64 : Imp [] 64 13 := imp_of (Or.inl rfl) p64_ok (by norm_num) (fun e' h' => i23 e' (List.mem_of_mem_filter h')) (Or.inr fun t ht => by
+theorem r64_hi : okT [] Q64 64 13 [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] = true := by decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma mTwin_FF_64 : mTwin 64 [(FF, 1)] = true := by decide +kernel
+lemma ir1_64 : Imp [] 64 13 := imp_of_twin pbSig_ok sigS_ok rawSig_64 mzSig_64 tzSig_64 ne45_64 p64_ok (by norm_num)
+  (fun e' h' => i23456 e' (List.mem_of_mem_filter h')) r64_0_twin r64_0_all mTwin_FF_64 r64_1 (fun t ht1 ht2 => by
   have h := r64_hi
   simp only [okT, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true, Bool.not_eq_true'] at h
   obtain ⟨h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12⟩ := h
   interval_cases t
-  · exact r64_0_ex
-  · exact one1 r64_1
-  · exact one1 h2
-  · exact one1 h3
-  · exact one1 h4
-  · exact one1 h5
-  · exact one1 h6
-  · exact one1 h7
-  · exact one1 h8
-  · exact one1 h9
-  · exact one1 h10
-  · exact one1 h11
-  · exact one1 h12)
-lemma ir1_128 : Imp [] 128 13 := fun q hq hs =>
-  ir1_64 q hq (by rw [← phiFull_tz128]; exact hs.map_phi phiFull_mz128 (fun _ hx => phiFull_C128 hx))
+  · exact h2
+  · exact h3
+  · exact h4
+  · exact h5
+  · exact h6
+  · exact h7
+  · exact h8
+  · exact h9
+  · exact h10
+  · exact h11
+  · exact h12)
+lemma ir1_128 : Imp [] 128 13 := imp_transfer sigT_ok rawTau_128_64 mzTau_128_64 tzTau_128_64 ir1_64
 lemma i1 : ∀ e ∈ rt1, Imp [] e.1 e.2 := by
   intro e he
   simp only [rt1, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at he
@@ -4351,137 +5267,111 @@ lemma i1 : ∀ e ∈ rt1, Imp [] e.1 e.2 := by
   · exact i1L e he
   · exact ir1_64
   · exact ir1_128
-lemma ir : ∀ e ∈ rt, Imp [] e.1 e.2 := apI (apI i1 i2) i3
+lemma irAll : ∀ e ∈ rtAll, Imp [] e.1 e.2 := apI i1 i23456
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem root_p : pOk 0 rt = true := by decide +kernel
+theorem root_p : pOk 0 Q0 = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r0_0_0 : chk [] rt 0 14 0 r0H_0 1 = false := by decide +kernel
+theorem r0_0 : chkSym (w4Z 0) (w5Z 0) [] Q0 0 14 0 FF 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r0_0_1 : chk [] rt 0 14 0 r0H_1 0 = false := by decide +kernel
+theorem r0_1 : chkSym (w4Z 0) (w5Z 0) [] Q0 0 14 1 FF 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem r0_0_2 : chk [] rt 0 14 0 r0H_2 0 = false := by decide +kernel
-def r0_0_M : List (ℕ × ℕ) := [(r0H_0, 1), (r0H_1, 0), (r0H_2, 0)]
+theorem r0_hi : okT [] Q0 0 15 [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma r0_0_full : mFull r0_0_M = true := by decide +kernel
-lemma r0_0_ex : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] rt 0 14 0 p.1 p.2 = false := by
-  refine ⟨r0_0_M, r0_0_full, fun p hp => ?_⟩
-  simp only [r0_0_M, List.mem_cons, List.not_mem_nil, or_false] at hp
-  rcases hp with rfl | rfl | rfl
-  · exact r0_0_0
-  · exact r0_0_1
-  · exact r0_0_2
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem r0_1 : chk [] rt 0 14 1 FF 1 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem r0_hi : okT [] rt 0 15 [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] = true := by decide +kernel
-lemma iroot : Imp [] 0 15 := imp_ts (Or.inl rfl) root_p (by norm_num) ir (fun t ht => by
+lemma mTwin_FF_0 : mTwin 0 [(FF, 1)] = true := by decide +kernel
+lemma iroot : Imp [] 0 15 := imp_of_twin pbSig_ok sigS_ok rawSig_0 mzSig_0 tzSig_0 ne45_0 root_p (by norm_num)
+  (fun e' h' => irAll e' (List.mem_of_mem_filter h')) mTwin_FF_0 (fun p hp' => by simp only [List.mem_singleton] at hp'; rw [hp']; exact r0_0) mTwin_FF_0 r0_1 (fun t ht1 ht2 => by
   have h := r0_hi
   simp only [okT, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true, Bool.not_eq_true'] at h
   obtain ⟨h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14⟩ := h
   interval_cases t
-  · exact r0_0_ex
-  · exact one r0_1
-  · exact one h2
-  · exact one h3
-  · exact one h4
-  · exact one h5
-  · exact one h6
-  · exact one h7
-  · exact one h8
-  · exact one h9
-  · exact one h10
-  · exact one h11
-  · exact one h12
-  · exact one h13
-  · exact one h14)
+  · exact h2
+  · exact h3
+  · exact h4
+  · exact h5
+  · exact h6
+  · exact h7
+  · exact h8
+  · exact h9
+  · exact h10
+  · exact h11
+  · exact h12
+  · exact h13
+  · exact h14)
 
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b3_ok : rt3.all (okB [] rt3 []) = true := by decide +kernel
-lemma ib3 : ∀ e ∈ rt3, ImpB [] e.1 (e.2 + 1) 1 := okAllB b3_ok (by simp) i3 (by simp)
+theorem b6_ok : rt6.all (okB [] rt6 []) = true := by decide +kernel
+lemma ib6 : ∀ e ∈ rt6, ImpB [] e.1 (e.2 + 1) 1 := okAllB b6_ok (by simp) i6 (by simp)
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b2a_ok : rt2a.all (okB rt3 rt2 rt3) = true := by decide +kernel
+theorem b5_ok : rt5.all (okB rt6 rt5 rt6) = true := by decide +kernel
+lemma ib5 : ∀ e ∈ rt5, ImpB [] e.1 (e.2 + 1) 1 := okAllB b5_ok ib6 i5 i6
+lemma ib56 : ∀ e ∈ rt56, ImpB [] e.1 (e.2 + 1) 1 := apB ib5 ib6
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b2b_ok : rt2b.all (okB rt3 rt2 rt3) = true := by decide +kernel
-lemma ib2 : ∀ e ∈ rt2, ImpB [] e.1 (e.2 + 1) 1 := apB (okAllB b2a_ok ib3 i2 i3) (okAllB b2b_ok ib3 i2 i3)
-lemma ib23 : ∀ e ∈ rt2 ++ rt3, ImpB [] e.1 (e.2 + 1) 1 := apB ib2 ib3
+theorem b4_ok : rt4.all (okB rt56 rt4 rt56) = true := by decide +kernel
+lemma ib4 : ∀ e ∈ rt4, ImpB [] e.1 (e.2 + 1) 1 := okAllB b4_ok ib56 i4 i56
+lemma ib456 : ∀ e ∈ rt456, ImpB [] e.1 (e.2 + 1) 1 := apB ib4 ib56
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b1L_ok : rt1L.all (okB (rt2 ++ rt3) rt1 (rt2 ++ rt3)) = true := by decide +kernel
-lemma ib1L : ∀ e ∈ rt1L, ImpB [] e.1 (e.2 + 1) 1 := okAllB b1L_ok ib23 i1 i23
-def Q64b : List (ℕ × ℕ) := up (rt2 ++ rt3) (pr (rt2 ++ rt3) 64)
+theorem b3_ok : rt3.all (okB rt456 rt3 rt456) = true := by decide +kernel
+lemma ib3 : ∀ e ∈ rt3, ImpB [] e.1 (e.2 + 1) 1 := okAllB b3_ok ib456 i3 i456
+lemma ib3456 : ∀ e ∈ rt3456, ImpB [] e.1 (e.2 + 1) 1 := apB ib3 ib456
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem b2a_ok : rt2a.all (okB rt3456 rt2a rt3456) = true := by decide +kernel
+lemma ib2a : ∀ e ∈ rt2a, ImpB [] e.1 (e.2 + 1) 1 := okAllB b2a_ok ib3456 i2a i3456
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem b2b_ok : rt2b.all (okB rt3456 rt2b rt3456) = true := by decide +kernel
+lemma ib2b : ∀ e ∈ rt2b, ImpB [] e.1 (e.2 + 1) 1 := okAllB b2b_ok ib3456 i2b i3456
+lemma ib2 : ∀ e ∈ rt2, ImpB [] e.1 (e.2 + 1) 1 := apB ib2a ib2b
+lemma ib23456 : ∀ e ∈ rt23456, ImpB [] e.1 (e.2 + 1) 1 := apB ib2 ib3456
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+theorem b1L_ok : rt1L.all (okB rt23456 rt1L rt23456) = true := by decide +kernel
+lemma ib1L : ∀ e ∈ rt1L, ImpB [] e.1 (e.2 + 1) 1 := okAllB b1L_ok ib23456 i1L i23456
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 theorem p64b_ok : pOk 64 Q64b = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b64_1_0 : chk [] Q64b 64 13 1 b64H_0 1 = false := by decide +kernel
+theorem b64_1_0 : chkSym (w4Z 64) (w5Z 64) [] Q64b 64 13 1 b64H_0 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b64_1_1 : chk [] Q64b 64 13 1 b64H_1 0 = false := by decide +kernel
+theorem b64_1_1 : chkSym (w4Z 64) (w5Z 64) [] Q64b 64 13 1 b64H_1 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b64_1_2 : chk [] Q64b 64 13 1 b64H_2 0 = false := by decide +kernel
+theorem b64_1_2 : chkSym (w4Z 64) (w5Z 64) [] Q64b 64 13 1 b64H_2 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b64_1_3 : chk [] Q64b 64 13 1 b64H_3 0 = false := by decide +kernel
+theorem b64_1_3 : chkSym (w4Z 64) (w5Z 64) [] Q64b 64 13 1 b64H_3 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b64_1_4 : chk [] Q64b 64 13 1 b64H_4 0 = false := by decide +kernel
+theorem b64_1_4 : chkSym (w4Z 64) (w5Z 64) [] Q64b 64 13 1 b64H_4 0 = false := by decide +kernel
+def b64_1_M : List (ℕ × ℕ) := [(b64H_0, 1), (b64H_1, 0), (b64H_2, 0), (b64H_3, 0), (b64H_4, 0)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b64_1_5 : chk [] Q64b 64 13 1 b64H_5 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b64_1_6 : chk [] Q64b 64 13 1 b64H_6 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b64_1_7 : chk [] Q64b 64 13 1 b64H_7 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b64_1_8 : chk [] Q64b 64 13 1 b64H_8 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b64_1_9 : chk [] Q64b 64 13 1 b64H_9 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b64_1_10 : chk [] Q64b 64 13 1 b64H_10 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b64_1_11 : chk [] Q64b 64 13 1 b64H_11 0 = false := by decide +kernel
-def b64_1_M : List (ℕ × ℕ) := [(b64H_0, 1), (b64H_1, 0), (b64H_2, 0), (b64H_3, 0), (b64H_4, 0), (b64H_5, 0), (b64H_6, 0), (b64H_7, 0), (b64H_8, 0), (b64H_9, 0), (b64H_10, 0), (b64H_11, 0)]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma b64_1_full : mFull b64_1_M = true := by decide +kernel
-lemma b64_1_ex : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] Q64b 64 13 1 p.1 p.2 = false := by
-  refine ⟨b64_1_M, b64_1_full, fun p hp => ?_⟩
+lemma b64_1_twin : mTwin 64 b64_1_M = true := by decide +kernel
+lemma b64_1_all : ∀ p ∈ b64_1_M, chkSym (w4Z 64) (w5Z 64) [] Q64b 64 13 1 p.1 p.2 = false := by
+  intro p hp
   simp only [b64_1_M, List.mem_cons, List.not_mem_nil, or_false] at hp
-  rcases hp with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  rcases hp with rfl | rfl | rfl | rfl | rfl
   · exact b64_1_0
   · exact b64_1_1
   · exact b64_1_2
   · exact b64_1_3
   · exact b64_1_4
-  · exact b64_1_5
-  · exact b64_1_6
-  · exact b64_1_7
-  · exact b64_1_8
-  · exact b64_1_9
-  · exact b64_1_10
-  · exact b64_1_11
 lemma ib1_64 : ImpB [] 64 14 1 :=
-  impB_onePartition p64b_ok (by norm_num) ir1_64 (up_imp ib23 fun y hy => i23 y (List.mem_of_mem_filter hy)) b64_1_ex
-lemma ib1_128 : ImpB [] 128 14 1 := fun q hq hs =>
-  ib1_64 q hq (by rw [← phiFull_tz128]; exact hs.map_phi phiFull_mz128 (fun _ hx => phiFull_C128 hx))
+  impB_oneTwin pbSig_ok sigS_ok rawSig_64 mzSig_64 tzSig_64 ne45_64 p64b_ok (by norm_num) ir1_64
+    (up_imp ib23456 fun y hy => i23456 y (List.mem_of_mem_filter hy)) b64_1_twin b64_1_all
+lemma ib1_128 : ImpB [] 128 14 1 :=
+  impB_transfer sigT_ok rawTau_128_64 mzTau_128_64 tzTau_128_64 ib1_64
 lemma ib1 : ∀ e ∈ rt1, ImpB [] e.1 (e.2 + 1) 1 := by
   intro e he
   simp only [rt1, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at he
@@ -4489,39 +5379,17 @@ lemma ib1 : ∀ e ∈ rt1, ImpB [] e.1 (e.2 + 1) 1 := by
   · exact ib1L e he
   · exact ib1_64
   · exact ib1_128
-lemma ib_all : ∀ e ∈ rt, ImpB [] e.1 (e.2 + 1) 1 := apB (apB ib1 ib2) ib3
-lemma ir0b : ∀ e ∈ rt0b, ImpB [] e.1 e.2 1 := fun e he =>
-  up_imp ib_all ir e (List.mem_of_mem_filter he)
+lemma ibAll : ∀ e ∈ rtAll, ImpB [] e.1 (e.2 + 1) 1 := apB ib1 ib23456
+lemma ir0b : ∀ e ∈ Q0b, ImpB [] e.1 e.2 1 := up_imp ibAll (fun y hy => irAll y (List.mem_of_mem_filter hy))
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem root_p0b : pOk 0 rt0b = true := by decide +kernel
+theorem root_pb : pOk 0 Q0b = true := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-theorem b0_1_0 : chk [] rt0b 0 15 1 b0H_0 1 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b0_1_1 : chk [] rt0b 0 15 1 b0H_1 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b0_1_2 : chk [] rt0b 0 15 1 b0H_2 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-theorem b0_1_3 : chk [] rt0b 0 15 1 b0H_3 0 = false := by decide +kernel
-def b0_1_M : List (ℕ × ℕ) := [(b0H_0, 1), (b0H_1, 0), (b0H_2, 0), (b0H_3, 0)]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma b0_1_full : mFull b0_1_M = true := by decide +kernel
-lemma b0_1_ex : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] rt0b 0 15 1 p.1 p.2 = false := by
-  refine ⟨b0_1_M, b0_1_full, fun p hp => ?_⟩
-  simp only [b0_1_M, List.mem_cons, List.not_mem_nil, or_false] at hp
-  rcases hp with rfl | rfl | rfl | rfl
-  · exact b0_1_0
-  · exact b0_1_1
-  · exact b0_1_2
-  · exact b0_1_3
+theorem b0_1 : chkSym (w4Z 0) (w5Z 0) [] Q0b 0 15 1 FF 1 = false := by decide +kernel
 lemma iroot_one {S : Finset ℕ}
     (hS : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0)) (hl : Live Z0 (mz 0) (tz 0) 15 1 S) : False :=
-  imp_of_live (L := 16) (Or.inl rfl) root_p0b (by norm_num) ir0b (by omega) hS hl (fun q hq => iroot q hq) (Or.inr b0_1_ex)
+  imp_of_live_twin (L := 16) pbSig_ok sigS_ok rawSig_0 mzSig_0 tzSig_0 ne45_0 root_pb (by norm_num) (by omega) ir0b (by omega) hS hl (fun q hq => iroot q hq) mTwin_FF_0 (fun p hp' => by simp only [List.mem_singleton] at hp'; rw [hp']; exact b0_1)
 open PEqualNP.CircuitLowerBounds PEqualNP.MetaComplexity
 section circuit
 variable (m : ℕ)
