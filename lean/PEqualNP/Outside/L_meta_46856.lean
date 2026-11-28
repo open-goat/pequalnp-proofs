@@ -1182,75 +1182,6 @@ lemma sortNats_perm (l : List Nat) : (sortNats l).Perm l := by
   | cons a bs ih => exact (insertNat_perm a (sortNats bs)).trans (.cons a ih)
 lemma sortNats_toFinset (l : List Nat) : (sortNats l).toFinset = l.toFinset := by
   ext x; simpa only [List.mem_toFinset] using (sortNats_perm l).mem_iff
-def hashWs (nb : Nat) (ws : List Nat) : Nat :=
-  (ws.foldl (fun h w => h + (w % 1000003) * 31) 0) % nb
-def bucketContains (buckets : Array (List (List Nat))) (ws : List Nat) : Bool :=
-  let s := sortNats ws
-  (buckets.getD (hashWs buckets.size s) []).contains s
-def closeChild (pools : List BoundPool) (autos : List (List (Nat × Nat)))
-    (prevBuckets : Array (List (List Nat))) (k : Nat) (rest : List Nat) (op : Choice) : Bool :=
-  let ws := choiceVal op :: rest
-  pools.any (fun c => scalarPoolCut c k rest op) ||
-    autos.any (fun sw => bucketContains prevBuckets (ws.map (permWord sw)))
-lemma closeChild_sound {raw T pools autos prevBuckets k rest op}
-    (hT : T < 2^128)
-    (hPools : ∀ c ∈ pools, ValidPool raw T c)
-    (hAutos : ∀ sw ∈ autos, swapsValid sw = true ∧ permWord sw T = T)
-    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T k xs.toFinset)
-    (nd : (choiceVal op :: rest).Nodup)
-    (hlt : ∀ x ∈ choiceVal op :: rest, x < 2^128)
-    (h : closeChild pools autos prevBuckets k rest op = true) :
-    Impossible T k (choiceVal op :: rest).toFinset := by
-  simp only [closeChild, Bool.or_eq_true, List.any_eq_true] at h
-  rcases h with ⟨c, hc, hcut⟩ | ⟨sw, hsw, hhit⟩
-  · exact scalarPoolCut_sound (hPools c hc) nd hcut
-  · unfold bucketContains at hhit
-    simp only [Array.getD, List.contains_eq_mem, decide_eq_true_eq] at hhit
-    split at hhit
-    next hlt_b =>
-      have himp := hPrev _ hlt_b _ hhit
-      rw [sortNats_toFinset] at himp
-      have ⟨hsv, hfix⟩ := hAutos sw hsw
-      have hvr : swapsValid sw.reverse = true := by simp only [swapsValid, List.all_reverse]; exact hsv
-      have hinv_row_gen : ∀ (l : List (Nat × Nat)), swapsValid l = true →
-          ∀ r : Row, permRow l.reverse (permRow l r) = r := by
-        intro l hl
-        induction l with
-        | nil => intro r; rfl
-        | cons p ps ih =>
-          simp only [swapsValid, List.all_cons, Bool.and_eq_true, decide_eq_true_eq] at hl
-          intro r
-          have h1 : permRow (p :: ps).reverse (permRow (p :: ps) r) =
-              swapRow p.1 p.2 (permRow ps.reverse (permRow ps (swapRow p.1 p.2 r))) := by
-            simp [permRow, List.reverse_cons, List.foldl_append]
-          rw [h1, ih hl.2, swapRow_invol p.1 p.2 (by omega) hl.1.2]
-      have hinv_row2 : ∀ r : Row, permRow sw (permRow sw.reverse r) = r := by
-        simpa using hinv_row_gen sw.reverse hvr
-      have hinv_w : ∀ x : Nat, x < 2^128 → permWord sw.reverse (permWord sw x) = x := by
-        intro x hx
-        have h1 := permWord_eq_renameW sw hsv x hx
-        have h2 := permWord_eq_renameW sw.reverse hvr (permWord sw x) (h1 ▸ renameW_lt _ x)
-        rw [h2, h1]
-        apply Nat.eq_of_testBit_eq; intro r
-        by_cases hrr : r < 128
-        · rw [testBit_renameW _ _ ⟨r, hrr⟩, testBit_renameW, hinv_row2]
-        · rw [Nat.testBit_eq_false_of_lt (lt_of_lt_of_le (renameW_lt _ _) (Nat.pow_le_pow_right (by decide) (by omega))),
-              Nat.testBit_eq_false_of_lt (lt_of_lt_of_le hx (Nat.pow_le_pow_right (by decide) (by omega)))]
-      have hfix_r : permWord sw.reverse T = T := by
-        conv_lhs => rw [← hfix]
-        exact hinv_w T hT
-      have hmap_lt : ∀ a ∈ (choiceVal op :: rest).map (permWord sw), a < 2^128 := by
-        intro a ha
-        obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ha
-        rw [permWord_eq_renameW sw hsv x (hlt x hx)]
-        exact renameW_lt _ x
-      have hrot := rotate_impossible himp sw.reverse hvr hT hfix_r hmap_lt
-      have hback : (((choiceVal op :: rest).map (permWord sw)).map (permWord sw.reverse)) = (choiceVal op :: rest) := by
-        rw [List.map_map]
-        conv_rhs => rw [← List.map_id (choiceVal op :: rest)]
-        exact List.map_congr_left fun x hx => hinv_w x (hlt x hx)
-      rwa [hback] at hrot
-    next => simp at hhit
 def childTwo (ws : List Nat) (a b d : Nat) (ka kb : Bool) : List Nat :=
   bin d a b :: kept ka a (kept kb b ((ws.erase a).erase b))
 lemma erase_toFinset {l : List Nat} (nd : l.Nodup) (a : Nat) :
@@ -1351,137 +1282,6 @@ lemma childTwo_swap (v : List Nat) (nd : v.Nodup) (a b : Nat) (d : Nat) (hd : d 
   simp only [childTwo, List.toFinset_cons, Finset.mem_insert, List.mem_toFinset, hkeep,
     (nd.erase _).mem_erase_iff, nd.mem_erase_iff, bin_comm_flip d hd a b]
   tauto
-def evalMove (cap n fmask : Nat) (ws : List Decor) (cov : Cov)
-    (pools : List BoundPool) (autos : List (List (Nat × Nat)))
-    (prevBuckets : Array (List (List Nat)))
-    (d : Nat) (a b z : Decor) (ka kb : Bool) : Bool :=
-  let len := 1 + (n - (if ka then 0 else 1) - (if kb then 0 else 1))
-  if len > cap then true else
-    let rs := restCov cov (dsep a) (dsep b) ka kb
-    if ((rs ||| dsep z) &&& fmask) != fmask then true else
-    if z.1 == 0 || ws.any (fun v => v.1 == z.1) then true else
-      let rest := (delTwo ws a b ka kb).map Prod.fst
-      closeChild pools autos prevBuckets (cap - 1) rest (d, a.1, b.1)
-def testPair (cap n fmask : Nat) (ws : List Decor) (cov : Cov)
-    (pools : List BoundPool) (autos : List (List (Nat × Nat)))
-    (prevBuckets : Array (List (List Nat))) (a b : Decor) (d : Nat) : Bool :=
-  let z := dbin d a b
-  let go := evalMove cap n fmask ws cov pools autos prevBuckets d a b z
-  go false false && go true false && go false true && go true true
-def testAll (cap n fmask : Nat) (ws : List Decor) (cov : Cov)
-    (pools : List BoundPool) (autos : List (List (Nat × Nat)))
-    (prevBuckets : Array (List (List Nat))) : List Decor → Bool
-  | [] => true
-  | a :: bs =>
-    bs.all (fun b => [0, 1, 2, 3].all (testPair cap n fmask ws cov pools autos prevBuckets a b)) &&
-      testAll cap n fmask ws cov pools autos prevBuckets bs
-lemma evalMove_sound {raw T pos neg ws pools autos prevBuckets cap a b d ka kb}
-    (hT : T < 2^128)
-    (gp : goodPairs T pos neg) (hf : ∀ w ∈ ws, faithful pos neg w)
-    (nd : (ws.map Prod.fst).Nodup) (hlt : ∀ w ∈ ws, w.1 < 2^128)
-    (ha : a ∈ ws) (hb : b ∈ ws) (ne : a ≠ b) (hcap : 0 < cap) (hd : d < 4)
-    (hPools : ∀ c ∈ pools, ValidPool raw T c)
-    (hAutos : ∀ sw ∈ autos, swapsValid sw = true ∧ permWord sw T = T)
-    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T (cap - 1) xs.toFinset)
-    (hnz : (dbin d a b).1 ≠ 0) (hfr : (dbin d a b).1 ∉ ws.map Prod.fst)
-    (test : evalMove cap ws.length (fullMask pos.length) ws (coverage ws) pools autos prevBuckets
-      d a b (dbin d a b) ka kb = true) :
-    Impossible T (cap - 1) ((dbin d a b).1 :: (delTwo ws a b ka kb).map Prod.fst).toFinset := by
-  let z := dbin d a b
-  let rest := delTwo ws a b ka kb
-  let child := z.1 :: rest.map Prod.fst
-  have sub : rest.Sublist ws := delTwo_sub ws a b ka kb
-  have ndc : child.Nodup := List.nodup_cons.mpr ⟨fun hm => hfr ((sub.map _).subset hm), nd.sublist (sub.map _)⟩
-  have hltc : ∀ x ∈ child, x < 2^128 := by
-    intro x hx
-    rcases List.mem_cons.mp hx with rfl | hx
-    · exact bin_lt d a.1 b.1 (hlt a ha) (hlt b hb)
-    · obtain ⟨w, hw, rfl⟩ := List.mem_map.mp hx
-      exact hlt w (sub.subset hw)
-  have hfr_b : ws.any (fun v => v.1 == z.1) = false := by
-    apply Bool.eq_false_iff.mpr; intro hh
-    obtain ⟨x, hx, he⟩ := List.any_eq_true.mp hh
-    exact hfr (beq_iff_eq.mp he ▸ List.mem_map_of_mem hx)
-  have hnz_b : (z.1 == 0) = false := beq_false_of_ne hnz
-  have hleq : 1 + (ws.length - (if ka then 0 else 1) - (if kb then 0 else 1)) = child.length := by
-    change _ = (z.1 :: rest.map Prod.fst).length
-    rw [List.length_cons, List.length_map, delTwo_len ws a b ka kb ha hb ne, Nat.add_comm 1]
-  intro k hk h
-  have hsz := live_size h
-  change child.toFinset.card ≤ k + 1 at hsz
-  rw [List.toFinset_card_of_nodup ndc] at hsz
-  have hlen : child.length ≤ cap := by omega
-  have hcov := cov_required gp (ws := z :: rest)
-    (fun w hw => by rcases List.mem_cons.mp hw with rfl | hw; exact faithful_bin d (hf a ha) (hf b hb); exact hf w (sub.subset hw)) h
-  have hcov_eq : (coverage (z :: rest)).1 = restCov (coverage ws) (dsep a) (dsep b) ka kb ||| dsep z := by
-    change dsep z ||| (coverage rest).1 = _
-    rw [cov_delTwo a b ha hb ne ka kb, Nat.or_comm]
-  rw [hcov_eq] at hcov
-  have hcov_b : (((restCov (coverage ws) (dsep a) (dsep b) ka kb ||| dsep z) &&& fullMask pos.length) != fullMask pos.length) = false := by
-    simp [hcov]
-  unfold evalMove at test
-  dsimp only at test
-  have hnotgt : ¬(child.length > cap) := by omega
-  dsimp only [z] at hcov_b hnz_b hfr_b
-  simp only [hleq, hnotgt, ↓reduceIte, hcov_b, hnz_b, hfr_b, Bool.false_or, Bool.false_eq_true] at test
-  exact closeChild_sound (op := (d, a.1, b.1)) (rest := rest.map Prod.fst) hT hPools hAutos hPrev ndc hltc test k hk h
-lemma testAll_pair {cap n fmask ws cov pools autos prevBuckets l}
-    (h : testAll cap n fmask ws cov pools autos prevBuckets l = true)
-    {a b : Decor} (ha : a ∈ l) (hb : b ∈ l) (ne : a ≠ b) :
-    (∀ d < 4, testPair cap n fmask ws cov pools autos prevBuckets a b d = true) ∨
-    (∀ d < 4, testPair cap n fmask ws cov pools autos prevBuckets b a d = true) := by
-  induction l with
-  | nil => simp at ha
-  | cons w l ih =>
-    simp only [testAll, Bool.and_eq_true, List.all_eq_true] at h
-    rcases List.mem_cons.mp ha with rfl | ha'
-    · have bm := (List.mem_cons.mp hb).resolve_left ne.symm
-      exact Or.inl fun d hd => h.1 b bm d (by interval_cases d <;> decide)
-    · rcases List.mem_cons.mp hb with rfl | hb'
-      · exact Or.inr fun d hd => h.1 a ha' d (by interval_cases d <;> decide)
-      · exact ih h.2 ha' hb'
-lemma node_sound {raw T pos neg ws pools autos prevBuckets cap}
-    (hT : T < 2^128) (gp : goodPairs T pos neg)
-    (hf : ∀ w ∈ ws, faithful pos neg w) (nd : (ws.map Prod.fst).Nodup)
-    (hlt : ∀ w ∈ ws, w.1 < 2^128) (out : T ∉ ws.map Prod.fst)
-    (hPools : ∀ c ∈ pools, ValidPool raw T c)
-    (hAutos : ∀ sw ∈ autos, swapsValid sw = true ∧ permWord sw T = T)
-    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T (cap - 1) xs.toFinset)
-    (checks : cap = 0 ∨ testAll cap ws.length (fullMask pos.length) ws (coverage ws) pools autos prevBuckets ws = true) :
-    Impossible T cap (ws.map Prod.fst).toFinset := by
-  rcases checks with rfl | hcheck
-  · intro k hk h
-    have hk0 : k = 0 := by omega
-    subst hk0
-    obtain ⟨hS, _⟩ := h
-    exact out (List.mem_toFinset.mp (hS ▸ Finset.mem_singleton_self T))
-  by_cases h0 : cap = 0
-  · subst h0; intro k hk h
-    have hk0 : k = 0 := by omega
-    subst hk0
-    obtain ⟨hS, _⟩ := h
-    exact out (List.mem_toFinset.mp (hS ▸ Finset.mem_singleton_self T))
-  have hcap : 0 < cap := by omega
-  apply enum_step nd out
-  intro a ha b hb d hd ka kb ne hnz hfr _
-  obtain ⟨a, haW, rfl⟩ := List.mem_map.mp ha
-  obtain ⟨b, hbW, rfl⟩ := List.mem_map.mp hb
-  have ab : a ≠ b := fun e => ne (congrArg Prod.fst e)
-  have one (x y : Decor) (d' : Nat) (hd' : d' < 4) (hx : x ∈ ws) (hy : y ∈ ws) (nxy : x.1 ≠ y.1)
-      (k1 k2 : Bool) (hnz' : bin d' x.1 y.1 ≠ 0) (hfr' : bin d' x.1 y.1 ∉ ws.map Prod.fst)
-      (ht : testPair cap ws.length (fullMask pos.length) ws (coverage ws) pools autos prevBuckets x y d' = true) :
-      Impossible T (cap - 1) (childTwo (ws.map Prod.fst) x.1 y.1 d' k1 k2).toFinset := by
-    rw [← delTwo_map_toFinset nd hx hy nxy d' k1 k2]
-    have hem : evalMove cap ws.length (fullMask pos.length) ws (coverage ws) pools autos prevBuckets d' x y (dbin d' x y) k1 k2 = true := by
-      simp only [testPair, Bool.and_eq_true] at ht
-      cases k1 <;> cases k2 <;> first | exact ht.1.1.1 | exact ht.1.2 | exact ht.1.1.2 | exact ht.2
-    exact evalMove_sound hT gp hf nd hlt hx hy (fun e => nxy (congrArg Prod.fst e)) hcap hd' hPools hAutos hPrev hnz' hfr' hem
-  rcases testAll_pair hcheck haW hbW ab with hh | hh
-  · exact one a b d hd haW hbW ne ka kb hnz hfr (hh d hd)
-  · rw [childTwo_swap _ nd _ _ d hd]
-    have hfl := flipOp_lt hd
-    exact one b a (flipOp d) hfl hbW haW ne.symm kb ka
-      (bin_comm_flip d hd a.1 b.1 ▸ hnz) (bin_comm_flip d hd a.1 b.1 ▸ hfr) (hh _ hfl)
 def varsOf (m : Nat) : List Nat :=
   (List.range 7).filterMap fun i => if m.testBit i then some (VAR i) else none
 def subcube (z o : Nat) : Nat :=
@@ -1642,239 +1442,15 @@ lemma base_of {pos neg base} (ok : baseCheck pos neg base = true) :
 def forestRootCheck (roots : List Nat) (T : Nat) (essPairs : List (Nat × Nat × Nat)) : Bool :=
   checkProper T && checkRoots roots &&
     roots.all fun a => essPairs.any fun e => (e.1 == a) && checkEss1 T roots e.1 e.2.1 e.2.2
-lemma lower_of_forest {roots T cap} {topBuckets : Array (List (List Nat))} {essPairs : List (Nat × Nat × Nat)}
-    (ok : forestRootCheck roots T essPairs = true)
-    (hTop : ∀ i (hi : i < topBuckets.size), ∀ xs ∈ topBuckets[i], Impossible T cap xs.toFinset)
-    (hRoot : bucketContains topBuckets roots = true) :
-    Lower roots T (cap + 1) := by
-  simp only [forestRootCheck, Bool.and_eq_true, List.all_eq_true, List.any_eq_true, beq_iff_eq] at ok
-  obtain ⟨⟨hT, hR⟩, hess⟩ := ok
-  have ⟨p1, p2, p3⟩ := checkProper_sound hT
-  have hR' := checkRoots_sound hR
-  have hEss' : ∀ a ∈ roots, Essential T roots a := fun a ha => by
-    obtain ⟨⟨v, r, s⟩, _, rfl, he⟩ := hess a ha
-    exact checkEss1_sound he
-  have hImp : Impossible T cap (sortNats roots).toFinset := by
-    unfold bucketContains Array.getD at hRoot
-    dsimp only at hRoot
-    split at hRoot
-    next hi => exact hTop _ hi _ (List.contains_iff_mem.mp hRoot)
-    next => simp at hRoot
-  rw [sortNats_toFinset] at hImp
-  exact lower_of_impossible p1 p2 p3 hR' hEss' hImp
-def buildWires (base : List Decor) (steps : List (Nat × Nat × Nat)) : Array Decor :=
-  steps.foldl (fun arr s =>
-    let a := arr.getD s.2.1 (0, 0, 0)
-    let b := arr.getD s.2.2 (0, 0, 0)
-    arr.push (dbin s.1 a b)) base.toArray
 lemma faithful_zero (pos neg : List Nat) : faithful pos neg (0, 0, 0) := by
   constructor
   · apply Nat.eq_of_testBit_eq; intro i; rw [testBit_projBits]; cases pos[i]? <;> simp
   · apply Nat.eq_of_testBit_eq; intro i; rw [testBit_projBits]; cases neg[i]? <;> simp
-lemma buildWires_faithful {pos neg base steps}
-    (hbase : ∀ x ∈ base, faithful pos neg x ∧ x.1 < 2^128) :
-    ∀ x ∈ (buildWires base steps).toList, faithful pos neg x ∧ x.1 < 2^128 := by
-  have hdef : faithful pos neg (0, 0, 0) ∧ (0 : Nat) < 2^128 := ⟨faithful_zero pos neg, by decide⟩
-  have hstep : ∀ (arr : Array Decor) (s : Nat × Nat × Nat),
-      (∀ x ∈ arr.toList, faithful pos neg x ∧ x.1 < 2^128) →
-      ∀ x ∈ (arr.push (dbin s.1 (arr.getD s.2.1 (0, 0, 0)) (arr.getD s.2.2 (0, 0, 0)))).toList,
-        faithful pos neg x ∧ x.1 < 2^128 := by
-    intro arr s harr x hx
-    rw [Array.toList_push, List.mem_append, List.mem_singleton] at hx
-    rcases hx with hx | rfl
-    · exact harr x hx
-    · have hget (i : Nat) : faithful pos neg (arr.getD i (0, 0, 0)) ∧ (arr.getD i (0, 0, 0)).1 < 2^128 := by
-        unfold Array.getD
-        split
-        next hi => exact harr arr[i] (Array.getElem_mem_toList hi)
-        next => exact hdef
-      exact ⟨faithful_bin s.1 (hget s.2.1).1 (hget s.2.2).1, bin_lt s.1 _ _ (hget s.2.1).2 (hget s.2.2).2⟩
-  unfold buildWires
-  have hinit : ∀ x ∈ base.toArray.toList, faithful pos neg x ∧ x.1 < 2^128 := by simpa using hbase
-  clear hbase
-  generalize base.toArray = acc at hinit ⊢
-  induction steps generalizing acc with
-  | nil => exact hinit
-  | cons s ss ih => exact ih _ (hstep acc s hinit)
 lemma forall_cons {α : Type} {P : α → Prop} {a : α} {l : List α} (ha : P a) (hl : ∀ x ∈ l, P x) :
     ∀ x ∈ a :: l, P x := by
   intro x hx; rcases List.mem_cons.mp hx with rfl | hx; exact ha; exact hl x hx
-lemma array_forall_of_list {α : Type} {P : α → Prop} {l : List α} (h : ∀ x ∈ l, P x) :
-    ∀ i (hi : i < l.toArray.size), P l.toArray[i] :=
-  fun i hi => h l.toArray[i] (Array.getElem_mem_toList hi)
 abbrev PoolSpec := Nat × List (Nat × Nat × Nat)
-
-def sliceSpec (raw : List Nat) (target : Nat) (o : Option (Nat × Nat)) : Prop :=
-  ∀ pair, o = some pair → Slice raw target pair.1 pair.2
-lemma sliceSpecCons {raw target d k xs} (head : Slice raw target d k)
-    (tail : ∀ o ∈ xs, sliceSpec raw target o) :
-    ∀ o ∈ some (d,k) :: xs, sliceSpec raw target o :=
-  forall_cons (fun _ eq => by cases eq; exact head) tail
-lemma sliceSpecNil {raw target} : ∀ o ∈ [], sliceSpec raw target o :=
-  fun _ h => (List.not_mem_nil h).elim
-
-def poolSteps (steps : List (Nat × Nat × Nat)) (rows : List (Nat × List Nat)) : List PoolSpec :=
-  let table := steps.toArray
-  rows.map (fun row => (row.1, row.2.map (fun i => table[i]?.getD (0,0,0))))
-
 abbrev NodeSpec := List Nat × List Nat × List Nat
-
-def readIndexMask : Nat → Nat → Nat → List Nat
-  | 0, _, _ => []
-  | fuel+1, base, bits =>
-      if bits = 0 then [] else
-      let zeros := (bits ^^^ (bits-1)).log2
-      let index := base + zeros
-      index :: readIndexMask fuel (index+1) (bits >>> (zeros+1))
-def readIndexGaps : Nat → Nat → Nat → List Nat
-  | 0, _, _ => []
-  | fuel+1, start, bits =>
-      if bits ≤ 1 then [] else
-      let width := (bits ^^^ (bits-1)).log2
-      let tail := bits >>> (width+1)
-      let gap := (1 <<< width) + (tail &&& ((1 <<< width)-1))
-      (start+gap-1) :: readIndexGaps fuel (start+gap) (tail >>> width)
-def decodeIndices (n : Nat) : List Nat :=
-  let data := n >>> 1
-  if n.testBit 0 then readIndexGaps (data.log2+1) 0 data
-  else readIndexMask (data.log2+1) 0 data
-def indexPairNodes (rows : List (Nat × Nat)) : List NodeSpec :=
-  rows.map fun row => (decodeIndices row.1, decodeIndices row.2, [0])
-def indexTripleNodes (rows : List (Nat × Nat × Nat)) : List NodeSpec :=
-  rows.map fun row => (decodeIndices row.1, decodeIndices row.2.1, decodeIndices row.2.2)
-
-def nodesWithIdentity (entries : List (List Nat × List Nat)) : List NodeSpec :=
-  entries.map (fun entry => (entry.1, entry.2, [0]))
-
-def buildPools (W : Array Decor) (raw : List Nat) (slices : Array (Nat × Nat))
-    (pspecs : List PoolSpec) : Array (Option BoundPool) :=
-  (pspecs.map fun (slIdx, chIdxs) =>
-    match slices[slIdx]? with
-    | none => none
-    | some (dom, lb) =>
-      let cs := chIdxs.map fun (op, ia, ib) => (op, (W.getD ia (0, 0, 0)).1, (W.getD ib (0, 0, 0)).1)
-      materialize raw cs dom lb).toArray
-lemma buildPools_sound {W : Array Decor} {raw T} {slices : Array (Nat × Nat)} {pspecs : List PoolSpec}
-    (hSlices : ∀ i (hi : i < slices.size), Slice raw T slices[i].1 slices[i].2) :
-    ∀ i (hi : i < (buildPools W raw slices pspecs).size),
-      ∀ c, (buildPools W raw slices pspecs)[i] = some c → ValidPool raw T c := by
-  intro i hi c hc
-  unfold buildPools at hi hc
-  have hmem : some c ∈ pspecs.map (fun (slIdx, chIdxs) =>
-      match slices[slIdx]? with
-      | none => none
-      | some (dom, lb) =>
-        let cs := chIdxs.map fun (op, ia, ib) => (op, (W.getD ia (0, 0, 0)).1, (W.getD ib (0, 0, 0)).1)
-        materialize raw cs dom lb) := by
-    rw [← hc]
-    exact Array.getElem_mem_toList hi
-  obtain ⟨⟨slIdx, chIdxs⟩, _, hmat⟩ := List.mem_map.mp hmem
-  cases hget_sl : slices[slIdx]? with
-  | none => simp [hget_sl] at hmat
-  | some sl =>
-    simp only [hget_sl] at hmat
-    have ⟨hsi, hval⟩ := Array.getElem?_eq_some_iff.mp hget_sl
-    exact materialize_sound (hval ▸ hSlices slIdx hsi) hmat
-def checkNode (W : Array Decor) (T fmask : Nat)
-    (poolTable : Array (Option BoundPool)) (autosTable : Array (List (Nat × Nat)))
-    (prevBuckets : Array (List (List Nat))) (k : Nat) (ns : NodeSpec) : Bool :=
-  let ws := ns.1.map fun idx => W.getD idx (0, 0, 0)
-  let vals := ws.map Prod.fst
-  let pools := ns.2.1.filterMap fun pIdx => poolTable.getD pIdx none
-  let nodeAutos := ns.2.2.filterMap fun aIdx => autosTable[aIdx]?
-  decide vals.Nodup && !(vals.contains T) &&
-    (k == 0 || testAll k ws.length fmask ws (coverage ws) pools nodeAutos prevBuckets ws)
-def checkNodes (W : Array Decor) (T fmask : Nat)
-    (poolTable : Array (Option BoundPool)) (autosTable : Array (List (Nat × Nat)))
-    (prevBuckets : Array (List (List Nat))) (k : Nat) (nodes : List NodeSpec) : Bool :=
-  nodes.all (checkNode W T fmask poolTable autosTable prevBuckets k)
-lemma checkNode_sound {W : Array Decor} {raw pos neg T poolTable autosTable prevBuckets k ns}
-    (hT : T < 2^128) (gp : goodPairs T pos neg)
-    (hW : ∀ x ∈ W.toList, faithful pos neg x ∧ x.1 < 2^128)
-    (hPoolTable : ∀ i (hi : i < poolTable.size), ∀ c, poolTable[i] = some c → ValidPool raw T c)
-    (hAutos : ∀ sw ∈ autosTable.toList, swapsValid sw = true ∧ permWord sw T = T)
-    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T (k - 1) xs.toFinset)
-    (ok : checkNode W T (fullMask pos.length) poolTable autosTable prevBuckets k ns = true) :
-    Impossible T k ((ns.1.map fun idx => (W.getD idx (0, 0, 0)).1).toFinset) := by
-  have hdef : faithful pos neg (0, 0, 0) ∧ (0 : Nat) < 2^128 := ⟨faithful_zero pos neg, by decide⟩
-  have hget (idx : Nat) : faithful pos neg (W.getD idx (0, 0, 0)) ∧ (W.getD idx (0, 0, 0)).1 < 2^128 := by
-    unfold Array.getD; split
-    next hi => exact hW W[idx] (Array.getElem_mem_toList hi)
-    next => exact hdef
-  unfold checkNode at ok
-  simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true', List.contains_eq_mem, Bool.or_eq_true, beq_iff_eq] at ok
-  let ws := ns.1.map fun idx => W.getD idx (0, 0, 0)
-  have hmap : ws.map Prod.fst = ns.1.map fun idx => (W.getD idx (0, 0, 0)).1 := by simp [ws, List.map_map, Function.comp_def]
-  rw [← hmap]
-  apply node_sound hT gp
-    (fun w hw => by obtain ⟨idx, _, rfl⟩ := List.mem_map.mp hw; exact (hget idx).1)
-    ok.1.1
-    (fun w hw => by obtain ⟨idx, _, rfl⟩ := List.mem_map.mp hw; exact (hget idx).2)
-    (of_decide_eq_false ok.1.2)
-    (fun c hc => by
-      obtain ⟨pIdx, _, hmat⟩ := List.mem_filterMap.mp hc
-      unfold Array.getD at hmat
-      split at hmat
-      next hi => exact hPoolTable pIdx hi c hmat
-      next => simp at hmat)
-    (fun sw hsw => by
-      obtain ⟨aIdx, _, ha⟩ := List.mem_filterMap.mp hsw
-      have ⟨hi, hval⟩ := Array.getElem?_eq_some_iff.mp ha
-      exact hAutos sw (hval ▸ Array.getElem_mem_toList hi))
-    hPrev ok.2
-def nodeVals (W : Array Decor) (ns : NodeSpec) : List Nat :=
-  sortNats (ns.1.map fun idx => (W.getD idx (0, 0, 0)).1)
-def insertBucket (buckets : Array (List (List Nat))) (xs : List Nat) : Array (List (List Nat)) :=
-  let idx := hashWs buckets.size xs
-  if h : idx < buckets.size then
-    let b := buckets[idx]
-    if b.contains xs then buckets else buckets.set idx (xs :: b) h
-  else buckets
-def buildBuckets (nb : Nat) (W : Array Decor) (nodes : List NodeSpec) : Array (List (List Nat)) :=
-  nodes.foldl (fun acc ns => insertBucket acc (nodeVals W ns)) (Array.replicate nb [])
-lemma insertBucket_mem {bks : Array (List (List Nat))} {P : List Nat → Prop} {xs : List Nat}
-    (hb : ∀ i (hi : i < bks.size), ∀ ys ∈ bks[i], P ys) (hxs : P xs) :
-    ∀ i (hi : i < (insertBucket bks xs).size), ∀ ys ∈ (insertBucket bks xs)[i], P ys := by
-  unfold insertBucket
-  dsimp only
-  split
-  next hidx =>
-    split
-    · exact hb
-    · intro i hi ys hys
-      rw [Array.size_set] at hi
-      rw [Array.getElem_set] at hys
-      split at hys
-      next =>
-        rcases List.mem_cons.mp hys with rfl | hys'
-        · exact hxs
-        · exact hb _ hidx ys hys'
-      next => exact hb i hi ys hys
-  next => exact hb
-lemma buildBuckets_sound {W : Array Decor} {raw pos neg T poolTable autosTable prevBuckets k nb}
-    {nodes : List NodeSpec}
-    (hT : T < 2^128) (gp : goodPairs T pos neg)
-    (hW : ∀ x ∈ W.toList, faithful pos neg x ∧ x.1 < 2^128)
-    (hPoolTable : ∀ i (hi : i < poolTable.size), ∀ c, poolTable[i] = some c → ValidPool raw T c)
-    (hAutos : ∀ sw ∈ autosTable.toList, swapsValid sw = true ∧ permWord sw T = T)
-    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T (k - 1) xs.toFinset)
-    (hNodes : checkNodes W T (fullMask pos.length) poolTable autosTable prevBuckets k nodes = true) :
-    ∀ i (hi : i < (buildBuckets nb W nodes).size), ∀ xs ∈ (buildBuckets nb W nodes)[i], Impossible T k xs.toFinset := by
-  have hmem : ∀ ns ∈ nodes, Impossible T k (nodeVals W ns).toFinset := fun ns hns => by
-    unfold nodeVals
-    rw [sortNats_toFinset]
-    exact checkNode_sound hT gp hW hPoolTable hAutos hPrev (List.all_eq_true.mp hNodes ns hns)
-  clear hNodes
-  unfold buildBuckets
-  have hinit : ∀ i (hi : i < (Array.replicate nb ([] : List (List Nat))).size),
-      ∀ xs ∈ (Array.replicate nb ([] : List (List Nat)))[i], Impossible T k xs.toFinset := by
-    intro i hi xs hxs; simp at hxs
-  generalize Array.replicate nb ([] : List (List Nat)) = acc at hinit ⊢
-  induction nodes generalizing acc with
-  | nil => exact hinit
-  | cons ns rest ih =>
-    exact ih (fun x hx => hmem x (List.mem_cons_of_mem _ hx))
-      (insertBucket acc (nodeVals W ns)) (insertBucket_mem hinit (hmem ns (List.mem_cons_self ..)))
 lemma var_testBit (i : Fin 7) (r : Row) : (VAR i.val).testBit r.val = r.val.testBit i.val := by
   revert i r; decide +kernel
 def sliceDirectCheck (z o zDead : Nat) (raw : List Nat) (T : Nat) (qRoots : List Nat) (qGoal : Nat) : Bool :=
@@ -2748,2760 +2324,3863 @@ lemma lower_of_forestBT {roots T cap} {topBks : BT (List (List Nat))} {essPairs 
     exact btAll_get hTop (fun _ h => (List.not_mem_nil h).elim) _ _ (List.contains_iff_mem.mp hRoot)
   rw [sortNats_toFinset] at hImp
   exact lower_of_impossible p1 p2 p3 hR' hEss' hImp
-def startDecor (roots pos neg : List Nat) : List Decor :=
-  roots.map fun x => (x, projBits pos x, projBits neg x)
-def startWires (roots pos neg : List Nat) : BT Decor :=
-  buildWiresBT 4 (startDecor roots pos neg) []
-def startNodes (roots : List Nat) : List NodeSpec := [(List.range roots.length, [], [0])]
-def singleLayerCheck (roots : List Nat) (T k : Nat) (pos neg : List Nat)
-    (essentialPairs : List (Nat × Nat × Nat)) : Bool :=
-  forestRootCheck roots T essentialPairs && decide (T < 2^128) &&
-  goodPairsCheck T pos neg && baseCheck pos neg (startDecor roots pos neg) &&
-  checkNodesBT (startWires roots pos neg) T (fullMask pos.length)
-    BT.empty BT.empty BT.empty k (startNodes roots) &&
-  bucketContainsBT (buildBucketsBT (startWires roots pos neg) (startNodes roots)) roots
-lemma lower_from_single_layer {roots T k pos neg essentialPairs}
-    (h : singleLayerCheck roots T k pos neg essentialPairs = true) :
-    Lower roots T (k+1) := by
-  simp only [singleLayerCheck, Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨⟨⟨hr,hT⟩,hp⟩,hb⟩,hn⟩,hm⟩ := h
-  apply lower_of_forestBT hr _ hm
-  apply buildBucketsBT_sound (raw := roots) hT (goodPairs_of hp) _ _ _ _ hn
-  · exact buildWiresBT_faithful (base_of hb)
-  · trivial
-  · trivial
-  · trivial
-def identifyRow (i j keep : Nat) (r : Row) : Row :=
-  let x := r.val &&& keep
-  ⟨(if x.testBit j then x ||| (2^i) else x) % 128, Nat.mod_lt _ (by decide)⟩
-lemma mapped_slice {raw : List Nat} {T d : Nat} {roots : List Nat} {G cost : Nat}
-    (f : Row → Row) (hd : ∀ r : Row, d.testBit (f r).val = true)
-    (hc : raw.all (fun a => freeIn roots (renameW f a)) = true)
-    (ht : renameW f T = G) (proper : checkProper G = true)
-    (low : Lower roots G cost) : Slice raw T d cost := by
-  obtain ⟨ne, lt, bit⟩ := checkProper_sound proper
-  have eq : restrictW f (obs T) = obs G := (obs_renameW f T).symm.trans (congrArg obs ht)
-  refine ⟨f, roots, hd, ?_, ?_, ?_⟩
-  · exact fun a ha => freeIn_sound (List.all_eq_true.mp hc a ha)
-  · rw [eq]
-    exact obs_not_const ne lt bit
-  · rw [eq]
-    exact low
-def oppositeRow (i j keep : Nat) (r : Row) : Row :=
-  let x := r.val &&& keep
-  ⟨(if x.testBit j then x else x ||| (2^i)) % 128, Nat.mod_lt _ (by decide)⟩
-def freeSigned (roots : List Nat) (w : Nat) : Bool :=
-  freeIn roots w || roots.any (fun b => w == (ALL128 ^^^ b))
-lemma freeSigned_sound {roots : List Nat} {f : Row → Row} {a : Nat}
-    (ok : freeSigned roots (renameW f a) = true) :
-    Avail (roots.map obs) (restrictW f (obs a)) := by
-  simp only [freeSigned, Bool.or_eq_true, List.any_eq_true, beq_iff_eq] at ok
-  rcases ok with h | ⟨b, hb, heq⟩
-  · exact freeIn_sound h
-  · have eq : restrictW f (obs a) = invW (obs b) := by
-      rw [← obs_renameW, heq]
-      funext r
-      have hall : ALL128.testBit r.val = true := by
-        simp only [ALL128]; have h := r.isLt
-        simpa [h] using Nat.testBit_two_pow_sub_one 128 r.val
-      simp [obs, invW, Nat.testBit_xor, hall]
+def hashWs (nb : Nat) (ws : List Nat) : Nat :=
+  (ws.foldl (fun h w => h + (w % 1000003) * 31) 0) % nb
+def bucketContains (buckets : Array (List (List Nat))) (ws : List Nat) : Bool :=
+  let s := sortNats ws
+  (buckets.getD (hashWs buckets.size s) []).contains s
+def closeChild (pools : List BoundPool) (autos : List (List (Nat × Nat)))
+    (prevBuckets : Array (List (List Nat))) (k : Nat) (rest : List Nat) (op : Choice) : Bool :=
+  let ws := choiceVal op :: rest
+  pools.any (fun c => scalarPoolCut c k rest op) ||
+    autos.any (fun sw => bucketContains prevBuckets (ws.map (permWord sw)))
+lemma closeChild_sound {raw T pools autos prevBuckets k rest op}
+    (hT : T < 2^128)
+    (hPools : ∀ c ∈ pools, ValidPool raw T c)
+    (hAutos : ∀ sw ∈ autos, swapsValid sw = true ∧ permWord sw T = T)
+    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T k xs.toFinset)
+    (nd : (choiceVal op :: rest).Nodup)
+    (hlt : ∀ x ∈ choiceVal op :: rest, x < 2^128)
+    (h : closeChild pools autos prevBuckets k rest op = true) :
+    Impossible T k (choiceVal op :: rest).toFinset := by
+  simp only [closeChild, Bool.or_eq_true, List.any_eq_true] at h
+  rcases h with ⟨c, hc, hcut⟩ | ⟨sw, hsw, hhit⟩
+  · exact scalarPoolCut_sound (hPools c hc) nd hcut
+  · unfold bucketContains at hhit
+    simp only [Array.getD, List.contains_eq_mem, decide_eq_true_eq] at hhit
+    split at hhit
+    next hlt_b =>
+      have himp := hPrev _ hlt_b _ hhit
+      rw [sortNats_toFinset] at himp
+      have ⟨hsv, hfix⟩ := hAutos sw hsw
+      have hvr : swapsValid sw.reverse = true := by simp only [swapsValid, List.all_reverse]; exact hsv
+      have hinv_row_gen : ∀ (l : List (Nat × Nat)), swapsValid l = true →
+          ∀ r : Row, permRow l.reverse (permRow l r) = r := by
+        intro l hl
+        induction l with
+        | nil => intro r; rfl
+        | cons p ps ih =>
+          simp only [swapsValid, List.all_cons, Bool.and_eq_true, decide_eq_true_eq] at hl
+          intro r
+          have h1 : permRow (p :: ps).reverse (permRow (p :: ps) r) =
+              swapRow p.1 p.2 (permRow ps.reverse (permRow ps (swapRow p.1 p.2 r))) := by
+            simp [permRow, List.reverse_cons, List.foldl_append]
+          rw [h1, ih hl.2, swapRow_invol p.1 p.2 (by omega) hl.1.2]
+      have hinv_row2 : ∀ r : Row, permRow sw (permRow sw.reverse r) = r := by
+        simpa using hinv_row_gen sw.reverse hvr
+      have hinv_w : ∀ x : Nat, x < 2^128 → permWord sw.reverse (permWord sw x) = x := by
+        intro x hx
+        have h1 := permWord_eq_renameW sw hsv x hx
+        have h2 := permWord_eq_renameW sw.reverse hvr (permWord sw x) (h1 ▸ renameW_lt _ x)
+        rw [h2, h1]
+        apply Nat.eq_of_testBit_eq; intro r
+        by_cases hrr : r < 128
+        · rw [testBit_renameW _ _ ⟨r, hrr⟩, testBit_renameW, hinv_row2]
+        · rw [Nat.testBit_eq_false_of_lt (lt_of_lt_of_le (renameW_lt _ _) (Nat.pow_le_pow_right (by decide) (by omega))),
+              Nat.testBit_eq_false_of_lt (lt_of_lt_of_le hx (Nat.pow_le_pow_right (by decide) (by omega)))]
+      have hfix_r : permWord sw.reverse T = T := by
+        conv_lhs => rw [← hfix]
+        exact hinv_w T hT
+      have hmap_lt : ∀ a ∈ (choiceVal op :: rest).map (permWord sw), a < 2^128 := by
+        intro a ha
+        obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ha
+        rw [permWord_eq_renameW sw hsv x (hlt x hx)]
+        exact renameW_lt _ x
+      have hrot := rotate_impossible himp sw.reverse hvr hT hfix_r hmap_lt
+      have hback : (((choiceVal op :: rest).map (permWord sw)).map (permWord sw.reverse)) = (choiceVal op :: rest) := by
+        rw [List.map_map]
+        conv_rhs => rw [← List.map_id (choiceVal op :: rest)]
+        exact List.map_congr_left fun x hx => hinv_w x (hlt x hx)
+      rwa [hback] at hrot
+    next => simp at hhit
+def evalMove (cap n fmask : Nat) (ws : List Decor) (cov : Cov)
+    (pools : List BoundPool) (autos : List (List (Nat × Nat)))
+    (prevBuckets : Array (List (List Nat)))
+    (d : Nat) (a b z : Decor) (ka kb : Bool) : Bool :=
+  let len := 1 + (n - (if ka then 0 else 1) - (if kb then 0 else 1))
+  if len > cap then true else
+    let rs := restCov cov (dsep a) (dsep b) ka kb
+    if ((rs ||| dsep z) &&& fmask) != fmask then true else
+    if z.1 == 0 || ws.any (fun v => v.1 == z.1) then true else
+      let rest := (delTwo ws a b ka kb).map Prod.fst
+      closeChild pools autos prevBuckets (cap - 1) rest (d, a.1, b.1)
+def testPair (cap n fmask : Nat) (ws : List Decor) (cov : Cov)
+    (pools : List BoundPool) (autos : List (List (Nat × Nat)))
+    (prevBuckets : Array (List (List Nat))) (a b : Decor) (d : Nat) : Bool :=
+  let z := dbin d a b
+  let go := evalMove cap n fmask ws cov pools autos prevBuckets d a b z
+  go false false && go true false && go false true && go true true
+def testAll (cap n fmask : Nat) (ws : List Decor) (cov : Cov)
+    (pools : List BoundPool) (autos : List (List (Nat × Nat)))
+    (prevBuckets : Array (List (List Nat))) : List Decor → Bool
+  | [] => true
+  | a :: bs =>
+    bs.all (fun b => [0, 1, 2, 3].all (testPair cap n fmask ws cov pools autos prevBuckets a b)) &&
+      testAll cap n fmask ws cov pools autos prevBuckets bs
+lemma evalMove_sound {raw T pos neg ws pools autos prevBuckets cap a b d ka kb}
+    (hT : T < 2^128)
+    (gp : goodPairs T pos neg) (hf : ∀ w ∈ ws, faithful pos neg w)
+    (nd : (ws.map Prod.fst).Nodup) (hlt : ∀ w ∈ ws, w.1 < 2^128)
+    (ha : a ∈ ws) (hb : b ∈ ws) (ne : a ≠ b) (hcap : 0 < cap) (hd : d < 4)
+    (hPools : ∀ c ∈ pools, ValidPool raw T c)
+    (hAutos : ∀ sw ∈ autos, swapsValid sw = true ∧ permWord sw T = T)
+    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T (cap - 1) xs.toFinset)
+    (hnz : (dbin d a b).1 ≠ 0) (hfr : (dbin d a b).1 ∉ ws.map Prod.fst)
+    (test : evalMove cap ws.length (fullMask pos.length) ws (coverage ws) pools autos prevBuckets
+      d a b (dbin d a b) ka kb = true) :
+    Impossible T (cap - 1) ((dbin d a b).1 :: (delTwo ws a b ka kb).map Prod.fst).toFinset := by
+  let z := dbin d a b
+  let rest := delTwo ws a b ka kb
+  let child := z.1 :: rest.map Prod.fst
+  have sub : rest.Sublist ws := delTwo_sub ws a b ka kb
+  have ndc : child.Nodup := List.nodup_cons.mpr ⟨fun hm => hfr ((sub.map _).subset hm), nd.sublist (sub.map _)⟩
+  have hltc : ∀ x ∈ child, x < 2^128 := by
+    intro x hx
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact bin_lt d a.1 b.1 (hlt a ha) (hlt b hb)
+    · obtain ⟨w, hw, rfl⟩ := List.mem_map.mp hx
+      exact hlt w (sub.subset hw)
+  have hfr_b : ws.any (fun v => v.1 == z.1) = false := by
+    apply Bool.eq_false_iff.mpr; intro hh
+    obtain ⟨x, hx, he⟩ := List.any_eq_true.mp hh
+    exact hfr (beq_iff_eq.mp he ▸ List.mem_map_of_mem hx)
+  have hnz_b : (z.1 == 0) = false := beq_false_of_ne hnz
+  have hleq : 1 + (ws.length - (if ka then 0 else 1) - (if kb then 0 else 1)) = child.length := by
+    change _ = (z.1 :: rest.map Prod.fst).length
+    rw [List.length_cons, List.length_map, delTwo_len ws a b ka kb ha hb ne, Nat.add_comm 1]
+  intro k hk h
+  have hsz := live_size h
+  change child.toFinset.card ≤ k + 1 at hsz
+  rw [List.toFinset_card_of_nodup ndc] at hsz
+  have hlen : child.length ≤ cap := by omega
+  have hcov := cov_required gp (ws := z :: rest)
+    (fun w hw => by rcases List.mem_cons.mp hw with rfl | hw; exact faithful_bin d (hf a ha) (hf b hb); exact hf w (sub.subset hw)) h
+  have hcov_eq : (coverage (z :: rest)).1 = restCov (coverage ws) (dsep a) (dsep b) ka kb ||| dsep z := by
+    change dsep z ||| (coverage rest).1 = _
+    rw [cov_delTwo a b ha hb ne ka kb, Nat.or_comm]
+  rw [hcov_eq] at hcov
+  have hcov_b : (((restCov (coverage ws) (dsep a) (dsep b) ka kb ||| dsep z) &&& fullMask pos.length) != fullMask pos.length) = false := by
+    simp [hcov]
+  unfold evalMove at test
+  dsimp only at test
+  have hnotgt : ¬(child.length > cap) := by omega
+  dsimp only [z] at hcov_b hnz_b hfr_b
+  simp only [hleq, hnotgt, ↓reduceIte, hcov_b, hnz_b, hfr_b, Bool.false_or, Bool.false_eq_true] at test
+  exact closeChild_sound (op := (d, a.1, b.1)) (rest := rest.map Prod.fst) hT hPools hAutos hPrev ndc hltc test k hk h
+lemma testAll_pair {cap n fmask ws cov pools autos prevBuckets l}
+    (h : testAll cap n fmask ws cov pools autos prevBuckets l = true)
+    {a b : Decor} (ha : a ∈ l) (hb : b ∈ l) (ne : a ≠ b) :
+    (∀ d < 4, testPair cap n fmask ws cov pools autos prevBuckets a b d = true) ∨
+    (∀ d < 4, testPair cap n fmask ws cov pools autos prevBuckets b a d = true) := by
+  induction l with
+  | nil => simp at ha
+  | cons w l ih =>
+    simp only [testAll, Bool.and_eq_true, List.all_eq_true] at h
+    rcases List.mem_cons.mp ha with rfl | ha'
+    · have bm := (List.mem_cons.mp hb).resolve_left ne.symm
+      exact Or.inl fun d hd => h.1 b bm d (by interval_cases d <;> decide)
+    · rcases List.mem_cons.mp hb with rfl | hb'
+      · exact Or.inr fun d hd => h.1 a ha' d (by interval_cases d <;> decide)
+      · exact ih h.2 ha' hb'
+lemma node_sound {raw T pos neg ws pools autos prevBuckets cap}
+    (hT : T < 2^128) (gp : goodPairs T pos neg)
+    (hf : ∀ w ∈ ws, faithful pos neg w) (nd : (ws.map Prod.fst).Nodup)
+    (hlt : ∀ w ∈ ws, w.1 < 2^128) (out : T ∉ ws.map Prod.fst)
+    (hPools : ∀ c ∈ pools, ValidPool raw T c)
+    (hAutos : ∀ sw ∈ autos, swapsValid sw = true ∧ permWord sw T = T)
+    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T (cap - 1) xs.toFinset)
+    (checks : cap = 0 ∨ testAll cap ws.length (fullMask pos.length) ws (coverage ws) pools autos prevBuckets ws = true) :
+    Impossible T cap (ws.map Prod.fst).toFinset := by
+  rcases checks with rfl | hcheck
+  · intro k hk h
+    have hk0 : k = 0 := by omega
+    subst hk0
+    obtain ⟨hS, _⟩ := h
+    exact out (List.mem_toFinset.mp (hS ▸ Finset.mem_singleton_self T))
+  by_cases h0 : cap = 0
+  · subst h0; intro k hk h
+    have hk0 : k = 0 := by omega
+    subst hk0
+    obtain ⟨hS, _⟩ := h
+    exact out (List.mem_toFinset.mp (hS ▸ Finset.mem_singleton_self T))
+  have hcap : 0 < cap := by omega
+  apply enum_step nd out
+  intro a ha b hb d hd ka kb ne hnz hfr _
+  obtain ⟨a, haW, rfl⟩ := List.mem_map.mp ha
+  obtain ⟨b, hbW, rfl⟩ := List.mem_map.mp hb
+  have ab : a ≠ b := fun e => ne (congrArg Prod.fst e)
+  have one (x y : Decor) (d' : Nat) (hd' : d' < 4) (hx : x ∈ ws) (hy : y ∈ ws) (nxy : x.1 ≠ y.1)
+      (k1 k2 : Bool) (hnz' : bin d' x.1 y.1 ≠ 0) (hfr' : bin d' x.1 y.1 ∉ ws.map Prod.fst)
+      (ht : testPair cap ws.length (fullMask pos.length) ws (coverage ws) pools autos prevBuckets x y d' = true) :
+      Impossible T (cap - 1) (childTwo (ws.map Prod.fst) x.1 y.1 d' k1 k2).toFinset := by
+    rw [← delTwo_map_toFinset nd hx hy nxy d' k1 k2]
+    have hem : evalMove cap ws.length (fullMask pos.length) ws (coverage ws) pools autos prevBuckets d' x y (dbin d' x y) k1 k2 = true := by
+      simp only [testPair, Bool.and_eq_true] at ht
+      cases k1 <;> cases k2 <;> first | exact ht.1.1.1 | exact ht.1.2 | exact ht.1.1.2 | exact ht.2
+    exact evalMove_sound hT gp hf nd hlt hx hy (fun e => nxy (congrArg Prod.fst e)) hcap hd' hPools hAutos hPrev hnz' hfr' hem
+  rcases testAll_pair hcheck haW hbW ab with hh | hh
+  · exact one a b d hd haW hbW ne ka kb hnz hfr (hh d hd)
+  · rw [childTwo_swap _ nd _ _ d hd]
+    have hfl := flipOp_lt hd
+    exact one b a (flipOp d) hfl hbW haW ne.symm kb ka
+      (bin_comm_flip d hd a.1 b.1 ▸ hnz) (bin_comm_flip d hd a.1 b.1 ▸ hfr) (hh _ hfl)
+lemma lower_of_forest {roots T cap} {topBuckets : Array (List (List Nat))} {essPairs : List (Nat × Nat × Nat)}
+    (ok : forestRootCheck roots T essPairs = true)
+    (hTop : ∀ i (hi : i < topBuckets.size), ∀ xs ∈ topBuckets[i], Impossible T cap xs.toFinset)
+    (hRoot : bucketContains topBuckets roots = true) :
+    Lower roots T (cap + 1) := by
+  simp only [forestRootCheck, Bool.and_eq_true, List.all_eq_true, List.any_eq_true, beq_iff_eq] at ok
+  obtain ⟨⟨hT, hR⟩, hess⟩ := ok
+  have ⟨p1, p2, p3⟩ := checkProper_sound hT
+  have hR' := checkRoots_sound hR
+  have hEss' : ∀ a ∈ roots, Essential T roots a := fun a ha => by
+    obtain ⟨⟨v, r, s⟩, _, rfl, he⟩ := hess a ha
+    exact checkEss1_sound he
+  have hImp : Impossible T cap (sortNats roots).toFinset := by
+    unfold bucketContains Array.getD at hRoot
+    dsimp only at hRoot
+    split at hRoot
+    next hi => exact hTop _ hi _ (List.contains_iff_mem.mp hRoot)
+    next => simp at hRoot
+  rw [sortNats_toFinset] at hImp
+  exact lower_of_impossible p1 p2 p3 hR' hEss' hImp
+def buildWires (base : List Decor) (steps : List (Nat × Nat × Nat)) : Array Decor :=
+  steps.foldl (fun arr s =>
+    let a := arr.getD s.2.1 (0, 0, 0)
+    let b := arr.getD s.2.2 (0, 0, 0)
+    arr.push (dbin s.1 a b)) base.toArray
+lemma buildWires_faithful {pos neg base steps}
+    (hbase : ∀ x ∈ base, faithful pos neg x ∧ x.1 < 2^128) :
+    ∀ x ∈ (buildWires base steps).toList, faithful pos neg x ∧ x.1 < 2^128 := by
+  have hdef : faithful pos neg (0, 0, 0) ∧ (0 : Nat) < 2^128 := ⟨faithful_zero pos neg, by decide⟩
+  have hstep : ∀ (arr : Array Decor) (s : Nat × Nat × Nat),
+      (∀ x ∈ arr.toList, faithful pos neg x ∧ x.1 < 2^128) →
+      ∀ x ∈ (arr.push (dbin s.1 (arr.getD s.2.1 (0, 0, 0)) (arr.getD s.2.2 (0, 0, 0)))).toList,
+        faithful pos neg x ∧ x.1 < 2^128 := by
+    intro arr s harr x hx
+    rw [Array.toList_push, List.mem_append, List.mem_singleton] at hx
+    rcases hx with hx | rfl
+    · exact harr x hx
+    · have hget (i : Nat) : faithful pos neg (arr.getD i (0, 0, 0)) ∧ (arr.getD i (0, 0, 0)).1 < 2^128 := by
+        unfold Array.getD
+        split
+        next hi => exact harr arr[i] (Array.getElem_mem_toList hi)
+        next => exact hdef
+      exact ⟨faithful_bin s.1 (hget s.2.1).1 (hget s.2.2).1, bin_lt s.1 _ _ (hget s.2.1).2 (hget s.2.2).2⟩
+  unfold buildWires
+  have hinit : ∀ x ∈ base.toArray.toList, faithful pos neg x ∧ x.1 < 2^128 := by simpa using hbase
+  clear hbase
+  generalize base.toArray = acc at hinit ⊢
+  induction steps generalizing acc with
+  | nil => exact hinit
+  | cons s ss ih => exact ih _ (hstep acc s hinit)
+lemma array_forall_of_list {α : Type} {P : α → Prop} {l : List α} (h : ∀ x ∈ l, P x) :
+    ∀ i (hi : i < l.toArray.size), P l.toArray[i] :=
+  fun i hi => h l.toArray[i] (Array.getElem_mem_toList hi)
+def buildPools (W : Array Decor) (raw : List Nat) (slices : Array (Nat × Nat))
+    (pspecs : List PoolSpec) : Array (Option BoundPool) :=
+  (pspecs.map fun (slIdx, chIdxs) =>
+    match slices[slIdx]? with
+    | none => none
+    | some (dom, lb) =>
+      let cs := chIdxs.map fun (op, ia, ib) => (op, (W.getD ia (0, 0, 0)).1, (W.getD ib (0, 0, 0)).1)
+      materialize raw cs dom lb).toArray
+lemma buildPools_sound {W : Array Decor} {raw T} {slices : Array (Nat × Nat)} {pspecs : List PoolSpec}
+    (hSlices : ∀ i (hi : i < slices.size), Slice raw T slices[i].1 slices[i].2) :
+    ∀ i (hi : i < (buildPools W raw slices pspecs).size),
+      ∀ c, (buildPools W raw slices pspecs)[i] = some c → ValidPool raw T c := by
+  intro i hi c hc
+  unfold buildPools at hi hc
+  have hmem : some c ∈ pspecs.map (fun (slIdx, chIdxs) =>
+      match slices[slIdx]? with
+      | none => none
+      | some (dom, lb) =>
+        let cs := chIdxs.map fun (op, ia, ib) => (op, (W.getD ia (0, 0, 0)).1, (W.getD ib (0, 0, 0)).1)
+        materialize raw cs dom lb) := by
+    rw [← hc]
+    exact Array.getElem_mem_toList hi
+  obtain ⟨⟨slIdx, chIdxs⟩, _, hmat⟩ := List.mem_map.mp hmem
+  cases hget_sl : slices[slIdx]? with
+  | none => simp [hget_sl] at hmat
+  | some sl =>
+    simp only [hget_sl] at hmat
+    have ⟨hsi, hval⟩ := Array.getElem?_eq_some_iff.mp hget_sl
+    exact materialize_sound (hval ▸ hSlices slIdx hsi) hmat
+def checkNode (W : Array Decor) (T fmask : Nat)
+    (poolTable : Array (Option BoundPool)) (autosTable : Array (List (Nat × Nat)))
+    (prevBuckets : Array (List (List Nat))) (k : Nat) (ns : NodeSpec) : Bool :=
+  let ws := ns.1.map fun idx => W.getD idx (0, 0, 0)
+  let vals := ws.map Prod.fst
+  let pools := ns.2.1.filterMap fun pIdx => poolTable.getD pIdx none
+  let nodeAutos := ns.2.2.filterMap fun aIdx => autosTable[aIdx]?
+  decide vals.Nodup && !(vals.contains T) &&
+    (k == 0 || testAll k ws.length fmask ws (coverage ws) pools nodeAutos prevBuckets ws)
+def checkNodes (W : Array Decor) (T fmask : Nat)
+    (poolTable : Array (Option BoundPool)) (autosTable : Array (List (Nat × Nat)))
+    (prevBuckets : Array (List (List Nat))) (k : Nat) (nodes : List NodeSpec) : Bool :=
+  nodes.all (checkNode W T fmask poolTable autosTable prevBuckets k)
+lemma checkNode_sound {W : Array Decor} {raw pos neg T poolTable autosTable prevBuckets k ns}
+    (hT : T < 2^128) (gp : goodPairs T pos neg)
+    (hW : ∀ x ∈ W.toList, faithful pos neg x ∧ x.1 < 2^128)
+    (hPoolTable : ∀ i (hi : i < poolTable.size), ∀ c, poolTable[i] = some c → ValidPool raw T c)
+    (hAutos : ∀ sw ∈ autosTable.toList, swapsValid sw = true ∧ permWord sw T = T)
+    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T (k - 1) xs.toFinset)
+    (ok : checkNode W T (fullMask pos.length) poolTable autosTable prevBuckets k ns = true) :
+    Impossible T k ((ns.1.map fun idx => (W.getD idx (0, 0, 0)).1).toFinset) := by
+  have hdef : faithful pos neg (0, 0, 0) ∧ (0 : Nat) < 2^128 := ⟨faithful_zero pos neg, by decide⟩
+  have hget (idx : Nat) : faithful pos neg (W.getD idx (0, 0, 0)) ∧ (W.getD idx (0, 0, 0)).1 < 2^128 := by
+    unfold Array.getD; split
+    next hi => exact hW W[idx] (Array.getElem_mem_toList hi)
+    next => exact hdef
+  unfold checkNode at ok
+  simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true', List.contains_eq_mem, Bool.or_eq_true, beq_iff_eq] at ok
+  let ws := ns.1.map fun idx => W.getD idx (0, 0, 0)
+  have hmap : ws.map Prod.fst = ns.1.map fun idx => (W.getD idx (0, 0, 0)).1 := by simp [ws, List.map_map, Function.comp_def]
+  rw [← hmap]
+  apply node_sound hT gp
+    (fun w hw => by obtain ⟨idx, _, rfl⟩ := List.mem_map.mp hw; exact (hget idx).1)
+    ok.1.1
+    (fun w hw => by obtain ⟨idx, _, rfl⟩ := List.mem_map.mp hw; exact (hget idx).2)
+    (of_decide_eq_false ok.1.2)
+    (fun c hc => by
+      obtain ⟨pIdx, _, hmat⟩ := List.mem_filterMap.mp hc
+      unfold Array.getD at hmat
+      split at hmat
+      next hi => exact hPoolTable pIdx hi c hmat
+      next => simp at hmat)
+    (fun sw hsw => by
+      obtain ⟨aIdx, _, ha⟩ := List.mem_filterMap.mp hsw
+      have ⟨hi, hval⟩ := Array.getElem?_eq_some_iff.mp ha
+      exact hAutos sw (hval ▸ Array.getElem_mem_toList hi))
+    hPrev ok.2
+def nodeVals (W : Array Decor) (ns : NodeSpec) : List Nat :=
+  sortNats (ns.1.map fun idx => (W.getD idx (0, 0, 0)).1)
+def insertBucket (buckets : Array (List (List Nat))) (xs : List Nat) : Array (List (List Nat)) :=
+  let idx := hashWs buckets.size xs
+  if h : idx < buckets.size then
+    let b := buckets[idx]
+    if b.contains xs then buckets else buckets.set idx (xs :: b) h
+  else buckets
+def buildBuckets (nb : Nat) (W : Array Decor) (nodes : List NodeSpec) : Array (List (List Nat)) :=
+  nodes.foldl (fun acc ns => insertBucket acc (nodeVals W ns)) (Array.replicate nb [])
+lemma insertBucket_mem {bks : Array (List (List Nat))} {P : List Nat → Prop} {xs : List Nat}
+    (hb : ∀ i (hi : i < bks.size), ∀ ys ∈ bks[i], P ys) (hxs : P xs) :
+    ∀ i (hi : i < (insertBucket bks xs).size), ∀ ys ∈ (insertBucket bks xs)[i], P ys := by
+  unfold insertBucket
+  dsimp only
+  split
+  next hidx =>
+    split
+    · exact hb
+    · intro i hi ys hys
+      rw [Array.size_set] at hi
+      rw [Array.getElem_set] at hys
+      split at hys
+      next =>
+        rcases List.mem_cons.mp hys with rfl | hys'
+        · exact hxs
+        · exact hb _ hidx ys hys'
+      next => exact hb i hi ys hys
+  next => exact hb
+lemma buildBuckets_sound {W : Array Decor} {raw pos neg T poolTable autosTable prevBuckets k nb}
+    {nodes : List NodeSpec}
+    (hT : T < 2^128) (gp : goodPairs T pos neg)
+    (hW : ∀ x ∈ W.toList, faithful pos neg x ∧ x.1 < 2^128)
+    (hPoolTable : ∀ i (hi : i < poolTable.size), ∀ c, poolTable[i] = some c → ValidPool raw T c)
+    (hAutos : ∀ sw ∈ autosTable.toList, swapsValid sw = true ∧ permWord sw T = T)
+    (hPrev : ∀ i (hi : i < prevBuckets.size), ∀ xs ∈ prevBuckets[i], Impossible T (k - 1) xs.toFinset)
+    (hNodes : checkNodes W T (fullMask pos.length) poolTable autosTable prevBuckets k nodes = true) :
+    ∀ i (hi : i < (buildBuckets nb W nodes).size), ∀ xs ∈ (buildBuckets nb W nodes)[i], Impossible T k xs.toFinset := by
+  have hmem : ∀ ns ∈ nodes, Impossible T k (nodeVals W ns).toFinset := fun ns hns => by
+    unfold nodeVals
+    rw [sortNats_toFinset]
+    exact checkNode_sound hT gp hW hPoolTable hAutos hPrev (List.all_eq_true.mp hNodes ns hns)
+  clear hNodes
+  unfold buildBuckets
+  have hinit : ∀ i (hi : i < (Array.replicate nb ([] : List (List Nat))).size),
+      ∀ xs ∈ (Array.replicate nb ([] : List (List Nat)))[i], Impossible T k xs.toFinset := by
+    intro i hi xs hxs; simp at hxs
+  generalize Array.replicate nb ([] : List (List Nat)) = acc at hinit ⊢
+  induction nodes generalizing acc with
+  | nil => exact hinit
+  | cons ns rest ih =>
+    exact ih (fun x hx => hmem x (List.mem_cons_of_mem _ hx))
+      (insertBucket acc (nodeVals W ns)) (insertBucket_mem hinit (hmem ns (List.mem_cons_self ..)))
+lemma checkNodesBT_mem {W : BT Decor} {raw pos neg T poolTable autosTable prevBks k nodes}
+    (hT : T < 2^128) (gp : goodPairs T pos neg)
+    (hW : btAll (fun x => faithful pos neg x ∧ x.1 < 2^128) W)
+    (hPoolTable : btAll (fun o => ∀ c, o = some c → ValidPool raw T c) poolTable)
+    (hAutos : btAll (fun sw => swapsValid sw = true ∧ permWord sw T = T) autosTable)
+    (hPrev : btAll (fun bk => ∀ xs ∈ bk, Impossible T (k - 1) xs.toFinset) prevBks)
+    (hNodes : checkNodesBT W T (fullMask pos.length) poolTable autosTable prevBks k nodes = true) :
+    ∀ ns ∈ nodes, Impossible T k (nodeValsBT W ns).toFinset := by
+  intro ns hns
+  unfold nodeValsBT; rw [sortNats_toFinset]
+  exact checkNodeBT_sound hT gp hW hPoolTable hAutos hPrev (List.all_eq_true.mp hNodes ns hns)
+lemma forall_append {α : Type} {P : α → Prop} {l1 l2 : List α}
+    (h1 : ∀ x ∈ l1, P x) (h2 : ∀ x ∈ l2, P x) : ∀ x ∈ l1 ++ l2, P x := by
+  intro x hx; rcases List.mem_append.mp hx with h | h; exact h1 x h; exact h2 x h
+lemma buildBucketsBT_of_mem {W : BT Decor} {T k nodes}
+    (hmem : ∀ ns ∈ nodes, Impossible T k (nodeValsBT W ns).toFinset) :
+    btAll (fun bk => ∀ xs ∈ bk, Impossible T k xs.toFinset) (buildBucketsBT W nodes) := by
+  unfold buildBucketsBT
+  have hinit : btAll (fun bk => ∀ xs ∈ bk, Impossible T k xs.toFinset) (BT.empty : BT (List (List Nat))) := trivial
+  generalize (BT.empty : BT (List (List Nat))) = acc at hinit ⊢
+  induction nodes generalizing acc with
+  | nil => exact hinit
+  | cons ns rest ih =>
+    apply ih (fun x hx => hmem x (List.mem_cons_of_mem _ hx))
+    apply btAll_update hinit (fun _ h => (List.not_mem_nil h).elim)
+    intro b hb ys hys
+    split at hys
+    · exact hb ys hys
+    · rcases List.mem_cons.mp hys with rfl | hys'
+      · exact hmem ns (List.mem_cons_self ..)
+      · exact hb ys hys'
+def buildPoolsSubBT (pdepth : Nat) (W : BT Decor) (raw : List Nat) (slices : BT (Option (Nat × Nat)))
+    (pspecs : BT (Option PoolSpec)) (used : List Nat) : BT (Option BoundPool) :=
+  used.foldl (fun acc pIdx =>
+    match btGet none pspecs pIdx with
+    | none => acc
+    | some (slIdx, chIdxs) =>
+      match btGet none slices slIdx with
+      | none => acc
+      | some (dom, lb) =>
+        let cs := chIdxs.map fun (op, ia, ib) => (op, (btGet (0, 0, 0) W ia).1, (btGet (0, 0, 0) W ib).1)
+        btSet pdepth acc pIdx (materialize raw cs dom lb)) BT.empty
+lemma buildPoolsSubBT_sound {pdepth} {W : BT Decor} {raw T} {slices : BT (Option (Nat × Nat))}
+    {pspecs : BT (Option PoolSpec)} {used : List Nat}
+    (hSlices : btAll (fun o => ∀ p, o = some p → Slice raw T p.1 p.2) slices) :
+    btAll (fun o => ∀ c, o = some c → ValidPool raw T c) (buildPoolsSubBT pdepth W raw slices pspecs used) := by
+  unfold buildPoolsSubBT
+  have hinit : btAll (fun o => ∀ c, o = some c → ValidPool raw T c) (BT.empty : BT (Option BoundPool)) := trivial
+  generalize (BT.empty : BT (Option BoundPool)) = acc at hinit ⊢
+  induction used generalizing acc with
+  | nil => exact hinit
+  | cons pIdx rest ih =>
+    apply ih
+    dsimp only
+    cases hps : btGet none pspecs pIdx with
+    | none => simp only [hps]; exact hinit
+    | some spec =>
+      cases hsl : btGet none slices spec.1 with
+      | none => simp only [hps, hsl]; exact hinit
+      | some sl =>
+        simp only [hps, hsl]
+        apply btAll_set hinit
+        intro c hc
+        exact materialize_sound (btAll_get (d := none) hSlices (fun _ h => by simp at h) spec.1 sl hsl) hc
+
+def dualRow (r : Row) : Row := ⟨(r.val ^^^ 63) % 128, Nat.mod_lt _ (by decide)⟩
+
+lemma map_available (f : Row → Row) {b c : List Wire}
+    (cover : ∀ w ∈ b, Avail c (restrictW f w)) {w : Wire} (hw : Avail b w) :
+    Avail c (restrictW f w) := by
+  rcases hw with hb | ⟨bit,rfl⟩ | hi
+  · exact cover _ hb
+  · exact Or.inr (Or.inl ⟨bit,rfl⟩)
+  · have h : Avail c (invW (restrictW f w)) := cover _ hi
+    simpa only [invW_inv] using avail_inv h
+
+lemma map_reach (f : Row → Row) {R S : List Wire}
+    (cover : ∀ w ∈ R, Avail S (restrictW f w)) {p b} (hr : Reach R p b) :
+    ∃ c, Reach S p c ∧ ∀ w ∈ b, Avail c (restrictW f w) := by
+  induction p generalizing b with
+  | zero =>
+    have hb : b = R := hr
+    exact ⟨S,rfl,hb.symm ▸ cover⟩
+  | succ p ih =>
+    obtain ⟨op,b,a,d,prev,ha,hd,rfl⟩ := hr
+    obtain ⟨c,hc,hmap⟩ := ih prev
+    let w := comb2 op (restrictW f a) (restrictW f d)
+    have eq : restrictW f (comb2 op a d) = w := by cases op <;> rfl
+    refine ⟨w :: c,⟨op,c,_,_,hc,map_available f hmap ha,map_available f hmap hd,rfl⟩,?_⟩
+    intro t ht
+    rcases List.mem_cons.mp ht with rfl | hold
+    · rw [eq]
+      exact Or.inl List.mem_cons_self
+    · exact avail_cons w (hmap t hold)
+
+lemma dualLower {roots : List Nat} {T G L : Nat}
+    (hvars : ∀ r : Row, roots.all (fun a => decide (obs a (dualRow r) = !(obs a r))) = true)
+    (hgoal : ∀ r : Row, (!(obs T (dualRow r))) = obs G r)
+    (prior : Lower roots G L) : Lower roots T L := by
+  intro p bank hr hav
+  have maps (w : Wire) (hw : w ∈ roots.map obs) : Avail (roots.map obs) (restrictW dualRow w) := by
+    obtain ⟨a,ha,rfl⟩ := List.mem_map.mp hw
+    have eq : restrictW dualRow (obs a) = invW (obs a) :=
+      funext fun r => of_decide_eq_true (List.all_eq_true.mp (hvars r) a ha)
     rw [eq]
-    exact avail_inv (Or.inl (List.mem_map_of_mem hb))
-lemma opposite_slice {raw : List Nat} {T d : Nat} {roots : List Nat} {G cost : Nat}
-    (f : Row → Row) (hd : ∀ r : Row, d.testBit (f r).val = true)
-    (hc : raw.all (fun a => freeSigned roots (renameW f a)) = true)
-    (ht : renameW f T = G) (proper : checkProper G = true)
-    (low : Lower roots G cost) : Slice raw T d cost := by
-  obtain ⟨ne, lt, bit⟩ := checkProper_sound proper
-  have eq : restrictW f (obs T) = obs G := (obs_renameW f T).symm.trans (congrArg obs ht)
-  refine ⟨f, roots, hd, ?_, ?_, ?_⟩
-  · exact fun a ha => freeSigned_sound (List.all_eq_true.mp hc a ha)
-  · rw [eq]; exact obs_not_const ne lt bit
-  · rw [eq]; exact low
-def h3R : List Nat := varsOf 44
-def h3G : Nat := 0xfff0fff0f000f000fff0fff0f000f000
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h3Bound : Lower h3R h3G 4 := lower_from_single_layer (k := 3) (pos := [36,40,12,12,40,36]) (neg := [32,32,4,8,8,4]) (essentialPairs := [(VAR 2,8,12),(VAR 3,4,12),(VAR 5,4,36)]) (by decide +kernel)
-def h4R : List Nat := varsOf 13
-def h4G : Nat := 0xfa0afa0afa0afa0afa0afa0afa0afa0a
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h4Bound : Lower h4R h4G 3 := lower_from_single_layer (k := 2) (pos := [1,1,12,9]) (neg := [0,5,8,8]) (essentialPairs := [(VAR 0,0,1),(VAR 2,1,5),(VAR 3,4,12)]) (by decide +kernel)
-def h6R : List Nat := varsOf 36
-def h6G : Nat := 0xf0f0f0ff0f0f0f00f0f0f0ff0f0f0f0
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h6Bound : Lower h6R h6G 3 := lower_from_single_layer (k := 2) (pos := [4,32,4,32]) (neg := [0,0,36,36]) (essentialPairs := [(VAR 2,0,4),(VAR 5,0,32)]) (by decide +kernel)
-def h5R : List Nat := varsOf 44
-def h5G : Nat := 0xf000f00f000f0000f000f00f000f000
-lemma h5Bound : Lower h5R h5G 4 := lift_of (z := 0) (o := 8) (essPairs := [(VAR 3,4,12)]) (by decide +kernel) h6Bound
-def h7R : List Nat := varsOf 37
-def h7G : Nat := 0xafafafaffafafafaafafafaffafafafa
-lemma h7Bound : Lower h7R h7G 4 := lift_of (z := 1) (o := 0) (essPairs := [(VAR 0,0,1)]) (by decide +kernel) h6Bound
-def h8R : List Nat := varsOf 41
-def h8G : Nat := 0xaaaaaaaaff00ff00aaaaaaaaff00ff00
-lemma h8Bound : Lower h8R h8G 3 := carry_of (swaps := [(2,3),(3,4),(4,5),(0,1),(1,2),(2,3),(0,1)]) (roots2 := h4R) (T2 := h4G) (by decide +kernel) h4Bound
-def h2R : List Nat := varsOf 45
-def h2G : Nat := 0xafaaafaafa0afa0aafaaafaafa0afa0a
-def h2Pos : List Nat := [1,12,1,37,12,9,13,12,37,40,40,40]
-def h2Neg : List Nat := [0,8,5,36,4,8,5,44,5,32,8,44]
-def h2Mask : Nat := fullMask 12
-def h2Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,365,324),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,474,2524),(0xff00ff00ff00ff00ff00ff00ff00ff00,3826,3234),(0xffffffff00000000ffffffff00000000,3848,2696)]
-def h2Steps : List (Nat × Nat × Nat) := [(2,1,3)]
-def h2W : BT Decor := buildWiresBT 3 h2Base h2Steps
-def h2AutoList : List (List (Nat × Nat)) := [[]]
-def h2Autos : BT (List (Nat × Nat)) := btOfList 1 h2AutoList
-lemma h2Pairs : goodPairs h2G h2Pos h2Neg := goodPairs_of (by decide +kernel)
-lemma h2BaseOk : ∀ x ∈ h2Base, faithful h2Pos h2Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h2WOk : btAll (fun x => faithful h2Pos h2Neg x ∧ x.1 < 2^128) h2W := buildWiresBT_faithful h2BaseOk
-lemma h2AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h2G = h2G) h2Autos := btAll_ofList (autos_of (by decide +kernel))
-def h2SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 4,3),some (subcubeFast 0 8,4),some (subcubeFast 1 0,4),some (subcubeFast 32 0,3),some (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5,4)]
-def h2Slices : BT (Option (Nat × Nat)) := btOfList 3 h2SliceList
-def h2Specs : List PoolSpec := [(2,[]),(1,[]),(3,[]),(0,[]),(4,[])]
-def h2Pools : BT (Option BoundPool) := buildPoolsBT 3 h2W h2R h2Slices h2Specs
-set_option maxRecDepth 200000 in
-lemma h2Slice4 : Slice h2R h2G (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5) 4 := mapped_slice (identifyRow 0 2 44) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h2Slice3 : Slice h2R h2G (subcubeFast 32 0) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h4Bound
-set_option maxRecDepth 200000 in
-lemma h2Slice2 : Slice h2R h2G (subcubeFast 1 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h5Bound
-set_option maxRecDepth 200000 in
-lemma h2Slice1 : Slice h2R h2G (subcubeFast 0 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h7Bound
-set_option maxRecDepth 200000 in
-lemma h2Slice0 : Slice h2R h2G (subcubeFast 0 4) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h8Bound
-lemma h2SlicesOk : btAll (sliceSpec h2R h2G) h2Slices := btAll_ofList (P := sliceSpec h2R h2G) (sliceSpecCons h2Slice0 (sliceSpecCons h2Slice1 (sliceSpecCons h2Slice2 (sliceSpecCons h2Slice3 (sliceSpecCons h2Slice4 sliceSpecNil)))))
-lemma h2PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h2R h2G c) h2Pools := buildPoolsBT_sound h2SlicesOk
-def h2Empty : BT (List (List Nat)) := BT.empty
-lemma h2EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h2G (4 - 1) xs.toFinset) h2Empty := trivial
-def h2Block4_0 : List NodeSpec := nodesWithIdentity [([0,1,2,3,4],[0,3,4])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h2Test4_0 : checkNodesBT h2W h2G h2Mask h2Pools h2Autos h2Empty 4 h2Block4_0 = true := by decide +kernel
-def h2Nodes4 : List NodeSpec := h2Block4_0
-lemma h2Check4 : checkNodesBT h2W h2G h2Mask h2Pools h2Autos h2Empty 4 h2Nodes4 = true := h2Test4_0
-def h2Bucket4 : BT (List (List Nat)) := buildBucketsBT h2W h2Nodes4
-lemma h2Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h2G 4 xs.toFinset) h2Bucket4 := buildBucketsBT_sound (by decide) h2Pairs h2WOk h2PoolsOk h2AutosOk h2EmptyOk h2Check4
-def h2Block5_0 : List NodeSpec := nodesWithIdentity [([0,1,2,3],[0,1,2,3])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h2Test5_0 : checkNodesBT h2W h2G h2Mask h2Pools h2Autos h2Bucket4 5 h2Block5_0 = true := by decide +kernel
-def h2Nodes5 : List NodeSpec := h2Block5_0
-lemma h2Check5 : checkNodesBT h2W h2G h2Mask h2Pools h2Autos h2Bucket4 5 h2Nodes5 = true := h2Test5_0
-def h2Bucket5 : BT (List (List Nat)) := buildBucketsBT h2W h2Nodes5
-lemma h2Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h2G 5 xs.toFinset) h2Bucket5 := buildBucketsBT_sound (by decide) h2Pairs h2WOk h2PoolsOk h2AutosOk h2Bucket4Ok h2Check5
-lemma h2Bound : Lower h2R h2G 6 := lower_of_forestBT (essPairs := [(VAR 0,0,1),(VAR 2,1,5),(VAR 3,4,12),(VAR 5,5,37)]) (by decide +kernel) h2Bucket5Ok (by decide +kernel)
-def h10R : List Nat := varsOf 42
-def h10G : Nat := 0xcc00cc00ffccffcccc00cc00ffccffcc
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h10Bound : Lower h10R h10G 4 := lower_from_single_layer (k := 3) (pos := [2,8,42,42,8,2]) (neg := [0,0,34,40,40,34]) (essentialPairs := [(VAR 1,0,2),(VAR 3,0,8),(VAR 5,2,34)]) (by decide +kernel)
-def h9R : List Nat := varsOf 46
-def h9G : Nat := 0xccc0ccc0ffccffccccc0ccc0ffccffcc
-lemma h9Bound : Lower h9R h9G 5 := lift_of (z := 4) (o := 0) (essPairs := [(VAR 2,34,38)]) (by decide +kernel) h10Bound
-def h11R : List Nat := varsOf 46
-def h11G : Nat := 0xccfcccfcf0ccf0ccccfcccfcf0ccf0cc
-lemma h11Bound : Lower h11R h11G 6 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h2R) (T2 := h2G) (by decide +kernel) h2Bound
-def h13R : List Nat := varsOf 14
-def h13G : Nat := 0xf3c0f3c0f3c0f3c0f3c0f3c0f3c0f3c0
-lemma h13Bound : Lower h13R h13G 3 := carry_of (swaps := [(0,1),(1,2),(2,3)]) (roots2 := h4R) (T2 := h4G) (by decide +kernel) h4Bound
-def h12R : List Nat := varsOf 46
-def h12G : Nat := 0xfff0fff0f3c0f3c0fff0fff0f3c0f3c0
-def h12Pos : List Nat := [8,36,6,6,8,42,36,42,12,14]
-def h12Neg : List Nat := [10,32,2,4,0,34,4,10,4,10]
-def h12Mask : Nat := fullMask 10
-def h12Base : List Decor := [(0xcccccccccccccccccccccccccccccccc,684,677),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,846,328),(0xff00ff00ff00ff00ff00ff00ff00ff00,945,641),(0xffffffff00000000ffffffff00000000,226,34)]
-def h12Steps : List (Nat × Nat × Nat) := []
-def h12W : BT Decor := buildWiresBT 2 h12Base h12Steps
-def h12AutoList : List (List (Nat × Nat)) := [[]]
-def h12Autos : BT (List (Nat × Nat)) := btOfList 1 h12AutoList
-lemma h12Pairs : goodPairs h12G h12Pos h12Neg := goodPairs_of (by decide +kernel)
-lemma h12BaseOk : ∀ x ∈ h12Base, faithful h12Pos h12Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h12WOk : btAll (fun x => faithful h12Pos h12Neg x ∧ x.1 < 2^128) h12W := buildWiresBT_faithful h12BaseOk
-lemma h12AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h12G = h12G) h12Autos := btAll_ofList (autos_of (by decide +kernel))
-def h12SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 32 0,3)]
-def h12Slices : BT (Option (Nat × Nat)) := btOfList 1 h12SliceList
-def h12Specs : List PoolSpec := [(0,[])]
-def h12Pools : BT (Option BoundPool) := buildPoolsBT 1 h12W h12R h12Slices h12Specs
-set_option maxRecDepth 200000 in
-lemma h12Slice0 : Slice h12R h12G (subcubeFast 32 0) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h13Bound
-lemma h12SlicesOk : btAll (sliceSpec h12R h12G) h12Slices := btAll_ofList (P := sliceSpec h12R h12G) (sliceSpecCons h12Slice0 sliceSpecNil)
-lemma h12PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h12R h12G c) h12Pools := buildPoolsBT_sound h12SlicesOk
-def h12Empty : BT (List (List Nat)) := BT.empty
-lemma h12EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h12G (4 - 1) xs.toFinset) h12Empty := trivial
-def h12Block4_0 : List NodeSpec := nodesWithIdentity [([0,1,2,3],[0])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h12Test4_0 : checkNodesBT h12W h12G h12Mask h12Pools h12Autos h12Empty 4 h12Block4_0 = true := by decide +kernel
-def h12Nodes4 : List NodeSpec := h12Block4_0
-lemma h12Check4 : checkNodesBT h12W h12G h12Mask h12Pools h12Autos h12Empty 4 h12Nodes4 = true := h12Test4_0
-def h12Bucket4 : BT (List (List Nat)) := buildBucketsBT h12W h12Nodes4
-lemma h12Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h12G 4 xs.toFinset) h12Bucket4 := buildBucketsBT_sound (by decide) h12Pairs h12WOk h12PoolsOk h12AutosOk h12EmptyOk h12Check4
-lemma h12Bound : Lower h12R h12G 5 := lower_of_forestBT (essPairs := [(VAR 1,4,6),(VAR 2,2,6),(VAR 3,0,8),(VAR 5,4,36)]) (by decide +kernel) h12Bucket4Ok (by decide +kernel)
-def h15R : List Nat := varsOf 35
-def h15G : Nat := 0xeeeeeeee88888888eeeeeeee88888888
-lemma h15Bound : Lower h15R h15G 4 := carry_of (swaps := [(1,2),(2,3),(0,1),(1,2)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h14R : List Nat := varsOf 39
-def h14G : Nat := 0xeeeeeeeec8c8c8c8eeeeeeeec8c8c8c8
-lemma h14Bound : Lower h14R h14G 5 := lift_of (z := 4) (o := 0) (essPairs := [(VAR 2,2,6)]) (by decide +kernel) h15Bound
-def h16R : List Nat := varsOf 43
-def h16G : Nat := 0xeeeeeeeeaa88aa88eeeeeeeeaa88aa88
-lemma h16Bound : Lower h16R h16G 5 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h17R : List Nat := varsOf 45
-def h17G : Nat := 0xfffafffafa00fa00fffafffafa00fa00
-lemma h17Bound : Lower h17R h17G 5 := lift_of (z := 1) (o := 0) (essPairs := [(VAR 0,8,9)]) (by decide +kernel) h3Bound
-def h19R : List Nat := varsOf 37
-def h19G : Nat := 0xa0a0a0a0fafafafaa0a0a0a0fafafafa
-lemma h19Bound : Lower h19R h19G 4 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h10R) (T2 := h10G) (by decide +kernel) h10Bound
-def h20R : List Nat := varsOf 41
-def h20G : Nat := 0xffaaffaaaa00aa00ffaaffaaaa00aa00
-lemma h20Bound : Lower h20R h20G 4 := carry_of (swaps := [(1,2),(0,1)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h18R : List Nat := varsOf 45
-def h18G : Nat := 0xffa0ffa0fa00fa00ffa0ffa0fa00fa00
-def h18Pos : List Nat := [9,12,12,9,37,40,37,37,13,40,9]
-def h18Neg : List Nat := [8,8,4,1,5,8,36,33,5,32,0]
-def h18Mask : Nat := fullMask 11
-def h18Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,1497,408),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,470,340),(0xff00ff00ff00ff00ff00ff00ff00ff00,1839,35),(0xffffffff00000000ffffffff00000000,752,704)]
-def h18Steps : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,2),(3,0,2)]
-def h18W : BT Decor := buildWiresBT 3 h18Base h18Steps
-def h18AutoList : List (List (Nat × Nat)) := [[],[(2,5)],[(0,2)],[(0,5)],[(2,5),(0,2)],[(2,5),(0,5)]]
-def h18Autos : BT (List (Nat × Nat)) := btOfList 3 h18AutoList
-lemma h18Pairs : goodPairs h18G h18Pos h18Neg := goodPairs_of (by decide +kernel)
-lemma h18BaseOk : ∀ x ∈ h18Base, faithful h18Pos h18Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h18WOk : btAll (fun x => faithful h18Pos h18Neg x ∧ x.1 < 2^128) h18W := buildWiresBT_faithful h18BaseOk
-lemma h18AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h18G = h18G) h18Autos := btAll_ofList (autos_of (by decide +kernel))
-def h18SliceList : List (Option (Nat × Nat)) := [some (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5,4),some (0xaaaaaaaa55555555aaaaaaaa55555555,4),some (0xf0f0f0f00f0f0f0ff0f0f0f00f0f0f0f,4),some (0x55aa55aa55aa55aa55aa55aa55aa55aa,4),some (0xff00ff00ff00ff00ff00ff00ff00ff0,4),some (0xff00ffff00ff0000ff00ffff00ff00,4)]
-def h18Slices : BT (Option (Nat × Nat)) := btOfList 3 h18SliceList
-def h18Specs : List PoolSpec := [(0,[]),(3,[]),(1,[]),(4,[]),(2,[]),(5,[])]
-def h18Pools : BT (Option BoundPool) := buildPoolsBT 3 h18W h18R h18Slices h18Specs
-set_option maxRecDepth 200000 in
-lemma h18Slice5 : Slice h18R h18G (0xff00ffff00ff0000ff00ffff00ff00) 4 := opposite_slice (oppositeRow 3 5 37) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h19Bound
-set_option maxRecDepth 200000 in
-lemma h18Slice4 : Slice h18R h18G (0xff00ff00ff00ff00ff00ff00ff00ff0) 4 := opposite_slice (oppositeRow 2 3 41) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h20Bound
-set_option maxRecDepth 200000 in
-lemma h18Slice3 : Slice h18R h18G (0x55aa55aa55aa55aa55aa55aa55aa55aa) 4 := opposite_slice (oppositeRow 0 3 44) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h18Slice2 : Slice h18R h18G (0xf0f0f0f00f0f0f0ff0f0f0f00f0f0f0f) 4 := mapped_slice (identifyRow 2 5 41) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h20Bound
-set_option maxRecDepth 200000 in
-lemma h18Slice1 : Slice h18R h18G (0xaaaaaaaa55555555aaaaaaaa55555555) 4 := mapped_slice (identifyRow 0 5 44) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h18Slice0 : Slice h18R h18G (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5) 4 := mapped_slice (identifyRow 0 2 44) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h3Bound
-lemma h18SlicesOk : btAll (sliceSpec h18R h18G) h18Slices := btAll_ofList (P := sliceSpec h18R h18G) (sliceSpecCons h18Slice0 (sliceSpecCons h18Slice1 (sliceSpecCons h18Slice2 (sliceSpecCons h18Slice3 (sliceSpecCons h18Slice4 (sliceSpecCons h18Slice5 sliceSpecNil))))))
-lemma h18PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h18R h18G c) h18Pools := buildPoolsBT_sound h18SlicesOk
-def h18Empty : BT (List (List Nat)) := BT.empty
-lemma h18EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h18G (4 - 1) xs.toFinset) h18Empty := trivial
-def h18Block4_0 : List NodeSpec := indexPairNodes [(62,2), (94,2), (158,0), (286,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h18Test4_0 : checkNodesBT h18W h18G h18Mask h18Pools h18Autos h18Empty 4 h18Block4_0 = true := by decide +kernel
-def h18Nodes4 : List NodeSpec := h18Block4_0
-lemma h18Check4 : checkNodesBT h18W h18G h18Mask h18Pools h18Autos h18Empty 4 h18Nodes4 = true := h18Test4_0
-def h18Bucket4 : BT (List (List Nat)) := buildBucketsBT h18W h18Nodes4
-lemma h18Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h18G 4 xs.toFinset) h18Bucket4 := buildBucketsBT_sound (by decide) h18Pairs h18WOk h18PoolsOk h18AutosOk h18EmptyOk h18Check4
-def h18Block5_0 : List NodeSpec := [([0,1,2,3],[0,1,2,3,4,5],[0,1,2,3])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h18Test5_0 : checkNodesBT h18W h18G h18Mask h18Pools h18Autos h18Bucket4 5 h18Block5_0 = true := by decide +kernel
-def h18Nodes5 : List NodeSpec := h18Block5_0
-lemma h18Check5 : checkNodesBT h18W h18G h18Mask h18Pools h18Autos h18Bucket4 5 h18Nodes5 = true := h18Test5_0
-def h18Bucket5 : BT (List (List Nat)) := buildBucketsBT h18W h18Nodes5
-lemma h18Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h18G 5 xs.toFinset) h18Bucket5 := buildBucketsBT_sound (by decide) h18Pairs h18WOk h18PoolsOk h18AutosOk h18Bucket4Ok h18Check5
-lemma h18Bound : Lower h18R h18G 6 := lower_of_forestBT (essPairs := [(VAR 0,8,9),(VAR 2,8,12),(VAR 3,1,9),(VAR 5,5,37)]) (by decide +kernel) h18Bucket5Ok (by decide +kernel)
-def h21R : List Nat := varsOf 46
-def h21G : Nat := 0xfffcfffcf0c0f0c0fffcfffcf0c0f0c0
-lemma h21Bound : Lower h21R h21G 5 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h22R : List Nat := varsOf 46
-def h22G : Nat := 0xfcf0fcf0f0c0f0c0fcf0fcf0f0c0f0c0
-lemma h22Bound : Lower h22R h22G 6 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h23R : List Nat := varsOf 7
-def h23G : Nat := 0xe8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8
-lemma h23Bound : Lower h23R h23G 4 := carry_of (swaps := [(4,5),(1,2),(2,3),(3,4),(0,1),(1,2),(2,3)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h24R : List Nat := varsOf 39
-def h24G : Nat := 0xe8e8e8e8c8c8c8c8e8e8e8e8c8c8c8c8
-lemma h24Bound : Lower h24R h24G 5 := lift_of (z := 0) (o := 32) (essPairs := [(VAR 5,5,37)]) (by decide +kernel) h23Bound
-def h25R : List Nat := varsOf 11
-def h25G : Nat := 0xee88ee88ee88ee88ee88ee88ee88ee88
-lemma h25Bound : Lower h25R h25G 4 := carry_of (swaps := [(4,5),(1,2),(2,3),(3,4),(0,1),(1,2)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h26R : List Nat := varsOf 43
-def h26G : Nat := 0xee88ee88aa88aa88ee88ee88aa88aa88
-lemma h26Bound : Lower h26R h26G 5 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h24R) (T2 := h24G) (by decide +kernel) h24Bound
-def h27R : List Nat := varsOf 45
-def h27G : Nat := 0xaaa0aaa0fa00fa00aaa0aaa0fa00fa00
-def h27Pos : List Nat := [9,12,37,37,12,9,12,37,41]
-def h27Neg : List Nat := [8,8,33,36,4,1,44,5,33]
-def h27Mask : Nat := fullMask 9
-def h27Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,429,420),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,222,216),(0xff00ff00ff00ff00ff00ff00ff00ff00,371,67),(0xffffffff00000000ffffffff00000000,396,332)]
-def h27Steps : List (Nat × Nat × Nat) := []
-def h27W : BT Decor := buildWiresBT 2 h27Base h27Steps
-def h27AutoList : List (List (Nat × Nat)) := [[]]
-def h27Autos : BT (List (Nat × Nat)) := btOfList 1 h27AutoList
-lemma h27Pairs : goodPairs h27G h27Pos h27Neg := goodPairs_of (by decide +kernel)
-lemma h27BaseOk : ∀ x ∈ h27Base, faithful h27Pos h27Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h27WOk : btAll (fun x => faithful h27Pos h27Neg x ∧ x.1 < 2^128) h27W := buildWiresBT_faithful h27BaseOk
-lemma h27AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h27G = h27G) h27Autos := btAll_ofList (autos_of (by decide +kernel))
-def h27SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 4,3)]
-def h27Slices : BT (Option (Nat × Nat)) := btOfList 1 h27SliceList
-def h27Specs : List PoolSpec := [(0,[])]
-def h27Pools : BT (Option BoundPool) := buildPoolsBT 1 h27W h27R h27Slices h27Specs
-set_option maxRecDepth 200000 in
-lemma h27Slice0 : Slice h27R h27G (subcubeFast 0 4) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h8Bound
-lemma h27SlicesOk : btAll (sliceSpec h27R h27G) h27Slices := btAll_ofList (P := sliceSpec h27R h27G) (sliceSpecCons h27Slice0 sliceSpecNil)
-lemma h27PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h27R h27G c) h27Pools := buildPoolsBT_sound h27SlicesOk
-def h27Empty : BT (List (List Nat)) := BT.empty
-lemma h27EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h27G (4 - 1) xs.toFinset) h27Empty := trivial
-def h27Block4_0 : List NodeSpec := nodesWithIdentity [([0,1,2,3],[0])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h27Test4_0 : checkNodesBT h27W h27G h27Mask h27Pools h27Autos h27Empty 4 h27Block4_0 = true := by decide +kernel
-def h27Nodes4 : List NodeSpec := h27Block4_0
-lemma h27Check4 : checkNodesBT h27W h27G h27Mask h27Pools h27Autos h27Empty 4 h27Nodes4 = true := h27Test4_0
-def h27Bucket4 : BT (List (List Nat)) := buildBucketsBT h27W h27Nodes4
-lemma h27Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h27G 4 xs.toFinset) h27Bucket4 := buildBucketsBT_sound (by decide) h27Pairs h27WOk h27PoolsOk h27AutosOk h27EmptyOk h27Check4
-lemma h27Bound : Lower h27R h27G 5 := lower_of_forestBT (essPairs := [(VAR 0,8,9),(VAR 2,8,12),(VAR 3,1,9),(VAR 5,5,37)]) (by decide +kernel) h27Bucket4Ok (by decide +kernel)
-def h28R : List Nat := varsOf 38
-def h28G : Nat := 0xccccccccf0f0f0f0ccccccccf0f0f0f0
-lemma h28Bound : Lower h28R h28G 3 := carry_of (swaps := [(2,3),(3,4),(4,5),(0,1),(1,2)]) (roots2 := h4R) (T2 := h4G) (by decide +kernel) h4Bound
-def h29R : List Nat := varsOf 46
-def h29G : Nat := 0xccc0ccc0f0c0f0c0ccc0ccc0f0c0f0c0
-lemma h29Bound : Lower h29R h29G 5 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h27R) (T2 := h27G) (by decide +kernel) h27Bound
-def h30R : List Nat := varsOf 15
-def h30G : Nat := 0xeee8eee8eee8eee8eee8eee8eee8eee8
-lemma h30Bound : Lower h30R h30G 5 := carry_of (swaps := [(4,5),(1,2),(2,3),(3,4),(1,2),(2,3),(0,1),(1,2)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h31R : List Nat := varsOf 39
-def h31G : Nat := 0xeeeeeeeefafafafaeeeeeeeefafafafa
-lemma h31Bound : Lower h31R h31G 4 := lift_of (z := 1) (o := 0) (essPairs := [(VAR 0,0,1)]) (by decide +kernel) h28Bound
-def h32R : List Nat := varsOf 43
-def h32G : Nat := 0xeeeeeeeeffccffcceeeeeeeeffccffcc
-lemma h32Bound : Lower h32R h32G 4 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h31R) (T2 := h31G) (by decide +kernel) h31Bound
-def h1R : List Nat := varsOf 47
-def h1G : Nat := 0xeee8eee8fac8fac8eee8eee8fac8fac8
-def h1Pos : List Nat := [6,9,6,6,37,37,12,9,12,37,3,42,42,42,3,45,46,6,12,6,37,7,35,35,11,9,6,41,38,13,41,3,7,3,11,3,35,12,14,13,12,13,37,7,12,6,14,35,38,41,9,41,38,3,41,14,12,12,37,38,37,9,42,13,35,38]
-def h1Neg : List Nat := [4,8,5,2,33,36,4,1,44,5,2,40,34,10,1,44,44,10,8,34,1,5,33,34,10,10,36,44,34,5,40,0,2,10,2,34,2,5,10,4,0,44,4,4,10,0,4,32,4,33,33,1,44,33,8,8,36,40,32,2,0,40,2,8,1,36]
-def h1Mask : Nat := fullMask 66
-def h1Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x1b46e8e9febf0c6b2,0x1002e002020704294),(0xcccccccccccccccccccccccccccccccc,0x348b1e85f95eb7c0d,0x4800105f138a3408),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x29f917fe1343f837d,0x201114ea02c218365),(0xff00ff00ff00ff00ff00ff00ff00ff00,0xe3ce53e46b05b9c2,0xa2d012424b07a902),(0xffffffff00000000ffffffff00000000,0x35c5b841058d1ba30,0x2273682085cc99930)]
-def h1Steps : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(0,0,2),(1,0,2),(2,0,2),(3,0,2),(0,0,3),(1,0,3),(2,0,3),(3,0,3),(0,0,4),(1,0,4),(2,0,4),(3,0,4),(0,1,2),(1,1,2),(2,1,2),(3,1,2),(0,1,3),(1,1,3),(3,1,3),(0,1,4),(1,1,4),(3,1,4),(0,2,3),(1,0,30),(1,2,3),(2,2,3),(3,2,3),(0,2,4),(1,2,4),(2,2,4),(3,2,4),(1,2,5),(0,3,4),(1,3,4),(2,3,4),(3,3,4),(0,3,39),(0,4,39),(3,4,39),(2,2,5),(1,3,5),(1,4,5),(2,4,5),(2,0,50),(2,1,50),(0,2,50),(2,2,50),(1,5,30),(1,0,35),(1,1,35),(1,3,35),(2,3,35),(3,35,48),(1,5,59),(1,5,35),(1,0,37),(0,1,63),(1,1,63),(2,1,63),(3,1,63),(2,0,37),(1,1,37),(1,5,37),(0,0,45),(2,3,45),(2,3,53),(0,2,6),(3,2,6),(0,3,9),(3,3,9),(0,4,6),(2,4,6),(3,4,6),(0,4,9),(2,4,9),(0,6,9),(0,6,25),(0,9,25),(3,1,9),(1,1,33),(2,6,33),(2,9,33),(0,4,57),(0,1,58),(3,1,58),(0,4,58),(2,4,58),(1,1,78),(2,9,35),(2,6,35),(1,1,74),(1,1,79),(1,1,10),(1,3,10),(1,4,10),(2,4,10),(2,6,10),(1,1,11),(1,3,11),(2,4,75),(3,1,13),(3,2,13),(0,4,13),(1,0,110),(0,1,110),(1,1,110),(2,1,110),(3,1,110),(0,2,110),(1,2,110),(2,2,110),(3,2,110),(1,3,110),(3,4,13),(1,1,15),(1,2,15),(3,1,17),(1,0,78),(1,2,19),(1,3,19),(3,1,31),(2,6,30),(3,0,32),(3,1,32),(1,0,93),(3,0,93),(1,2,93),(3,4,32),(0,6,32),(1,0,33),(3,1,56),(3,0,57),(3,0,36),(3,1,36),(0,6,36),(2,6,37),(1,1,107),(3,1,107),(1,0,79),(1,1,80),(1,3,7),(2,4,7),(1,7,35),(1,2,7),(3,0,21),(0,4,152),(3,4,21),(1,0,26),(1,2,26),(0,4,148),(3,0,28),(1,7,30),(1,7,34),(0,4,151),(3,7,36),(1,1,162),(1,7,37),(1,1,161),(3,0,134),(2,2,40),(1,0,167),(1,7,40),(1,1,42),(1,7,42),(1,3,8),(1,8,24),(3,1,172),(0,4,172),(1,8,26),(1,2,16),(2,9,40),(2,9,29),(2,9,93),(0,9,32),(3,19,32),(1,19,43),(2,9,26),(1,1,184),(1,2,179),(3,0,87),(2,9,38),(1,2,77),(2,4,77),(1,10,29),(3,1,101),(0,4,101),(0,3,103),(2,3,103),(1,10,26),(1,10,40),(2,3,145),(1,1,198),(2,4,109),(3,11,21),(1,11,26),(3,1,202),(0,2,84),(1,2,84),(2,2,84),(3,2,84),(2,1,12),(2,2,12),(1,4,12),(3,20,183),(1,12,20),(0,21,183),(1,12,90),(3,12,21),(1,12,22),(2,4,204),(0,4,205),(0,21,110),(1,2,219),(2,21,110),(0,13,21),(2,13,22),(2,4,108),(2,13,27),(2,13,29),(2,13,35),(2,2,112),(1,1,14),(2,4,14),(1,14,22),(1,14,27),(0,4,232),(1,1,230),(1,14,29),(0,4,189),(1,14,35),(0,4,123),(1,16,42),(3,1,120),(2,17,29),(2,2,18),(1,3,52),(3,0,69),(1,19,37),(3,1,41),(3,1,127),(1,3,64),(3,3,65)]
-def h1W : BT Decor := buildWiresBT 8 h1Base h1Steps
-def h1AutoList : List (List (Nat × Nat)) := [[],[(2,3),(0,1)]]
-def h1Autos : BT (List (Nat × Nat)) := btOfList 1 h1AutoList
-lemma h1Pairs : goodPairs h1G h1Pos h1Neg := goodPairs_of (by decide +kernel)
-lemma h1BaseOk : ∀ x ∈ h1Base, faithful h1Pos h1Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h1WOk : btAll (fun x => faithful h1Pos h1Neg x ∧ x.1 < 2^128) h1W := buildWiresBT_faithful h1BaseOk
-lemma h1AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h1G = h1G) h1Autos := btAll_ofList (autos_of (by decide +kernel))
-def h1SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 4,4),some (subcubeFast 0 8,4),some (subcubeFast 0 32,5),some (subcubeFast 1 0,5),some (subcubeFast 1 8,3),some (subcubeFast 2 0,5),some (subcubeFast 2 4,3),some (subcubeFast 4 0,5),some (subcubeFast 4 32,4),some (subcubeFast 8 0,5),some (subcubeFast 8 32,4),some (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5,6),some (0xaaaaaaaa55555555aaaaaaaa55555555,5),some (0xcc33cc33cc33cc33cc33cc33cc33cc33,6),some (0xcccccccc33333333cccccccc33333333,5),some (0xf0f0f0f00f0f0f0ff0f0f0f00f0f0f0f,5),some (0xff00ff0000ff00ffff00ff0000ff00ff,5),some (0x66666666666666666666666666666666,5),some (0x55aa55aa55aa55aa55aa55aa55aa55aa,6),some (0x55555555aaaaaaaa55555555aaaaaaaa,5),some (0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c,6)]
-def h1Slices : BT (Option (Nat × Nat)) := btOfList 5 h1SliceList
-def h1Specs : List PoolSpec := poolSteps h1Steps [(3,[]),(5,[]),(7,[]),(9,[]),(8,[]),(11,[]),(13,[]),(4,[]),(6,[]),(1,[]),(10,[]),(2,[54]),(2,[]),(19,[]),(0,[]),(16,[]),(15,[]),(11,[1]),(17,[]),(9,[116]),(12,[]),(20,[]),(18,[]),(14,[]),(11,[2]),(7,[85]),(13,[1]),(3,[35]),(3,[37]),(11,[93]),(11,[167]),(3,[170]),(11,[167,170]),(7,[170]),(9,[105]),(11,[11]),(7,[14]),(7,[88]),(11,[27]),(2,[53]),(11,[14]),(11,[16]),(11,[18]),(2,[27]),(16,[4]),(11,[28]),(2,[28]),(11,[30]),(11,[30,53]),(11,[33]),(7,[77]),(7,[98]),(7,[97]),(20,[6]),(16,[6]),(5,[30]),(3,[105]),(3,[116]),(9,[233]),(9,[11]),(7,[35]),(7,[37]),(7,[12]),(9,[24]),(12,[238]),(9,[30]),(5,[32]),(9,[32]),(7,[130]),(9,[130]),(13,[27]),(7,[135])]
-def h1Pools : BT (Option BoundPool) := buildPoolsBT 7 h1W h1R h1Slices h1Specs
-set_option maxRecDepth 200000 in
-lemma h1Slice20 : Slice h1R h1G (0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c) 6 := opposite_slice (oppositeRow 1 2 45) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h2Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice19 : Slice h1R h1G (0x55555555aaaaaaaa55555555aaaaaaaa) 5 := opposite_slice (oppositeRow 0 5 46) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h9Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice18 : Slice h1R h1G (0x55aa55aa55aa55aa55aa55aa55aa55aa) 6 := opposite_slice (oppositeRow 0 3 46) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h11Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice17 : Slice h1R h1G (0x66666666666666666666666666666666) 5 := opposite_slice (oppositeRow 0 1 46) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h12Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice16 : Slice h1R h1G (0xff00ff0000ff00ffff00ff0000ff00ff) 5 := mapped_slice (identifyRow 3 5 39) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h14Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice15 : Slice h1R h1G (0xf0f0f0f00f0f0f0ff0f0f0f00f0f0f0f) 5 := mapped_slice (identifyRow 2 5 43) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h16Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice14 : Slice h1R h1G (0xcccccccc33333333cccccccc33333333) 5 := mapped_slice (identifyRow 1 5 45) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h17Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice13 : Slice h1R h1G (0xcc33cc33cc33cc33cc33cc33cc33cc33) 6 := mapped_slice (identifyRow 1 3 45) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h18Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice12 : Slice h1R h1G (0xaaaaaaaa55555555aaaaaaaa55555555) 5 := mapped_slice (identifyRow 0 5 46) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h21Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice11 : Slice h1R h1G (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5) 6 := mapped_slice (identifyRow 0 2 46) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h22Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice10 : Slice h1R h1G (subcubeFast 8 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h23Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice9 : Slice h1R h1G (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h24Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice8 : Slice h1R h1G (subcubeFast 4 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h25Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice7 : Slice h1R h1G (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h26Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice6 : Slice h1R h1G (subcubeFast 2 4) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h8Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice5 : Slice h1R h1G (subcubeFast 2 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h27Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice4 : Slice h1R h1G (subcubeFast 1 8) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h28Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice3 : Slice h1R h1G (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h29Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice2 : Slice h1R h1G (subcubeFast 0 32) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h30Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice1 : Slice h1R h1G (subcubeFast 0 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h31Bound
-set_option maxRecDepth 200000 in
-lemma h1Slice0 : Slice h1R h1G (subcubeFast 0 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h32Bound
-lemma h1SlicesOk : btAll (sliceSpec h1R h1G) h1Slices := btAll_ofList (P := sliceSpec h1R h1G) (sliceSpecCons h1Slice0 (sliceSpecCons h1Slice1 (sliceSpecCons h1Slice2 (sliceSpecCons h1Slice3 (sliceSpecCons h1Slice4 (sliceSpecCons h1Slice5 (sliceSpecCons h1Slice6 (sliceSpecCons h1Slice7 (sliceSpecCons h1Slice8 (sliceSpecCons h1Slice9 (sliceSpecCons h1Slice10 (sliceSpecCons h1Slice11 (sliceSpecCons h1Slice12 (sliceSpecCons h1Slice13 (sliceSpecCons h1Slice14 (sliceSpecCons h1Slice15 (sliceSpecCons h1Slice16 (sliceSpecCons h1Slice17 (sliceSpecCons h1Slice18 (sliceSpecCons h1Slice19 (sliceSpecCons h1Slice20 sliceSpecNil)))))))))))))))))))))
-set_option maxRecDepth 200000 in
-lemma h1PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h1R h1G c) h1Pools := buildPoolsBT_sound h1SlicesOk
-def h1Empty : BT (List (List Nat)) := BT.empty
-lemma h1EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h1G (4 - 1) xs.toFinset) h1Empty := trivial
-def h1Block4_0 : List NodeSpec := indexPairNodes [(85997623,0), (462895,0), (4997647,0), (471087,0), (130228309,0), (281032759,0), (24658447,0), (5210301,256), (25434441,0), (25958757,0), (5839850021,0), (20473359,0), (105308325,0), (32622645,0), (30737238565,256), (275779855,0), (313528591,0), (5570093079,0), (4999906889,0), (1250019877,0), (4798450213,0), (4999776805,12993), (363859109,0), (1292012069,0), (662782085,1945617), (5201103397,0), (5242489381,1697), (136374389285,0), (86983838245,249873), (5872242711,4929), (1447035957,0), (1602300943,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test4_0 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Empty 4 h1Block4_0 = true := by decide +kernel
-def h1Block4_1 : List NodeSpec := indexPairNodes [(6476304427,0), (1132585287,0), (1699901,0), (6744576053,0), (1708063,0), (4597092413,0), (27406379,0), (1724447,0), (1732639,0), (17918210091,0), (18052427819,0), (1773599,0), (1789983,0), (7415885847,0), (7952756759,0), (1963290677,0), (338231298085,0), (73553281671,5185), (4932718615,0), (89124254471,0), (24897839189,0), (25032056917,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test4_1 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Empty 4 h1Block4_1 = true := by decide +kernel
-def h1Nodes4 : List NodeSpec := h1Block4_0 ++ h1Block4_1
-lemma h1Check4 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Empty 4 h1Nodes4 = true := by
-  unfold h1Nodes4 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨h1Test4_0,h1Test4_1⟩
-def h1Bucket4 : BT (List (List Nat)) := buildBucketsBT h1W h1Nodes4
-set_option maxRecDepth 200000 in
-lemma h1Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h1G 4 xs.toFinset) h1Bucket4 := buildBucketsBT_sound (by decide) h1Pairs h1WOk h1PoolsOk h1AutosOk h1EmptyOk h1Check4
-def h1Block5_0 : List NodeSpec := indexPairNodes [(10004567,0), (10759711,0), (211007,192), (2422871,256), (14219311,337), (893103,4120), (16253983,320), (239679,1106), (958709,26696), (2633815,66), (48246831,2), (14160927,867), (544831,66), (11563095,0), (13660247,256), (15757399,66), (170047,65616), (949279,256), (2391071,867), (2165949,256), (12858021,0), (13906597,0), (137376421,0), (36439669,0), (36963957,64), (35916405,0), (36440693,64), (12910965,0), (33820247,0), (3424479,256), (3784927,43089), (16125215,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test5_0 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Block5_0 = true := by decide +kernel
-def h1Block5_1 : List NodeSpec := indexPairNodes [(835957,64), (190883927,0), (1028159,0), (2867423,768), (8487135,0), (2170943,768), (34472309,64), (692287,0), (3309941,64), (3375467,2), (3440943,0), (3506479,401), (182453279,1377), (766015,0), (2269247,0), (3768693,64), (645935191,0), (174068767,0), (2285631,2), (847935,365065), (2334783,0), (610367,0), (13899429,256), (147326581,0), (38142837,0), (10944671,1512497), (38666399,0), (38929269,0), (1027631151,0), (39715701,0), (254813727,0), (36569973,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test5_1 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Block5_1 = true := by decide +kernel
-def h1Block5_2 : List NodeSpec := indexPairNodes [(803701,0), (2547775,0), (2564159,0), (3244917,0), (977336407,256), (3441455,0), (960496671,320), (2400319,0), (35259243,433), (2596927,0), (3703669,0), (943723551,2), (2629695,64), (2580543,0), (13697909,0), (16712535,0), (42074967,0), (2711615,1057), (42861419,128), (2744383,8196), (1265695,337), (2515007,0), (2777151,0), (2457888815,0), (2826303,0), (2793535,0), (1413151,29496401), (13304479,208977), (4326452,0), (45352565,0), (51438901,0), (5243956,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test5_2 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Block5_2 = true := by decide +kernel
-def h1Block5_3 : List NodeSpec := indexPairNodes [(44123445,4801), (47449717,0), (226823333,141337), (276990501,76613235), (14428736677,5313), (205604149,4801), (1048659253,4801), (138495255,322), (21366039,1512497), (42731095,0), (667711,448), (253782123,497), (2957375,4), (241211499,433), (2875455,580), (22152471,507259153), (44303959,92307851), (41158231,0), (42206807,0), (12715607,497), (46826775,497), (6488887,1220559257), (45876823,64), (629182511,497), (174074911,1377), (2859071,8), (2973759,497), (3055679,8), (2646079,1377), (44091189,0), (46926453,0), (633366575,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test5_3 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Block5_3 = true := by decide +kernel
-def h1Block5_4 : List NodeSpec := indexPairNodes [(162536991,0), (3153983,0), (156248607,18615849), (3072063,66), (266349599,18615849), (3170367,72), (3088447,0), (3104831,8), (696403999,0), (713181215,74455057), (3070380063,2326625), (3103934495,512), (2302015,64), (51646039,0), (52166943,0), (83362327,47345), (3028293719,32), (13879095,0), (152571479,0), (3252287,0), (63180375,0), (86508055,18802039825), (3268671,0), (149947509,108), (685770271,2322), (3416127,8384), (589300853,497), (266344555,2432), (681576991,369), (41157407,31996145), (3465279,803), (262154347,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test5_4 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Block5_4 = true := by decide +kernel
-def h1Block5_5 : List NodeSpec := indexTripleNodes [(677383711,0,2), (3481663,130,2), (257964139,64,2), (673190431,0,2), (16173506667,2194,2), (16307724395,2434,2), (16441942123,0,2), (16576159851,0,2), (187697695,0,2), (3579967,433,2), (185601567,208977,2), (3596351,0,2), (717240427,497,2), (183505439,0,2), (235932789,4,6), (175120927,3023319073,6), (3629119,433,2), (170928671,128,6), (3645503,433,2), (3612735,0,2), (633340959,237921,2), (3661887,8200,2), (608181279,64,2), (3219519,8,2), (964639,0,2), (2799647,2949569,6), (3848223,0,2), (9615391,208977,2), (11712543,0,6), (13809695,2949569,2), (15906847,0,2), (35829791,7361,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test5_5 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Block5_5 = true := by decide +kernel
-def h1Block5_6 : List NodeSpec := indexTripleNodes [(40024095,0,2), (897087,1377,2), (3727423,0,2), (233837685,0,2), (3743807,0,2), (845163039,128,2), (3792959,0,2), (3760191,0,2), (2592143447,337,2), (3279946783,65600,2), (3825727,8,2), (3809343,8,2), (3776575,0,2), (1929247,178281489,2), (229647477,0,2), (547366005,0,2), (2753055,2,2), (232795167,256,2), (224410655,0,2), (1937439,33047577,2), (3874879,0,2), (891300383,0,2), (63083643957,0,2), (3021210677,0,2), (941636655,65029,6), (156238367,7656049193,2), (2924607,433,2), (40370719,0,2), (196495279127,433,2), (20710159,1945617,2), (52953631,512,2), (950010399,2,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test5_6 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Block5_6 = true := by decide +kernel
-def h1Block5_7 : List NodeSpec := indexTripleNodes [(954204703,0,2), (924844575,0,2), (3989567,1377,2), (1019967,0,2), (662808607,6167569,2), (679585823,119656465,2), (1392726039,3827176497,2), (2105407,1377,2), (370719,3827174481,2), (3006527,0,2), (2203711,0,2), (2220095,0,2), (36711455,0,2), (562221103,337,2), (578998319,0,6), (725055,8,2), (2613311,0,2), (1011829,26696,2), (2846837,10304,2), (3895413,0,2), (9662581,0,2), (260159,64,2), (3940415,0,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test5_7 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Block5_7 = true := by decide +kernel
-def h1Nodes5 : List NodeSpec := h1Block5_0 ++ h1Block5_1 ++ h1Block5_2 ++ h1Block5_3 ++ h1Block5_4 ++ h1Block5_5 ++ h1Block5_6 ++ h1Block5_7
-lemma h1Check5 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket4 5 h1Nodes5 = true := by
-  unfold h1Nodes5 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨⟨⟨⟨⟨h1Test5_0,h1Test5_1⟩,h1Test5_2⟩,h1Test5_3⟩,h1Test5_4⟩,h1Test5_5⟩,h1Test5_6⟩,h1Test5_7⟩
-def h1Bucket5 : BT (List (List Nat)) := buildBucketsBT h1W h1Nodes5
-set_option maxRecDepth 200000 in
-lemma h1Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h1G 5 xs.toFinset) h1Bucket5 := buildBucketsBT_sound (by decide) h1Pairs h1WOk h1PoolsOk h1AutosOk h1Bucket4Ok h1Check5
-def h1Block6_0 : List NodeSpec := indexTripleNodes [(104575,58,6), (125055,10506,2), (266367,10250,2), (290903,33094,6), (145471,173398,2), (356439,46,2), (95263,8230,2), (97311,774,6), (190527,231198,6), (1212,262726,2), (1214,819270,2), (2236,262982,2), (4286,557636,2), (16574,525716,2), (65726,1428,2), (94399,348615,2), (110783,697221,2), (401599,55391,6), (434367,557824,2), (450751,525402,2), (483519,532558,2), (499903,565256,2), (516287,532554,2), (1065151,2228768,2), (4489407,819268,2), (585791,173652,2), (4554943,819780,2), (610367,19104798,6), (4751551,87217,2), (618559,8008553,6), (4882623,13489,2), (1340,541391,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test6_0 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket5 6 h1Block6_0 = true := by decide +kernel
-def h1Block6_1 : List NodeSpec := indexTripleNodes [(119231,33354,2), (270783,586,2), (319935,67667,2), (352703,803,6), (369087,921891,2), (190,136619974,2), (385471,138,2), (451007,82,2), (467391,8458,2), (483775,8262,2), (500159,8202,2), (516543,164458,2), (2416703,173908,2), (1098175,176347,2), (1163711,369047,2), (2367551,8496266,2), (2383935,19105054,6), (1081663,6,2), (1212735,146,2), (774207,439929775,2), (2760767,130472779,2), (17470,33904,2), (66622,33106,2), (132156,49309259,2), (689781,153230483,2), (344895,688533043,2), (820823,115428053,2), (951895,59811631,2), (1082175,34072,2), (1147711,33436,2), (1344319,18915854,2), (675903,17344198,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test6_1 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket5 6 h1Block6_1 = true := by decide +kernel
-def h1Block6_2 : List NodeSpec := indexTripleNodes [(3081815,1494263165,2), (3212887,66614123,2), (3475031,2248429131,2), (3868247,1191323309,2), (2065215,40984,2), (4522815,2198552,2), (17695551,33880,2), (602175,108490,2), (17957695,32856,2), (634943,19105406,2), (19006271,2138186,2), (643135,16385254565,2), (625269,1225810579,2), (1082687,2256,2), (1279295,9985227,2), (790591,16820166,2), (1086,2139774,2), (2000191,14179421,2), (798783,107722,2), (407583,645998131,2), (411679,1191355699,2), (815167,122509774207,2), (20542,33904,2), (69694,336,2), (691799,13470123349,2), (509759,216,6), (831551,21538030,6), (2821719,747139453,2), (839743,108010,6), (2105406,2878,6), (4202558,35198,2), (8396862,32878,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test6_2 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket5 6 h1Block6_2 = true := by decide +kernel
-def h1Block6_3 : List NodeSpec := indexTripleNodes [(1507903,686,2), (1319019,2194,2), (659519,16820362,6), (6701163,2070,2), (5816407,35410,2), (2908223,174684,2), (6733911,58,2), (1699871,8242,2), (1478687,2066,2), (427583,2106384,2), (4210750,35872,6), (8405054,33980,2), (1377855,1644,2), (1902143,9366,6), (4326975,3688017,6), (856127,17343626,6), (5899839,9304,2), (6686271,2237472,2), (864319,173660,2), (440351,94449745,6), (872511,6188562589343,6), (485407,1292317465,6), (8421438,70,2), (1247807,522,2), (1772095,134,2), (2034239,1514139,2), (3694655,16819338,2), (5638719,9242,2), (6425151,163946,2), (3039295,173644,2), (3711039,19106846,2), (1117759,344,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test6_3 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket5 6 h1Block6_3 = true := by decide +kernel
-def h1Block6_4 : List NodeSpec := indexTripleNodes [(970815,16821642,2), (979007,174940,2), (1511999,6,6), (1774143,58247,2), (749631,18908558,6), (2842687,2262652,2), (3214111,103622674961,2), (3476255,94232484249,2), (954431,34370325658,2), (15935,619033437399,6), (822559,120067383,2), (987199,2665646,6), (2351167,44174,2), (6045783,43106,2), (7815255,10250,2), (2753055,7386433959,6), (1383999,1843655,2), (782399,19440782,6), (84418111,139719,6), (17571391,2107398,6), (1777215,2141240,2), (8651295,0xa83824126293,2), (9699871,134236619939,2), (1003583,35442487029,2), (112729663,9672101427,2), (11797023,12850491,2), (12845599,51402907,2), (1011775,2206874,2), (113778239,2105618,2), (56383,2629758,2), (1036351,2664278,6), (370719,61226464017,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test6_4 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket5 6 h1Block6_4 = true := by decide +kernel
-def h1Block6_5 : List NodeSpec := indexTripleNodes [(733247,0x6a0b46264fbf,6), (64501279,122469560217,2), (129000511,175160,2), (741439,141939724249,2), (1085471,497048337,2), (217069087,123536953241,2), (2187327,2663782,2), (684095,17343662,2), (58431,0xdc18d04b7fd,2), (215103,2622582,2), (219199,139609708847,6), (2884639,0xb1990b04b19,6), (446511,205687597,6), (223295,911037846891,2), (454703,4152,6), (2236479,884834870487,6), (2252863,17346190,2), (487541,10312,2), (243775,535646,6), (1056885,10250,2), (536639,6510894159,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test6_5 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket5 6 h1Block6_5 = true := by decide +kernel
-def h1Nodes6 : List NodeSpec := h1Block6_0 ++ h1Block6_1 ++ h1Block6_2 ++ h1Block6_3 ++ h1Block6_4 ++ h1Block6_5
-lemma h1Check6 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket5 6 h1Nodes6 = true := by
-  unfold h1Nodes6 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨⟨⟨h1Test6_0,h1Test6_1⟩,h1Test6_2⟩,h1Test6_3⟩,h1Test6_4⟩,h1Test6_5⟩
-def h1Bucket6 : BT (List (List Nat)) := buildBucketsBT h1W h1Nodes6
-set_option maxRecDepth 200000 in
-lemma h1Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h1G 6 xs.toFinset) h1Bucket6 := buildBucketsBT_sound (by decide) h1Pairs h1WOk h1PoolsOk h1AutosOk h1Bucket5Ok h1Check6
-def h1Block7_0 : List NodeSpec := indexTripleNodes [(126,9182,6), (190,13115614,6), (318,8670,2), (574,8574,2), (1086,12624510,2), (2110,41854,2), (4158,8318,6), (8254,10462,2), (9791,8400094,6), (32830,8400094,6), (65598,8399070,6), (12863,10622,6), (13887,10366,6), (14911,10366,2), (15935,10496126,6), (54335,8446,6), (58431,12627966,6), (60479,9726,6), (64575,10366,6), (133183,43646,6), (137279,10334,6), (141375,4369022,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test7_0 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket6 7 h1Block7_0 = true := by decide +kernel
-def h1Nodes7 : List NodeSpec := h1Block7_0
-lemma h1Check7 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket6 7 h1Nodes7 = true := h1Test7_0
-def h1Bucket7 : BT (List (List Nat)) := buildBucketsBT h1W h1Nodes7
-set_option maxRecDepth 200000 in
-lemma h1Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h1G 7 xs.toFinset) h1Bucket7 := buildBucketsBT_sound (by decide) h1Pairs h1WOk h1PoolsOk h1AutosOk h1Bucket6Ok h1Check7
-def h1Block8_0 : List NodeSpec := [([0,1,2,3,4],[],[0,1])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h1Test8_0 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket7 8 h1Block8_0 = true := by decide +kernel
-def h1Nodes8 : List NodeSpec := h1Block8_0
-lemma h1Check8 : checkNodesBT h1W h1G h1Mask h1Pools h1Autos h1Bucket7 8 h1Nodes8 = true := h1Test8_0
-def h1Bucket8 : BT (List (List Nat)) := buildBucketsBT h1W h1Nodes8
-set_option maxRecDepth 200000 in
-lemma h1Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h1G 8 xs.toFinset) h1Bucket8 := buildBucketsBT_sound (by decide) h1Pairs h1WOk h1PoolsOk h1AutosOk h1Bucket7Ok h1Check8
-set_option maxRecDepth 200000 in
-lemma h1Bound : Lower h1R h1G 9 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,2,6),(VAR 3,1,9),(VAR 5,5,37)]) (by decide +kernel) h1Bucket8Ok (by decide +kernel)
-def h34R : List Nat := varsOf 53
-def h34G : Nat := 0xfafaffff0000aaaafafaffff0000aaaa
-lemma h34Bound : Lower h34R h34G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(4,5),(1,2),(0,1)]) (roots2 := h9R) (T2 := h9G) (by decide +kernel) h9Bound
-def h36R : List Nat := varsOf 52
-def h36G : Nat := 0xf0f0ffff0000f0f0f0f0ffff0000f0f0
-lemma h36Bound : Lower h36R h36G 4 := carry_of (swaps := [(3,4),(4,5),(1,2)]) (roots2 := h10R) (T2 := h10G) (by decide +kernel) h10Bound
-def h37R : List Nat := varsOf 56
-def h37G : Nat := 0xffffff00ff000000ffffff00ff000000
-lemma h37Bound : Lower h37R h37G 4 := carry_of (swaps := [(3,4),(2,3)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h35R : List Nat := varsOf 60
-def h35G : Nat := 0xf0f0fff0f000f0f0f0f0fff0f000f0f0
-def h35Pos : List Nat := [4,40,4,4,40,36,12,52,40,28,12,4,28,52,60]
-def h35Neg : List Nat := [0,32,8,20,56,32,8,20,8,20,0,16,24,48,56]
-def h35Mask : Nat := fullMask 15
-def h35Base : List Decor := [(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x7eed,648),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x5752,0x5154),(0xffff0000ffff0000ffff0000ffff0000,0x7280,0x7a98),(0xffffffff00000000ffffffff00000000,0x61b2,0x6032)]
-def h35Steps : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(3,0,1),(0,0,2),(1,0,2),(2,1,2),(3,1,2),(0,1,3),(1,1,3),(2,3,4),(3,3,5)]
-def h35W : BT Decor := buildWiresBT 4 h35Base h35Steps
-def h35AutoList : List (List (Nat × Nat)) := [[],[(3,5)]]
-def h35Autos : BT (List (Nat × Nat)) := btOfList 1 h35AutoList
-lemma h35Pairs : goodPairs h35G h35Pos h35Neg := goodPairs_of (by decide +kernel)
-lemma h35BaseOk : ∀ x ∈ h35Base, faithful h35Pos h35Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h35WOk : btAll (fun x => faithful h35Pos h35Neg x ∧ x.1 < 2^128) h35W := buildWiresBT_faithful h35BaseOk
-lemma h35AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h35G = h35G) h35Autos := btAll_ofList (autos_of (by decide +kernel))
-def h35SliceList : List (Option (Nat × Nat)) := [some (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f,4),some (0xff00ff0000ff00ffff00ff0000ff00ff,4),some (0xffff0000ffff0000ffff0000ffff00,4),some (0xffffffff00000000ffffffff0000,4)]
-def h35Slices : BT (Option (Nat × Nat)) := btOfList 2 h35SliceList
-def h35Specs : List PoolSpec := [(0,[]),(2,[]),(1,[]),(3,[])]
-def h35Pools : BT (Option BoundPool) := buildPoolsBT 2 h35W h35R h35Slices h35Specs
-set_option maxRecDepth 200000 in
-lemma h35Slice3 : Slice h35R h35G (0xffffffff00000000ffffffff0000) 4 := opposite_slice (oppositeRow 4 5 44) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h35Slice2 : Slice h35R h35G (0xffff0000ffff0000ffff0000ffff00) 4 := opposite_slice (oppositeRow 3 4 52) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h36Bound
-set_option maxRecDepth 200000 in
-lemma h35Slice1 : Slice h35R h35G (0xff00ff0000ff00ffff00ff0000ff00ff) 4 := mapped_slice (identifyRow 3 5 52) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h36Bound
-set_option maxRecDepth 200000 in
-lemma h35Slice0 : Slice h35R h35G (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f) 4 := mapped_slice (identifyRow 2 4 56) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h37Bound
-lemma h35SlicesOk : btAll (sliceSpec h35R h35G) h35Slices := btAll_ofList (P := sliceSpec h35R h35G) (sliceSpecCons h35Slice0 (sliceSpecCons h35Slice1 (sliceSpecCons h35Slice2 (sliceSpecCons h35Slice3 sliceSpecNil))))
-set_option maxRecDepth 200000 in
-lemma h35PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h35R h35G c) h35Pools := buildPoolsBT_sound h35SlicesOk
-def h35Empty : BT (List (List Nat)) := BT.empty
-lemma h35EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h35G (3 - 1) xs.toFinset) h35Empty := trivial
-def h35Block3_0 : List NodeSpec := nodesWithIdentity [([0,1,2,14],[]),([0,1,2,15],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h35Test3_0 : checkNodesBT h35W h35G h35Mask h35Pools h35Autos h35Empty 3 h35Block3_0 = true := by decide +kernel
-def h35Nodes3 : List NodeSpec := h35Block3_0
-lemma h35Check3 : checkNodesBT h35W h35G h35Mask h35Pools h35Autos h35Empty 3 h35Nodes3 = true := h35Test3_0
-def h35Bucket3 : BT (List (List Nat)) := buildBucketsBT h35W h35Nodes3
-set_option maxRecDepth 200000 in
-lemma h35Bucket3Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h35G 3 xs.toFinset) h35Bucket3 := buildBucketsBT_sound (by decide) h35Pairs h35WOk h35PoolsOk h35AutosOk h35EmptyOk h35Check3
-def h35Block4_0 : List NodeSpec := indexPairNodes [(62,14), (94,14), (158,0), (286,0), (542,0), (1054,0), (2078,4), (4126,4), (8222,8), (5407,8)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h35Test4_0 : checkNodesBT h35W h35G h35Mask h35Pools h35Autos h35Bucket3 4 h35Block4_0 = true := by decide +kernel
-def h35Nodes4 : List NodeSpec := h35Block4_0
-lemma h35Check4 : checkNodesBT h35W h35G h35Mask h35Pools h35Autos h35Bucket3 4 h35Nodes4 = true := h35Test4_0
-def h35Bucket4 : BT (List (List Nat)) := buildBucketsBT h35W h35Nodes4
-set_option maxRecDepth 200000 in
-lemma h35Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h35G 4 xs.toFinset) h35Bucket4 := buildBucketsBT_sound (by decide) h35Pairs h35WOk h35PoolsOk h35AutosOk h35Bucket3Ok h35Check4
-def h35Block5_0 : List NodeSpec := [([0,1,2,3],[0,1,2,3],[0,1])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h35Test5_0 : checkNodesBT h35W h35G h35Mask h35Pools h35Autos h35Bucket4 5 h35Block5_0 = true := by decide +kernel
-def h35Nodes5 : List NodeSpec := h35Block5_0
-lemma h35Check5 : checkNodesBT h35W h35G h35Mask h35Pools h35Autos h35Bucket4 5 h35Nodes5 = true := h35Test5_0
-def h35Bucket5 : BT (List (List Nat)) := buildBucketsBT h35W h35Nodes5
-set_option maxRecDepth 200000 in
-lemma h35Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h35G 5 xs.toFinset) h35Bucket5 := buildBucketsBT_sound (by decide) h35Pairs h35WOk h35PoolsOk h35AutosOk h35Bucket4Ok h35Check5
-set_option maxRecDepth 200000 in
-lemma h35Bound : Lower h35R h35G 6 := lower_of_forestBT (essPairs := [(VAR 2,0,4),(VAR 3,20,28),(VAR 4,4,20),(VAR 5,8,40)]) (by decide +kernel) h35Bucket5Ok (by decide +kernel)
-def h38R : List Nat := varsOf 29
-def h38G : Nat := 0xfa00faaafa00faaafa00faaafa00faaa
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h38Bound : Lower h38R h38G 4 := lower_from_single_layer (k := 3) (pos := [1,5,9,1,25,25,12,5]) (neg := [0,4,8,17,24,17,4,21]) (essentialPairs := [(VAR 0,0,1),(VAR 2,8,12),(VAR 3,4,12),(VAR 4,1,17)]) (by decide +kernel)
-def h39R : List Nat := varsOf 45
-def h39G : Nat := 0xfffafffafaaafaaafffafffafaaafaaa
-lemma h39Bound : Lower h39R h39G 5 := lift_of (z := 1) (o := 0) (essPairs := [(VAR 0,0,1)]) (by decide +kernel) h3Bound
-def h40R : List Nat := varsOf 49
-def h40G : Nat := 0xaaaaffff0000aaaaaaaaffff0000aaaa
-lemma h40Bound : Lower h40R h40G 4 := carry_of (swaps := [(3,4),(4,5),(0,1)]) (roots2 := h10R) (T2 := h10G) (by decide +kernel) h10Bound
-def h41R : List Nat := varsOf 53
-def h41G : Nat := 0xaaaafafa0000aaaaaaaafafa0000aaaa
-lemma h41Bound : Lower h41R h41G 5 := lift_of (z := 0) (o := 4) (essPairs := [(VAR 2,32,36)]) (by decide +kernel) h40Bound
-def h42R : List Nat := varsOf 57
-def h42G : Nat := 0xaaaaffaaaa00aaaaaaaaffaaaa00aaaa
-lemma h42Bound : Lower h42R h42G 6 := carry_of (swaps := [(1,2),(0,1)]) (roots2 := h35R) (T2 := h35G) (by decide +kernel) h35Bound
-def h43R : List Nat := varsOf 28
-def h43G : Nat := 0xf000fff0f000fff0f000fff0f000fff0
-lemma h43Bound : Lower h43R h43G 4 := carry_of (swaps := [(4,5),(1,2)]) (roots2 := h10R) (T2 := h10G) (by decide +kernel) h10Bound
-def h44R : List Nat := varsOf 60
-def h44G : Nat := 0xf000fff0f000f000f000fff0f000f000
-lemma h44Bound : Lower h44R h44G 5 := lift_of (z := 0) (o := 32) (essPairs := [(VAR 5,4,36)]) (by decide +kernel) h43Bound
-def h45R : List Nat := varsOf 29
-def h45G : Nat := 0xfaaafffafaaafffafaaafffafaaafffa
-lemma h45Bound : Lower h45R h45G 5 := lift_of (z := 1) (o := 0) (essPairs := [(VAR 0,0,1)]) (by decide +kernel) h43Bound
-def h46R : List Nat := varsOf 45
-def h46G : Nat := 0xfaaafaaafa00fa00faaafaaafa00fa00
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h46Bound : Lower h46R h46G 4 := lower_from_single_layer (k := 3) (pos := [9,37,9,12,12,37,33,44]) (neg := [8,36,1,4,8,5,1,36]) (essentialPairs := [(VAR 0,8,9),(VAR 2,8,12),(VAR 3,1,9),(VAR 5,1,33)]) (by decide +kernel)
-def h47R : List Nat := varsOf 57
-def h47G : Nat := 0xffaaffffff00ffaaffaaffffff00ffaa
-lemma h47Bound : Lower h47R h47G 5 := carry_of (swaps := [(3,4),(4,5),(3,4),(0,1),(1,2),(2,3),(0,1)]) (roots2 := h45R) (T2 := h45G) (by decide +kernel) h45Bound
-def h33R : List Nat := varsOf 61
-def h33G : Nat := 0xfaaafffafa00faaafaaafffafa00faaa
-def h33Pos : List Nat := [1,12,5,12,25,1,40,36,40,36,49,53,1,25,40,36,28,5,57,37,28,28,9,60,40,60,40,33,28,28,1,5,53,49,1,5,9,9,49,28,28,29,57,25,12,36,25,49,5,25,29,1,33,40,36,40]
-def h33Neg : List Nat := [0,8,4,4,17,17,56,4,8,32,17,52,8,24,32,52,20,20,56,4,21,24,17,52,48,56,0,32,8,56,4,21,21,32,32,0,8,0,48,4,52,21,17,21,0,0,56,21,17,8,17,21,17,16,20,24]
-def h33Mask : Nat := fullMask 56
-def h33Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x1fce7fc84e3c35,0x1d8e0180500430),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x453389b2bb8a8e,0x488b81c09b888c),(0xff00ff00ff00ff00ff00ff00ff00ff00,0xa65fb037f5615a,0x82401032243142),(0xffff0000ffff0000ffff0000ffff0000,0x6cfc332b52c10,0xfdcf41a3f7ac70),(0xffffffff00000000ffffffff00000000,0xf0a4430f8ccfc0,0x41462b84ca40)]
-def h33Steps : List (Nat × Nat × Nat) := [(1,0,1),(0,0,2),(1,0,2),(0,2,3),(1,2,3),(2,2,3),(3,2,3),(0,2,4),(1,2,4),(2,2,4),(3,2,4),(3,2,7),(0,3,4),(1,3,4),(2,3,4),(3,3,4),(1,2,20),(3,3,5),(1,3,7),(3,3,7),(3,3,21),(0,4,5),(0,4,7),(2,4,7),(0,4,21),(0,5,7),(0,5,21),(1,7,21),(2,2,20),(3,2,20),(0,5,20),(2,5,20),(3,2,32),(0,5,32),(2,7,20),(1,2,24),(1,2,27),(3,0,2),(0,0,3),(1,0,3),(2,0,3),(3,0,3),(0,0,4),(1,0,4),(2,0,4),(3,0,4),(3,0,5),(3,0,9),(1,0,20),(0,4,9),(3,4,9),(0,4,53),(3,0,20),(2,9,20),(1,0,54),(1,2,54),(1,3,54),(1,0,34),(1,3,34),(1,0,15),(2,3,15),(3,3,53),(1,15,20),(3,0,63),(3,2,63),(0,4,63),(2,4,22),(1,3,26),(3,0,21),(1,2,31),(2,0,1),(0,1,2),(1,1,2),(2,1,2),(3,1,2),(0,1,3),(1,1,3),(3,1,3),(1,1,4),(3,1,4),(1,1,20),(1,1,22),(1,1,26),(2,7,51),(1,3,42),(2,4,42),(1,42,51),(1,9,51),(2,9,51),(1,20,51),(2,20,51),(0,4,92),(1,0,10),(1,0,70),(1,10,51),(1,0,12),(3,0,61),(1,12,51),(2,4,102),(1,15,51),(1,3,103),(2,21,51),(1,1,6),(1,3,6),(2,3,6),(1,4,6),(2,4,6),(1,2,52),(0,7,9),(3,2,64),(2,7,15),(0,1,21),(3,1,21),(1,1,16),(1,20,42),(0,2,89),(2,2,90),(1,1,43),(3,3,77),(1,0,123),(0,4,77),(3,43,77),(1,3,79),(2,4,79),(1,43,79),(1,0,84),(1,3,84),(1,2,57),(0,1,40),(1,1,40),(2,1,40),(3,1,40),(1,4,45),(2,4,45),(3,45,77),(1,45,79),(2,4,133),(1,3,76),(2,4,76),(1,4,46),(1,1,56),(2,1,56),(1,2,56),(2,2,56),(2,3,56),(3,46,77),(3,0,127),(1,46,79),(3,0,131),(1,46,84),(0,1,147),(3,1,147),(2,9,46),(1,12,46),(1,15,46),(1,56,76),(3,3,145),(0,1,41),(1,1,41),(2,1,41),(3,1,41),(1,3,47),(3,47,77),(1,47,79),(1,3,162),(1,76,149),(0,3,48),(1,1,66),(2,1,66),(1,2,66),(2,2,66),(0,48,77),(1,0,176),(1,0,128),(2,48,79),(3,0,81),(0,4,81),(1,0,181),(0,48,81),(0,9,48),(3,10,48),(0,1,174),(3,1,174),(3,15,48),(1,66,76),(0,4,172),(1,1,49),(3,49,77),(1,49,79),(3,17,77),(0,18,77),(1,2,19),(3,19,77),(3,20,77),(1,17,79),(2,18,79),(1,19,79),(1,20,79),(1,4,8),(3,1,13),(2,13,20),(2,9,17),(1,1,11),(2,1,11),(1,11,20),(2,3,14),(3,15,18)]
-def h33W : BT Decor := buildWiresBT 8 h33Base h33Steps
-def h33AutoList : List (List (Nat × Nat)) := [[]]
-def h33Autos : BT (List (Nat × Nat)) := btOfList 1 h33AutoList
-lemma h33Pairs : goodPairs h33G h33Pos h33Neg := goodPairs_of (by decide +kernel)
-lemma h33BaseOk : ∀ x ∈ h33Base, faithful h33Pos h33Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h33WOk : btAll (fun x => faithful h33Pos h33Neg x ∧ x.1 < 2^128) h33W := buildWiresBT_faithful h33BaseOk
-lemma h33AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h33G = h33G) h33Autos := btAll_ofList (autos_of (by decide +kernel))
-def h33SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 4,5),some (subcubeFast 0 16,4),some (subcubeFast 0 32,5),some (subcubeFast 1 0,5),some (subcubeFast 1 32,4),some (subcubeFast 4 0,6),some (subcubeFast 8 0,5),some (subcubeFast 8 4,4),some (subcubeFast 16 0,5),some (subcubeFast 17 0,4),some (subcubeFast 32 0,4),some (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5,6),some (0xff00ff0000ff00ffff00ff0000ff00ff,5),some (0xffffffff00000000ffffffff0000,5)]
-def h33Slices : BT (Option (Nat × Nat)) := btOfList 4 h33SliceList
-def h33Specs : List PoolSpec := poolSteps h33Steps [(5,[]),(3,[]),(9,[]),(6,[0]),(7,[]),(4,[]),(0,[2]),(5,[2]),(8,[0]),(2,[0]),(0,[]),(5,[4]),(2,[0,48]),(0,[4]),(5,[10]),(8,[0,48]),(0,[10]),(3,[15]),(5,[15]),(5,[17]),(5,[21]),(11,[]),(6,[]),(8,[]),(1,[]),(10,[]),(2,[]),(12,[]),(5,[37]),(5,[5]),(5,[7]),(5,[1]),(5,[1,103]),(5,[1,104]),(5,[1,105]),(5,[1,106]),(8,[2]),(2,[2]),(5,[2,19]),(5,[2,22]),(6,[113]),(8,[37]),(2,[37]),(5,[38]),(5,[39]),(2,[39]),(8,[52]),(2,[52]),(5,[40]),(8,[132]),(5,[40,132]),(5,[40,133]),(8,[133]),(5,[41]),(2,[41]),(2,[48]),(5,[41,139]),(3,[139]),(5,[42]),(5,[42,161]),(2,[161]),(5,[43]),(8,[43]),(8,[48]),(5,[43,166]),(3,[166]),(5,[44]),(5,[45]),(8,[45]),(5,[118]),(5,[120]),(5,[122]),(5,[123]),(5,[175]),(5,[176]),(5,[125]),(5,[126]),(5,[3]),(5,[3,198]),(8,[47]),(5,[4,49]),(3,[12]),(8,[92]),(5,[6]),(6,[202]),(5,[8]),(0,[6]),(2,[95]),(6,[199]),(0,[8]),(5,[9]),(5,[9,205]),(2,[59]),(3,[13]),(5,[12]),(5,[13]),(5,[14]),(13,[]),(5,[14,15])]
-def h33Pools : BT (Option BoundPool) := buildPoolsBT 7 h33W h33R h33Slices h33Specs
-set_option maxRecDepth 200000 in
-lemma h33Slice13 : Slice h33R h33G (0xffffffff00000000ffffffff0000) 5 := opposite_slice (oppositeRow 4 5 45) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h17Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice12 : Slice h33R h33G (0xff00ff0000ff00ffff00ff0000ff00ff) 5 := mapped_slice (identifyRow 3 5 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h34Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice11 : Slice h33R h33G (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5) 6 := mapped_slice (identifyRow 0 2 60) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h35Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice10 : Slice h33R h33G (subcubeFast 32 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h38Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice9 : Slice h33R h33G (subcubeFast 17 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice8 : Slice h33R h33G (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h39Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice7 : Slice h33R h33G (subcubeFast 8 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h40Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice6 : Slice h33R h33G (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h41Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice5 : Slice h33R h33G (subcubeFast 4 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h42Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice4 : Slice h33R h33G (subcubeFast 1 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h43Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice3 : Slice h33R h33G (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h44Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice2 : Slice h33R h33G (subcubeFast 0 32) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h45Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice1 : Slice h33R h33G (subcubeFast 0 16) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h46Bound
-set_option maxRecDepth 200000 in
-lemma h33Slice0 : Slice h33R h33G (subcubeFast 0 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h47Bound
-lemma h33SlicesOk : btAll (sliceSpec h33R h33G) h33Slices := btAll_ofList (P := sliceSpec h33R h33G) (sliceSpecCons h33Slice0 (sliceSpecCons h33Slice1 (sliceSpecCons h33Slice2 (sliceSpecCons h33Slice3 (sliceSpecCons h33Slice4 (sliceSpecCons h33Slice5 (sliceSpecCons h33Slice6 (sliceSpecCons h33Slice7 (sliceSpecCons h33Slice8 (sliceSpecCons h33Slice9 (sliceSpecCons h33Slice10 (sliceSpecCons h33Slice11 (sliceSpecCons h33Slice12 (sliceSpecCons h33Slice13 sliceSpecNil))))))))))))))
-set_option maxRecDepth 200000 in
-lemma h33PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h33R h33G c) h33Pools := buildPoolsBT_sound h33SlicesOk
-def h33Empty : BT (List (List Nat)) := BT.empty
-lemma h33EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h33G (3 - 1) xs.toFinset) h33Empty := trivial
-def h33Block3_0 : List NodeSpec := nodesWithIdentity [([2,3,38,56],[]),([2,4,38,66],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test3_0 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Empty 3 h33Block3_0 = true := by decide +kernel
-def h33Nodes3 : List NodeSpec := h33Block3_0
-lemma h33Check3 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Empty 3 h33Nodes3 = true := h33Test3_0
-def h33Bucket3 : BT (List (List Nat)) := buildBucketsBT h33W h33Nodes3
-set_option maxRecDepth 200000 in
-lemma h33Bucket3Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h33G 3 xs.toFinset) h33Bucket3 := buildBucketsBT_sound (by decide) h33Pairs h33WOk h33PoolsOk h33AutosOk h33EmptyOk h33Check3
-def h33Block4_0 : List NodeSpec := indexPairNodes [(475849,0), (112765,2), (282749,0), (23332013,433), (471165,0), (80750685,1057), (266365,0), (132133037,433), (115388509,1057), (112747,2), (1138811,0), (381749291,0), (1828970571,0), (1679467,0), (22106277,0), (1702909975,0), (1736464407,0), (299915791,0), (24562860103,0), (24831295559,0), (1384206501,0), (27810869,0), (362830351,0), (1290271,0), (1669421099,0), (1686198315,0), (24203429,0), (4311767095,0), (1702910007,0), (2004963413,0), (5455919,0), (524289039,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test4_0 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket3 4 h33Block4_0 = true := by decide +kernel
-def h33Block4_1 : List NodeSpec := indexPairNodes [(29126525767,0), (29394961223,0), (1417760933,0), (306270293,0), (1300235279,0), (6078511,0), (8087117899,0), (8154226763,0), (376439567,0), (380634383,0), (19529130059,0), (128012453,0), (331436197,0), (368055175,0), (21944959879,0), (408962571,0), (18353213,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test4_1 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket3 4 h33Block4_1 = true := by decide +kernel
-def h33Nodes4 : List NodeSpec := h33Block4_0 ++ h33Block4_1
-lemma h33Check4 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket3 4 h33Nodes4 = true := by
-  unfold h33Nodes4 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨h33Test4_0,h33Test4_1⟩
-def h33Bucket4 : BT (List (List Nat)) := buildBucketsBT h33W h33Nodes4
-set_option maxRecDepth 200000 in
-lemma h33Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h33G 4 xs.toFinset) h33Bucket4 := buildBucketsBT_sound (by decide) h33Pairs h33WOk h33PoolsOk h33AutosOk h33Bucket3Ok h33Check4
-def h33Block5_0 : List NodeSpec := indexPairNodes [(221565,88), (541053,8), (573821,28), (672125,84), (704893,64), (2098282,1040), (811243,0), (241899,4), (2162778,528), (958699,0), (397437,335946), (35142781,73740), (135403,2052), (717131,849), (3469483,2560), (250091,22), (258283,6), (2179307,0), (2212075,0), (794869,10), (133183,1441), (629272683,256), (679604331,1889), (1057426507,64), (3797099,0), (36759659,0), (696381547,64), (713158763,0), (163704939,0), (813822059,1953), (44167275,0), (864153707,2017)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test5_0 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket4 5 h33Block5_0 = true := by decide +kernel
-def h33Block5_1 : List NodeSpec := indexPairNodes [(264344107,8), (52555883,0), (897708139,0), (880930923,8), (63969387,2), (729935979,1249), (746713195,0), (2982773,2), (3769205,2), (3048309,71789), (238423,118533), (58431,962723), (145471,0), (45094999,0), (946239,675), (2701193263,369), (1003583,2), (1028159,2), (2105407,675), (629182551,410691), (1015064607,836193), (1031841823,0), (2220095,6), (662736983,0), (981518367,0), (998295583,0), (2236479,6), (3137376343,52486213), (3170930775,205409), (3204485207,0), (3238039639,0), (612405335,52486213)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test5_1 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket4 5 h33Block5_1 = true := by decide +kernel
-def h33Block5_2 : List NodeSpec := indexPairNodes [(645959767,1441), (2264967199,0), (45132831,0), (2400319,0), (2734772271,0), (2197866527,0), (49327135,1569), (2433087,0), (2868989999,1697), (2465855,1569), (1556943,1090856045), (12453423,206889), (155715119,0), (914444405,1505), (65097775,1697), (2531391,1569), (146886703,1697), (2547775,1569), (2449612887,1569), (2315427927,369), (43035679,348321), (47229983,0), (750824479,0), (759213087,0), (767601695,7997985), (775990303,37929), (2351167,2404515), (612413527,345539), (12012642351,0), (9730940975,1000097), (2678847,6), (645967959,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test5_2 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket4 5 h33Block5_2 = true := by decide +kernel
-def h33Block5_3 : List NodeSpec := indexPairNodes [(11744239663,0), (9462538287,0), (2695231,6), (4076908631,3284501), (4110463063,172833), (4144017495,0), (4177571927,0), (595636311,3284501), (629190743,1441), (9865142319,63982853), (9596739631,0), (12683730991,0), (48484399,0), (2826303,0), (12415328303,0), (56873007,1761), (675310623,0), (2875455,0), (2239786015,1633), (2940991,1569), (3435551,1633), (2957375,1569), (830574709,1505), (47213599,1633), (2973759,1569), (6751631,5033567341), (13502751,62989), (181930271,0), (2583830615,1761), (2449645655,369), (44290095,356513), (52678703,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test5_3 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket4 5 h33Block5_3 = true := by decide +kernel
-def h33Block5_4 : List NodeSpec := indexPairNodes [(3573796911,0), (3607351343,0), (3640905775,19663457), (3674460207,12557), (2793535,708771), (641758239,369), (3088447,2), (3104831,2), (3121215,0), (3137599,0), (60302095,1633), (219167791,1633), (223347231,1633), (3170367,0), (236984407,2), (3186751,0), (987199,129137), (2842687,120945), (231746607,0), (3203135,0), (57937695,0), (3219519,0), (62399247,1569), (3235903,0), (245373015,2), (3252287,369), (2416703,0), (2859071,0), (2924607,1569), (2449471,1569), (985551,3553), (10880287,20865)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test5_4 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket4 5 h33Block5_4 = true := by decide +kernel
-def h33Block5_5 : List NodeSpec := indexPairNodes [(731599,3553), (207095343,1569), (11666991,2130465), (227391,1569), (239679,0), (35903,675), (774207,1569), (987535,3553), (953903,0), (2163999,0), (2166798,3553), (13766191,0), (3179284527,1569), (798783,1569), (778044959,1569), (206047519,1761), (10094879,2458337), (528447,1569), (147025967,0), (138612823,10785), (155390039,369), (62939223,10849), (159408215,369), (370148623,624994189), (137372431,25473), (58127,52823585), (3547919,9765409), (137279,0), (569407,675), (801118315,369), (809506923,2), (817891435,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test5_5 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket4 5 h33Block5_5 = true := by decide +kernel
-def h33Nodes5 : List NodeSpec := h33Block5_0 ++ h33Block5_1 ++ h33Block5_2 ++ h33Block5_3 ++ h33Block5_4 ++ h33Block5_5
-lemma h33Check5 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket4 5 h33Nodes5 = true := by
-  unfold h33Nodes5 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨⟨⟨h33Test5_0,h33Test5_1⟩,h33Test5_2⟩,h33Test5_3⟩,h33Test5_4⟩,h33Test5_5⟩
-def h33Bucket5 : BT (List (List Nat)) := buildBucketsBT h33W h33Nodes5
-set_option maxRecDepth 200000 in
-lemma h33Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h33G 5 xs.toFinset) h33Bucket5 := buildBucketsBT_sound (by decide) h33Pairs h33WOk h33PoolsOk h33AutosOk h33Bucket4Ok h33Check5
-def h33Block6_0 : List NodeSpec := indexPairNodes [(376,510), (378,3966), (23677,124), (1146,24124), (65658,167540), (63723,790108), (143595,1052222), (176363,2100854), (31871,252184590), (37951,248514606), (46143,400558182), (122,3710), (2917227,2414), (39899243,4852911), (11142763,4206), (10881643,200879), (41419883,209071), (38280299,32878), (66062443,786542), (1695851,80068751), (1712175,142880981), (1728559,88367173), (440351,71373333), (444447,176959701), (1342,26294373), (65854,22112357), (111039,8270037), (39999,641630475), (270783,27405), (42047,11079925903), (287167,119317), (48191,88608410663)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test6_0 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket5 6 h33Block6_0 = true := by decide +kernel
-def h33Block6_1 : List NodeSpec := indexPairNodes [(336319,26239045), (50239,2824701491), (352703,109609), (1876075,327386735), (318,6861655479), (23594047,2037869), (700479,2087338127), (708671,16667708455), (289437759,1368263), (306214975,188615), (1941611,5505485863), (897087,494929990), (281053247,475277), (297830463,1933579), (339773503,966797), (9307695,1444513557), (17039935,59661), (7736895,2041965), (219199,1769882225867), (272668735,2023623), (289445951,450759), (1351787,38799942), (299095,26243285), (149567,5130978927), (1908823,1174954053), (1101855,116412165), (1110047,981786693), (132163647,55409), (281061439,110755), (323004479,874609), (9831983,2048493333), (18088511,436997)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test6_1 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket5 6 h33Block6_1 = true := by decide +kernel
-def h33Block6_2 : List NodeSpec := indexPairNodes [(8261183,1905705), (888895,16662671), (1159199,131123981), (109599,5579885), (215103,244911294063), (127973439,8052935), (272676927,450759), (1368171,9610191), (307287,22060565), (153663,2824749199), (1925207,73503253), (5324847,206592533), (4767791,63982853), (123783231,135281), (132171839,270499), (281069631,710769), (5178175,174861), (5047615,355077), (8784159,78413852741), (905279,461375558), (5488687,429968141), (512047,5710957), (256063,161085186191), (119593023,5824711), (127981631,188615), (6144107,21746532495), (913471,11419791), (115402815,508713), (123791423,2065971), (132180031,1033001), (5440319,2041965), (5309759,986153)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test6_2 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket5 6 h33Block6_2 = true := by decide +kernel
-def h33Block6_3 : List NodeSpec := indexPairNodes [(9308447,91298754629), (716863,22988087), (31725119,874609), (31201855,710769), (30678591,481393), (120587327,692387), (979007,23360849207), (995391,46713947447), (692287,8275623), (32773695,110755), (32250431,270499), (31727167,110755), (124781631,2068643), (1011775,12217295047), (1019967,3188662471), (2891839,51016665647), (2908223,51008914743), (3055679,86805039), (2580543,22840951), (1036351,13559957111), (1044543,6914196791), (1642527,440510733), (264223,1386541), (260159,92276782), (198719,14365376655), (5702463,116419333), (17470,14042905), (66622,54817), (263214,29799269261), (755247,90973069), (206911,28725682375), (5964607,110049)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test6_3 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket5 6 h33Block6_3 = true := by decide +kernel
-def h33Block6_4 : List NodeSpec := indexPairNodes [(62527,2859207), (6095679,32225), (766015,60680342063), (1086,33261711), (544831,22955319), (6668395,4177889837), (20542,11593487385), (69694,31656473), (626223,8120919949), (52287,43401359), (790591,129935115895), (235583,22955319), (65598,528517190), (6570091,63820596825), (247071,34096910889), (44095,461375558), (446511,5380185), (223295,22840951), (6766639,1099016461), (247871,281353456679), (25955903,2198063877), (59679,72483245609), (182559,27995689), (243775,8331463), (25431615,120289), (26480191,64993), (231487,43401359), (33855,529270798), (536639,461375558), (3153983,7749775), (25359,3380717453), (202815,4701980051055)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test6_4 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket5 6 h33Block6_4 = true := by decide +kernel
-def h33Block6_5 : List NodeSpec := indexPairNodes [(70255679,73468432149), (274727999,69795), (35903,8331463), (99391,2068705), (7078975,32225)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test6_5 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket5 6 h33Block6_5 = true := by decide +kernel
-def h33Nodes6 : List NodeSpec := h33Block6_0 ++ h33Block6_1 ++ h33Block6_2 ++ h33Block6_3 ++ h33Block6_4 ++ h33Block6_5
-lemma h33Check6 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket5 6 h33Nodes6 = true := by
-  unfold h33Nodes6 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨⟨⟨h33Test6_0,h33Test6_1⟩,h33Test6_2⟩,h33Test6_3⟩,h33Test6_4⟩,h33Test6_5⟩
-def h33Bucket6 : BT (List (List Nat)) := buildBucketsBT h33W h33Nodes6
-set_option maxRecDepth 200000 in
-lemma h33Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h33G 6 xs.toFinset) h33Bucket6 := buildBucketsBT_sound (by decide) h33Pairs h33WOk h33PoolsOk h33AutosOk h33Bucket5Ok h33Check6
-def h33Block7_0 : List NodeSpec := indexPairNodes [(122,2158), (126,62327983), (585791,7737519), (389227,78), (190,752584303), (318,62010031), (12863,62327983), (157759,696256622), (161855,18819255335), (165951,9938175599), (170047,24171480687), (174143,7389087343), (178239,69815993967), (182335,19066029679), (186431,21750464655), (190527,44571592303), (602175,15582519), (618559,7790791), (634943,45845039), (643135,31164975), (651327,31164023), (659519,56329847), (574,27655965231), (1086,45554223), (2110,240945711), (4158,30877190703), (8254,615286391), (9791,31950931575), (32830,69263459959), (65598,494962790), (13887,73556967567), (14911,149256177263)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test7_0 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket6 7 h33Block7_0 = true := by decide +kernel
-def h33Block7_1 : List NodeSpec := indexPairNodes [(15935,37852954767), (33855,260573262)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test7_1 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket6 7 h33Block7_1 = true := by decide +kernel
-def h33Nodes7 : List NodeSpec := h33Block7_0 ++ h33Block7_1
-lemma h33Check7 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket6 7 h33Nodes7 = true := by
-  unfold h33Nodes7 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨h33Test7_0,h33Test7_1⟩
-def h33Bucket7 : BT (List (List Nat)) := buildBucketsBT h33W h33Nodes7
-set_option maxRecDepth 200000 in
-lemma h33Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h33G 7 xs.toFinset) h33Bucket7 := buildBucketsBT_sound (by decide) h33Pairs h33WOk h33PoolsOk h33AutosOk h33Bucket6Ok h33Check7
-def h33Block8_0 : List NodeSpec := nodesWithIdentity [([0,1,2,3,4],[0])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h33Test8_0 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket7 8 h33Block8_0 = true := by decide +kernel
-def h33Nodes8 : List NodeSpec := h33Block8_0
-lemma h33Check8 : checkNodesBT h33W h33G h33Mask h33Pools h33Autos h33Bucket7 8 h33Nodes8 = true := h33Test8_0
-def h33Bucket8 : BT (List (List Nat)) := buildBucketsBT h33W h33Nodes8
-set_option maxRecDepth 200000 in
-lemma h33Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h33G 8 xs.toFinset) h33Bucket8 := buildBucketsBT_sound (by decide) h33Pairs h33WOk h33PoolsOk h33AutosOk h33Bucket7Ok h33Check8
-set_option maxRecDepth 200000 in
-lemma h33Bound : Lower h33R h33G 9 := lower_of_forestBT (essPairs := [(VAR 0,0,1),(VAR 2,8,12),(VAR 3,4,12),(VAR 4,1,17),(VAR 5,4,36)]) (by decide +kernel) h33Bucket8Ok (by decide +kernel)
-namespace Cofactor12068
-def R_0 : List Nat := varsOf 22
-def G_0 : Nat := 0xfcfcc0c0fcfcc0c0fcfcc0c0fcfcc0c0
-lemma low_0 : Lower R_0 G_0 4 := carry_of (swaps := [(4,5),(1,2),(2,3)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
+    exact avail_inv (Or.inl (List.mem_map.mpr ⟨a,ha,rfl⟩))
+  obtain ⟨c,hc,hmap⟩ := map_reach dualRow maps hr
+  have eq : invW (restrictW dualRow (obs T)) = obs G := funext hgoal
+  exact prior p c hc (eq ▸ avail_inv (map_available dualRow hmap hav))
 
-def G_1 : Nat := 0xe8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8
-def R_1 : List Nat := varsOf 7
-lemma low_1_ok : carryOK [(0,3),(0,4),(0,2),(0,1)] R_1 G_1 R_0 G_0 = true := by decide +kernel
-lemma low_1 : Lower R_1 G_1 4 := carry_of low_1_ok low_0
+def identifyRow (z o i j : Nat) (r : Row) : Row :=
+  let mask := if r.val.testBit i then 1 <<< j else 0
+  ⟨((fixRow z o r).val &&& (127 ^^^ (1 <<< j)) ||| mask) % 128, Nat.mod_lt _ (by decide)⟩
+lemma mappedSlice {f : Row → Row} {raw R : List Nat} {T G D L : Nat}
+    (proper : checkProper G = true) (inDomain : ∀ r : Row, D.testBit (f r).val = true)
+    (covered : raw.all (fun v => freeIn R (renameW f v)) = true)
+    (mapped : renameW f T = G) (bound : Lower R G L) : Slice raw T D L := by
+  have ⟨g0,glt,gb0⟩ := checkProper_sound proper
+  refine ⟨f, R, inDomain, fun a ha => freeIn_sound (List.all_eq_true.mp covered a ha), ?_, ?_⟩
+  · rw [← obs_renameW, mapped]
+    exact obs_not_const g0 glt gb0
+  · rw [← obs_renameW, mapped]
+    exact bound
 
-def G_2 : Nat := 0xeeee8888eeee8888eeee8888eeee8888
-def R_2 : List Nat := varsOf 19
-lemma low_2_ok : carryOK [(0,2),(0,1)] R_2 G_2 R_0 G_0 = true := by decide +kernel
-lemma low_2 : Lower R_2 G_2 4 := carry_of low_2_ok low_0
+def cert0 : Nat := 0xfcc0fcc0fcc0fcc0fcc0fcc0fcc0fcc0
+def cert22 : List Nat := varsOf 14
+def cert191 : List Nat := [6,6,10,10,12,12,6,10,12]
+def cert174 : List Nat := [4,2,8,2,8,4,8,4,2]
+def cert128 : Nat := fullMask 9
+def cert47 : List Decor := [(0xcccccccccccccccccccccccccccccccc,0xcf,0x10a),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x173,0xa1),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x1bc,0x54)]
+def cert227 : List (Nat × Nat × Nat) := []
+def cert32 : Array Decor := buildWires cert47 cert227
+def cert40 : Array (List (Nat × Nat)) := #[]
+def cert219 : List (Nat × Nat) := []
+def cert221 : Array (Nat × Nat) := cert219.toArray
+def cert195 : List PoolSpec := []
+def cert14 : Array (Option BoundPool) := buildPools cert32 cert22 cert221 cert195
+lemma cert140 : goodPairs cert0 cert191 cert174 := goodPairs_of (by decide +kernel)
+lemma cert48 : ∀ x ∈ cert47, faithful cert191 cert174 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert33 : ∀ x ∈ cert32.toList, faithful cert191 cert174 x ∧ x.1 < 2^128 := buildWires_faithful cert48
+lemma cert41 : ∀ sw ∈ cert40.toList, swapsValid sw = true ∧ permWord sw cert0 = cert0 := autos_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+lemma cert222 : ∀ i (hi : i < cert221.size), Slice cert22 cert0 cert221[i].1 cert221[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert22 cert0 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert15 : ∀ i (hi : i < cert14.size), ∀ c, cert14[i] = some c → ValidPool cert22 cert0 c := buildPools_sound cert222
+def cert61 : Array (List (List Nat)) := #[]
+lemma cert62 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert0 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+def cert178 : List NodeSpec := []
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert99 : checkNodes cert32 cert0 cert128 cert14 cert40 cert61 0 cert178 = true := by decide +kernel
+def cert55 : Array (List (List Nat)) := buildBuckets 1 cert32 cert178
+lemma cert56 : ∀ i (hi : i < cert55.size), ∀ xs ∈ cert55[i], Impossible cert0 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert140 cert33 cert15 cert41 cert62 cert99
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert100 : checkNodes cert32 cert0 cert128 cert14 cert40 cert55 1 cert178 = true := by decide +kernel
+lemma cert57 : ∀ i (hi : i < cert55.size), ∀ xs ∈ cert55[i], Impossible cert0 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert140 cert33 cert15 cert41 cert56 cert100
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert101 : checkNodes cert32 cert0 cert128 cert14 cert40 cert55 2 cert178 = true := by decide +kernel
+lemma cert58 : ∀ i (hi : i < cert55.size), ∀ xs ∈ cert55[i], Impossible cert0 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert140 cert33 cert15 cert41 cert57 cert101
+def cert179 : List NodeSpec := [([0,1,2],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert102 : checkNodes cert32 cert0 cert128 cert14 cert40 cert55 3 cert179 = true := by decide +kernel
+def cert59 : Array (List (List Nat)) := buildBuckets 1 cert32 cert179
+lemma cert60 : ∀ i (hi : i < cert59.size), ∀ xs ∈ cert59[i], Impossible cert0 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert140 cert33 cert15 cert41 cert58 cert102
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert133 : forestRootCheck cert22 cert0 [(VAR 1,6,4),(VAR 2,6,2),(VAR 3,10,2)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert132 : bucketContains cert59 cert22 = true := by decide +kernel
+lemma cert144 : Lower cert22 cert0 4 := lower_of_forest cert133 cert60 cert132
+def cert11 : Nat := 0xfcfcc0c0fcfcc0c0fcfcc0c0fcfcc0c0
+def cert29 : List Nat := varsOf 22
+lemma cert163 : carryOK [(3,4)] cert29 cert11 cert22 cert0 = true := by decide +kernel
+lemma cert162 : Lower cert29 cert11 4 := carry_of cert163 cert144
+def cert12 : Nat := 0xffccffcccc00cc00ffccffcccc00cc00
+def cert30 : List Nat := varsOf 42
+lemma cert165 : carryOK [(3,5),(2,3),(2,4)] cert30 cert12 cert22 cert0 = true := by decide +kernel
+lemma cert164 : Lower cert30 cert12 4 := carry_of cert165 cert144
+def cert13 : Nat := 0xfff0fff0f000f000fff0fff0f000f000
+def cert31 : List Nat := varsOf 44
+lemma cert167 : carryOK [(3,5),(2,3),(1,2),(1,4)] cert31 cert13 cert22 cert0 = true := by decide +kernel
+lemma cert166 : Lower cert31 cert13 4 := carry_of cert167 cert144
+def cert1 : Nat := 0xfcc0fc00fcc0fc00fcc0fc00fcc0fc00
+def cert23 : List Nat := varsOf 30
+lemma cert146 : liftCheck 0 16 cert23 cert1 cert22 cert0 [(VAR 4,22,6)] = true := by decide +kernel
+lemma cert145 : Lower cert23 cert1 5 := lift_of cert146 cert144
+def cert2 : Nat := 0xffc0ffc0c000c000ffc0ffc0c000c000
+def cert24 : List Nat := varsOf 46
+lemma cert148 : liftCheck 0 2 cert24 cert2 cert31 cert13 [(VAR 1,14,12)] = true := by decide +kernel
+lemma cert147 : Lower cert24 cert2 5 := lift_of cert148 cert166
+def cert3 : Nat := 0xfff0ff00fff00000fff0ff00fff00000
+def cert25 : List Nat := varsOf 60
+def cert192 : List Nat := [20,20,24,24,28,40,40,44,44,52,52,56,20,20,20,24,24,24,40,40,40]
+def cert175 : List Nat := [16,4,16,8,12,32,8,36,12,48,36,48,12,36,48,12,36,48,12,36,48]
+def cert129 : Nat := fullMask 21
+def cert49 : List Decor := [(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x7793,0xdb592),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x1f89fc,0x49158),(0xffff0000ffff0000ffff0000ffff0000,0x3fe1f,0x124a05),(0xffffffff00000000ffffffff00000000,0x1c0fe0,0x1b6ea0)]
+def cert34 : Array Decor := buildWires cert49 cert227
+def cert16 : Array (Option BoundPool) := buildPools cert34 cert25 cert221 cert195
+lemma cert141 : goodPairs cert3 cert192 cert175 := goodPairs_of (by decide +kernel)
+lemma cert50 : ∀ x ∈ cert49, faithful cert192 cert175 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert35 : ∀ x ∈ cert34.toList, faithful cert192 cert175 x ∧ x.1 < 2^128 := buildWires_faithful cert50
+lemma cert42 : ∀ sw ∈ cert40.toList, swapsValid sw = true ∧ permWord sw cert3 = cert3 := autos_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+lemma cert223 : ∀ i (hi : i < cert221.size), Slice cert25 cert3 cert221[i].1 cert221[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert25 cert3 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert17 : ∀ i (hi : i < cert16.size), ∀ c, cert16[i] = some c → ValidPool cert25 cert3 c := buildPools_sound cert223
+lemma cert69 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert3 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert103 : checkNodes cert34 cert3 cert129 cert16 cert40 cert61 0 cert178 = true := by decide +kernel
+def cert63 : Array (List (List Nat)) := buildBuckets 1 cert34 cert178
+lemma cert64 : ∀ i (hi : i < cert63.size), ∀ xs ∈ cert63[i], Impossible cert3 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert141 cert35 cert17 cert42 cert69 cert103
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert104 : checkNodes cert34 cert3 cert129 cert16 cert40 cert63 1 cert178 = true := by decide +kernel
+lemma cert65 : ∀ i (hi : i < cert63.size), ∀ xs ∈ cert63[i], Impossible cert3 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert141 cert35 cert17 cert42 cert64 cert104
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert105 : checkNodes cert34 cert3 cert129 cert16 cert40 cert63 2 cert178 = true := by decide +kernel
+lemma cert66 : ∀ i (hi : i < cert63.size), ∀ xs ∈ cert63[i], Impossible cert3 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert141 cert35 cert17 cert42 cert65 cert105
+def cert180 : List NodeSpec := [([0,1,2,3],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert106 : checkNodes cert34 cert3 cert129 cert16 cert40 cert63 3 cert180 = true := by decide +kernel
+def cert67 : Array (List (List Nat)) := buildBuckets 1 cert34 cert180
+lemma cert68 : ∀ i (hi : i < cert67.size), ∀ xs ∈ cert67[i], Impossible cert3 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert141 cert35 cert17 cert42 cert66 cert106
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert135 : forestRootCheck cert25 cert3 [(VAR 2,20,16),(VAR 3,24,16),(VAR 4,20,4),(VAR 5,40,8)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert134 : bucketContains cert67 cert25 = true := by decide +kernel
+lemma cert149 : Lower cert25 cert3 4 := lower_of_forest cert135 cert68 cert134
+def cert4 : Nat := 0xfffcc000fffcc000fffcc000fffcc000
+def cert193 : List Nat := [14,14,14,18,18,20,20,22,24,24,26,28,14,18,18,18,20,20,20,24,24,24]
+def cert176 : List Nat := [12,10,6,16,2,16,4,6,16,8,10,12,16,6,10,12,6,10,12,6,10,12]
+def cert130 : Nat := fullMask 22
+def cert51 : List Decor := [(0xcccccccccccccccccccccccccccccccc,0xf49f,0x1b6496),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x718e7,0x2da8c5),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x381f07,0x36ce03),(0xffff0000ffff0000ffff0000ffff0000,0x3feff8,0x1128)]
+def cert228 : List (Nat × Nat × Nat) := [(3,0,3),(2,0,3),(0,0,3),(2,0,1),(1,0,1),(1,0,3),(0,0,1),(3,1,9),(0,1,9),(1,6,1),(3,0,1),(3,7,2),(1,7,2),(3,6,1),(3,10,8)]
+def cert36 : Array Decor := buildWires cert51 cert228
+def cert43 : Array (List (Nat × Nat)) := #[[],[(2,3)],[(1,2)],[(1,3),(1,2)],[(1,2),(1,3)],[(1,3)]]
+def cert18 : Array (Option BoundPool) := buildPools cert36 cert23 cert221 cert195
+lemma cert142 : goodPairs cert4 cert193 cert176 := goodPairs_of (by decide +kernel)
+lemma cert52 : ∀ x ∈ cert51, faithful cert193 cert176 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert37 : ∀ x ∈ cert36.toList, faithful cert193 cert176 x ∧ x.1 < 2^128 := buildWires_faithful cert52
+lemma cert44 : ∀ sw ∈ cert43.toList, swapsValid sw = true ∧ permWord sw cert4 = cert4 := autos_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+lemma cert224 : ∀ i (hi : i < cert221.size), Slice cert23 cert4 cert221[i].1 cert221[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert23 cert4 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert19 : ∀ i (hi : i < cert18.size), ∀ c, cert18[i] = some c → ValidPool cert23 cert4 c := buildPools_sound cert224
+lemma cert81 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert4 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert107 : checkNodes cert36 cert4 cert130 cert18 cert43 cert61 0 cert178 = true := by decide +kernel
+def cert70 : Array (List (List Nat)) := buildBuckets 1 cert36 cert178
+lemma cert71 : ∀ i (hi : i < cert70.size), ∀ xs ∈ cert70[i], Impossible cert4 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert142 cert37 cert19 cert44 cert81 cert107
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert108 : checkNodes cert36 cert4 cert130 cert18 cert43 cert70 1 cert178 = true := by decide +kernel
+lemma cert72 : ∀ i (hi : i < cert70.size), ∀ xs ∈ cert70[i], Impossible cert4 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert142 cert37 cert19 cert44 cert71 cert108
+def cert181 : List NodeSpec := [([18,2,3],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert109 : checkNodes cert36 cert4 cert130 cert18 cert43 cert70 2 cert181 = true := by decide +kernel
+def cert73 : Array (List (List Nat)) := buildBuckets 1 cert36 cert181
+lemma cert74 : ∀ i (hi : i < cert73.size), ∀ xs ∈ cert73[i], Impossible cert4 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert142 cert37 cert19 cert44 cert72 cert109
+def cert182 : List NodeSpec := [([5,4,1,2],[],[]),([11,0,2,3],[],[]),([0,12,2,3],[],[]),([0,13,2,3],[],[]),([7,14,2,3],[],[0]),([0,1,15,3],[],[]),([0,1,16,3],[],[]),([17,0,2,3],[],[]),([10,8,2,3],[],[0])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert110 : checkNodes cert36 cert4 cert130 cert18 cert43 cert73 3 cert182 = true := by decide +kernel
+def cert75 : Array (List (List Nat)) := buildBuckets 4 cert36 cert182
+lemma cert76 : ∀ i (hi : i < cert75.size), ∀ xs ∈ cert75[i], Impossible cert4 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert142 cert37 cert19 cert44 cert74 cert110
+def cert183 : List NodeSpec := [([4,0,1,2,3],[],[0]),([5,0,1,2,3],[],[0]),([6,0,1,2,3],[],[0,1]),([7,0,1,2,3],[],[0]),([0,1,8,2,3],[],[0]),([0,1,2,3,9],[],[0,1]),([10,0,1,2,3],[],[0])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert111 : checkNodes cert36 cert4 cert130 cert18 cert43 cert75 4 cert183 = true := by decide +kernel
+def cert77 : Array (List (List Nat)) := buildBuckets 3 cert36 cert183
+lemma cert78 : ∀ i (hi : i < cert77.size), ∀ xs ∈ cert77[i], Impossible cert4 4 xs.toFinset :=
+  buildBuckets_sound (by decide) cert142 cert37 cert19 cert44 cert76 cert111
+def cert184 : List NodeSpec := [([0,1,2,3],[],[0,2,1,3,4,5])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert112 : checkNodes cert36 cert4 cert130 cert18 cert43 cert77 5 cert184 = true := by decide +kernel
+def cert79 : Array (List (List Nat)) := buildBuckets 1 cert36 cert184
+lemma cert80 : ∀ i (hi : i < cert79.size), ∀ xs ∈ cert79[i], Impossible cert4 5 xs.toFinset :=
+  buildBuckets_sound (by decide) cert142 cert37 cert19 cert44 cert78 cert112
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert137 : forestRootCheck cert23 cert4 [(VAR 1,14,12),(VAR 2,14,10),(VAR 3,14,6),(VAR 4,18,2)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert136 : bucketContains cert79 cert23 = true := by decide +kernel
+lemma cert150 : Lower cert23 cert4 6 := lower_of_forest cert137 cert80 cert136
+def cert5 : Nat := 0xfffffff0fffff000fffffff0fffff000
+lemma cert152 : liftCheck 16 0 cert25 cert5 cert31 cert13 [(VAR 4,16,0)] = true := by decide +kernel
+lemma cert151 : Lower cert25 cert5 5 := lift_of cert152 cert166
+def cert6 : Nat := 0xfcfcc0c0fcfc0000fcfcc0c0fcfc0000
+def cert26 : List Nat := varsOf 54
+lemma cert154 : carryOK [(3,4),(3,5)] cert26 cert6 cert23 cert1 = true := by decide +kernel
+lemma cert153 : Lower cert26 cert6 5 := carry_of cert154 cert145
+def cert7 : Nat := 0xffccff00ffcc0000ffccff00ffcc0000
+def cert27 : List Nat := varsOf 58
+lemma cert156 : carryOK [(1,2)] cert27 cert7 cert25 cert3 = true := by decide +kernel
+lemma cert155 : Lower cert27 cert7 4 := carry_of cert156 cert149
+def cert8 : Nat := 0xfffcffc0fffcffc0fffcffc0fffcffc0
+lemma cert158 : carryOK [(1,5),(1,4),(1,3),(1,2)] cert23 cert8 cert25 cert5 = true := by decide +kernel
+lemma cert157 : Lower cert23 cert8 5 := carry_of cert158 cert151
+def cert9 : Nat := 0xffffffccffffcc00ffffffccffffcc00
+lemma cert160 : carryOK [(1,2)] cert27 cert9 cert25 cert5 = true := by decide +kernel
+lemma cert159 : Lower cert27 cert9 5 := carry_of cert160 cert151
+def cert10 : Nat := 0xfffcffc0fffcc000fffcffc0fffcc000
+def cert28 : List Nat := varsOf 62
+def cert194 : List Nat := [14,14,14,18,18,20,20,22,24,24,26,28,38,38,38,40,40,42,42,44,44,50,50,52,52,56,14,14,14,18,18,18,18,18,18,20,20,20,20,20,20,24,24,24,24,24,24,38,38,38,40,40,40,40,40,40]
+def cert177 : List Nat := [12,10,6,16,2,16,4,6,16,8,10,12,36,34,6,32,8,34,10,36,12,48,34,48,36,48,34,36,48,6,10,12,34,36,48,6,10,12,34,36,48,6,10,12,34,36,48,10,12,48,6,10,12,34,36,48]
+def cert131 : Nat := fullMask 56
+def cert53 : List Decor := [(0xcccccccccccccccccccccccccccccccc,0x38007fc66749f,0x2c965964466496),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x381f81d9878e7,0x552aaaa91858c5),(0xff00ff00ff00ff00ff00ff00ff00ff00,0xfc7e001e1f8f07,0x198c30c0150e03),(0xffff0000ffff0000ffff0000ffff0000,0x7fffe3e00ff8,0x82410412a00128),(0xffffffff00000000ffffffff00000000,0xff800003fff000,0xe271c71feab000)]
+def cert229 : List (Nat × Nat × Nat) := [(1,2,3),(2,0,4),(3,0,3),(0,2,3),(1,0,4),(1,0,3),(0,0,3),(1,3,4),(3,0,2),(3,3,4),(2,2,3),(0,0,2),(2,0,2),(1,2,4),(1,0,2),(2,3,4),(2,2,4),(0,0,1),(1,0,1),(3,2,3),(2,0,3),(2,0,1),(1,21,3),(3,21,0),(3,3,18),(1,1,2),(3,15,0),(2,1,2),(2,0,5),(0,0,5),(1,0,8),(0,1,9),(0,0,12),(2,0,8),(1,7,4),(1,7,2),(1,26,2),(2,22,2),(3,16,1),(3,13,1),(3,2,10),(2,1,4),(1,11,2),(3,11,1),(2,22,3),(1,11,1),(0,0,18),(0,1,19),(1,13,1),(1,1,3),(2,23,2),(1,17,1),(1,11,4),(2,19,4),(3,11,2),(2,1,3),(1,22,2),(3,22,2),(1,8,4),(3,6,1),(1,22,3),(0,1,10),(1,17,3),(3,17,1),(1,24,4),(3,1,10),(3,0,1),(1,22,4),(1,6,3),(1,16,3),(1,28,3),(1,51,3),(1,21,7),(3,7,18),(3,21,10),(0,10,18),(3,46,10),(3,11,18),(2,47,4),(1,66,4),(1,47,4),(3,37,1),(2,61,4),(1,66,2),(1,17,13),(3,17,54),(3,17,10),(1,21,26),(3,22,23),(3,16,54),(3,32,0),(3,46,0),(0,0,30),(1,64,3),(1,68,3),(1,43,3),(3,21,1),(1,21,11),(3,26,18),(1,32,26),(3,21,23),(3,22,12),(1,21,22),(0,23,18),(3,66,2),(3,22,5),(3,22,19),(3,2,65),(0,22,12),(1,42,3),(3,22,18),(1,49,2),(1,61,3),(2,61,3),(0,61,4),(1,15,22),(2,88,4),(1,113,2),(1,93,2),(2,93,4),(3,93,2),(1,119,3),(1,93,4),(3,14,61),(2,23,61),(0,93,2),(0,61,12),(3,62,23),(3,124,2),(1,129,4),(1,124,2)]
+def cert38 : Array Decor := buildWires cert53 cert229
+def cert45 : Array (List (Nat × Nat)) := #[[],[(1,2)]]
+def cert220 : List (Nat × Nat) := [(subcube 0 2,5),(subcube 32 0,6),(subcube 16 4,4),(subcube 0 32,5),(subcube 4 0,4),(subcube 0 4,5),(subcube 8 0,5),(subcube 2 0,4),(subcube 16 2,4),(subcube 8 32,4),(subcube 16 0,5)]
+def cert225 : Array (Nat × Nat) := cert220.toArray
+def cert196 : List PoolSpec := [(0,[]),(1,[(0,0,1),(1,0,1),(3,22,23)]),(2,[]),(1,[]),(3,[]),(4,[]),(5,[]),(1,[(2,0,3),(3,0,3)]),(6,[]),(7,[]),(8,[]),(1,[(0,0,3),(1,11,2)]),(1,[(1,0,3),(0,1,10)]),(9,[]),(1,[(0,0,3),(1,11,1)]),(1,[(0,0,3),(3,11,1)]),(1,[(2,1,2),(3,32,0)]),(10,[]),(1,[(0,0,3),(1,21,11)]),(1,[(1,0,3),(3,1,10)]),(1,[(0,0,1),(1,0,1)]),(1,[(1,21,3)]),(1,[(3,21,0)]),(1,[(3,3,18)]),(1,[(2,2,3)]),(1,[(1,1,2)]),(1,[(1,0,2)]),(1,[(1,2,3)]),(1,[(1,0,1)]),(1,[(2,0,1),(1,26,2)]),(1,[(1,0,3)]),(1,[(1,0,3),(3,2,10)]),(1,[(0,0,3)]),(1,[(2,1,2)]),(1,[(0,0,18)]),(1,[(2,0,2)]),(1,[(0,0,1)]),(1,[(0,0,2)]),(1,[(2,0,1)]),(1,[(2,0,3)]),(1,[(3,6,1)]),(1,[(2,0,2),(3,17,1)]),(1,[(3,0,3)]),(1,[(2,0,1),(3,0,1)])]
+def cert20 : Array (Option BoundPool) := buildPools cert38 cert28 cert225 cert196
+lemma cert143 : goodPairs cert10 cert194 cert177 := goodPairs_of (by decide +kernel)
+lemma cert54 : ∀ x ∈ cert53, faithful cert194 cert177 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert39 : ∀ x ∈ cert38.toList, faithful cert194 cert177 x ∧ x.1 < 2^128 := buildWires_faithful cert54
+lemma cert46 : ∀ sw ∈ cert45.toList, swapsValid sw = true ∧ permWord sw cert10 = cert10 := autos_of (by decide +kernel)
+lemma cert198 : sliceDirectCheck 0 2 0 cert28 cert10 cert25 cert5 = true := by decide +kernel
+lemma cert197 : Slice cert28 cert10 (subcube 0 2) 5 := slice_direct cert198 cert151
+lemma cert202 : sliceDirectCheck 32 0 0 cert28 cert10 cert23 cert4 = true := by decide +kernel
+lemma cert199 : Slice cert28 cert10 (subcube 32 0) 6 := slice_direct cert202 cert150
+lemma cert204 : sliceDirectCheck 16 4 0 cert28 cert10 cert30 cert12 = true := by decide +kernel
+lemma cert203 : Slice cert28 cert10 (subcube 16 4) 4 := slice_direct cert204 cert164
+lemma cert206 : sliceDirectCheck 0 32 0 cert28 cert10 cert23 cert8 = true := by decide +kernel
+lemma cert205 : Slice cert28 cert10 (subcube 0 32) 5 := slice_direct cert206 cert157
+lemma cert208 : sliceDirectCheck 4 0 0 cert28 cert10 cert27 cert7 = true := by decide +kernel
+lemma cert207 : Slice cert28 cert10 (subcube 4 0) 4 := slice_direct cert208 cert155
+lemma cert210 : sliceDirectCheck 0 4 0 cert28 cert10 cert27 cert9 = true := by decide +kernel
+lemma cert209 : Slice cert28 cert10 (subcube 0 4) 5 := slice_direct cert210 cert159
+lemma cert212 : sliceDirectCheck 8 0 0 cert28 cert10 cert26 cert6 = true := by decide +kernel
+lemma cert211 : Slice cert28 cert10 (subcube 8 0) 5 := slice_direct cert212 cert153
+lemma cert214 : sliceDirectCheck 2 0 0 cert28 cert10 cert25 cert3 = true := by decide +kernel
+lemma cert213 : Slice cert28 cert10 (subcube 2 0) 4 := slice_direct cert214 cert149
+lemma cert216 : sliceDirectCheck 16 2 0 cert28 cert10 cert31 cert13 = true := by decide +kernel
+lemma cert215 : Slice cert28 cert10 (subcube 16 2) 4 := slice_direct cert216 cert166
+lemma cert218 : sliceDirectCheck 8 32 0 cert28 cert10 cert29 cert11 = true := by decide +kernel
+lemma cert217 : Slice cert28 cert10 (subcube 8 32) 4 := slice_direct cert218 cert162
+lemma cert201 : sliceDirectCheck 16 0 0 cert28 cert10 cert24 cert2 = true := by decide +kernel
+lemma cert200 : Slice cert28 cert10 (subcube 16 0) 5 := slice_direct cert201 cert147
+set_option maxRecDepth 200000 in
+lemma cert226 : ∀ i (hi : i < cert225.size), Slice cert28 cert10 cert225[i].1 cert225[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert28 cert10 p.1 p.2) (forall_cons cert197 (forall_cons cert199 (forall_cons cert203 (forall_cons cert205 (forall_cons cert207 (forall_cons cert209 (forall_cons cert211 (forall_cons cert213 (forall_cons cert215 (forall_cons cert217 (forall_cons cert200 (fun _ h => (List.not_mem_nil h).elim))))))))))))
+lemma cert21 : ∀ i (hi : i < cert20.size), ∀ c, cert20[i] = some c → ValidPool cert28 cert10 c := buildPools_sound cert226
+lemma cert98 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert10 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert113 : checkNodes cert38 cert10 cert131 cert20 cert45 cert61 0 cert178 = true := by decide +kernel
+def cert82 : Array (List (List Nat)) := buildBuckets 1 cert38 cert178
+lemma cert83 : ∀ i (hi : i < cert82.size), ∀ xs ∈ cert82[i], Impossible cert10 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert98 cert113
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert114 : checkNodes cert38 cert10 cert131 cert20 cert45 cert82 1 cert178 = true := by decide +kernel
+lemma cert84 : ∀ i (hi : i < cert82.size), ∀ xs ∈ cert82[i], Impossible cert10 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert83 cert114
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert115 : checkNodes cert38 cert10 cert131 cert20 cert45 cert82 2 cert178 = true := by decide +kernel
+lemma cert85 : ∀ i (hi : i < cert82.size), ∀ xs ∈ cert82[i], Impossible cert10 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert84 cert115
+def cert185 : List NodeSpec := [([93,133,3,4],[],[]),([93,2,3,134],[],[]),([93,135,3,4],[],[]),([129,125,3,4],[],[]),([62,123,3,4],[],[]),([87,93,2,3],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert116 : checkNodes cert38 cert10 cert131 cert20 cert45 cert82 3 cert185 = true := by decide +kernel
+def cert86 : Array (List (List Nat)) := buildBuckets 3 cert38 cert185
+lemma cert87 : ∀ i (hi : i < cert86.size), ∀ xs ∈ cert86[i], Impossible cert10 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert85 cert116
+def cert186 : List NodeSpec := [([121,0,66,2,3],[],[]),([17,66,88,3,4],[],[]),([89,1,56,3,4],[],[]),([0,1,122,3,12],[],[]),([110,0,1,2,12],[],[]),([22,105,2,3,4],[],[]),([115,23,2,3,4],[],[]),([22,2,123,3,4],[0],[0]),([21,93,2,3,4],[],[]),([93,2,3,4,18],[],[]),([124,93,2,3,4],[1],[0]),([28,66,2,3,4],[],[]),([93,125,2,3,4],[],[0]),([93,2,123,3,4],[],[]),([0,1,2,61,126],[],[]),([93,2,3,4,72],[],[]),([112,0,1,2,12],[],[]),([93,2,3,4,127],[],[]),([17,1,2,65,12],[2],[]),([17,109,66,3,4],[],[]),([0,1,2,128,3],[],[]),([93,2,61,3,4],[1],[0]),([55,62,22,3,4],[],[]),([37,1,2,65,12],[2],[]),([0,1,2,117,12],[3],[]),([129,22,2,3,4],[],[]),([93,62,2,3,4],[0],[0]),([55,22,61,3,4],[],[]),([129,93,2,3,4],[1],[0]),([87,22,23,2,3],[],[0]),([0,1,2,114,12],[],[]),([130,93,2,3,4],[],[]),([0,1,2,131,3],[3],[]),([22,132,2,3,4],[],[]),([0,1,61,5,12],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert117 : checkNodes cert38 cert10 cert131 cert20 cert45 cert86 4 cert186 = true := by decide +kernel
+def cert88 : Array (List (List Nat)) := buildBuckets 12 cert38 cert186
+lemma cert89 : ∀ i (hi : i < cert88.size), ∀ xs ∈ cert88[i], Impossible cert10 4 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert87 cert117
+def cert168 : List NodeSpec := [([0,1,2,3,75,4],[],[]),([0,1,2,3,76,4],[4,5,6],[]),([77,0,1,2,3,4],[3],[]),([7,51,1,2,3,4],[4],[]),([0,78,1,2,3,4],[3],[]),([0,1,2,3,79,4],[],[]),([0,1,2,3,80,4],[],[]),([0,1,2,3,81,4],[0],[]),([21,25,7,1,2,4],[7],[]),([0,1,2,67,5,4],[3],[]),([82,0,1,2,3,4],[8,3],[]),([21,0,1,47,3,4],[3],[]),([0,1,47,3,4,18],[9,10],[]),([32,22,2,19,3,4],[0,8],[]),([83,0,1,47,3,4],[11],[]),([0,66,2,3,4,84],[],[]),([0,1,47,3,4,85],[9,10],[]),([86,0,1,2,3,12],[],[]),([14,42,0,1,2,3],[],[]),([28,1,2,3,10,4],[],[0]),([87,0,1,2,61,3],[3],[]),([22,23,2,3,4,72],[5],[0]),([0,1,2,88,3,4],[5,3,4],[]),([48,0,2,3,4,18],[],[]),([0,50,2,3,4,18],[9,10],[]),([26,71,2,3,4,18],[],[0]),([0,66,2,88,3,4],[0,2,5,12],[0]),([17,89,1,3,4],[0,9,10,13],[0]),([0,1,2,90,3,4],[0],[]),([17,1,2,91,3,4],[],[]),([21,0,50,2,3,4],[14],[]),([21,48,0,2,3,4],[15],[]),([14,0,68,1,2,3],[],[]),([0,68,2,3,54,4],[9],[]),([92,0,1,2,3,4],[],[]),([93,22,2,3,4],[0,2,5,1],[0]),([94,0,1,2,3,4],[0],[]),([17,13,1,56,3,4],[9],[0]),([95,1,2,19,3,4],[16],[]),([33,0,1,2,5,12],[10],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert119 : checkNodes cert38 cert10 cert131 cert20 cert45 cert88 5 cert168 = true := by decide +kernel
+def cert169 : List NodeSpec := [([96,1,2,3,10,4],[5],[]),([97,1,2,19,3,4],[],[]),([25,7,1,2,4,18],[],[]),([0,1,2,3,98,4],[0],[]),([0,1,2,74,54,4],[8],[]),([0,68,1,2,3,12],[],[]),([0,1,2,3,99,4],[0],[]),([14,43,0,1,2,3],[],[]),([43,0,2,3,54,4],[9],[]),([17,66,2,3,4],[2,0,10],[0]),([0,1,2,3,100,4],[0],[]),([26,0,101,2,3,4],[],[]),([102,0,1,2,3,4],[17,18],[]),([0,1,103,2,3,4],[],[]),([32,104,0,2,3,4],[6],[]),([0,1,105,2,3,4],[],[0]),([106,0,1,2,3,4],[4],[]),([22,0,1,2,5,12],[13,2,10],[0]),([107,0,1,2,3,4],[4],[]),([0,1,108,2,3,4],[],[]),([17,66,1,2,3,4],[2,8],[]),([109,0,66,2,3,4],[0,2,5],[0]),([110,0,1,2,3,4],[],[0]),([14,17,22,1,2,3],[13,2],[]),([51,1,23,2,3,4],[5],[]),([21,70,0,2,3,4],[19],[]),([17,22,1,2,3,12],[13,2],[0]),([22,23,2,61,3,4],[5,0,20],[0]),([17,32,22,2,3,4],[0,6,8],[]),([22,23,2,3,4,18],[5],[0]),([111,22,1,2,3,4],[0],[]),([55,22,2,3,4],[0,2],[0]),([34,0,1,2,5,12],[17,13,10],[]),([22,0,1,2,65,12],[2,10],[]),([0,1,2,65,5,4],[2,10,8],[]),([112,0,1,2,3,4],[],[0]),([113,0,1,2,3,12],[13,3,17],[0]),([0,1,2,65,4,12],[2,3],[]),([17,1,2,3,65,4],[2,0],[0]),([0,1,2,3,114,4],[],[0])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert120 : checkNodes cert38 cert10 cert131 cert20 cert45 cert88 5 cert169 = true := by decide +kernel
+def cert170 : List NodeSpec := [([21,26,71,2,3,4],[],[0]),([0,1,2,65,12],[2,10,3],[0,1]),([115,0,1,2,3,4],[],[0]),([21,22,23,2,3,4],[0,20],[0]),([87,22,0,1,2,3],[],[0]),([15,0,1,61,3,4],[],[]),([0,1,2,116,3,4],[3,4],[]),([17,13,68,1,3,4],[9],[]),([62,22,23,2,3,4],[0,5],[0]),([42,0,1,2,3,12],[17],[0]),([0,66,2,3,4,18],[],[]),([21,0,66,2,3,4],[0,12],[0]),([14,0,1,2,61,3],[3],[0]),([0,1,2,61,3,12],[17,4],[0]),([0,1,2,3,117,4],[6,0,3,4],[0]),([22,37,1,2,3,12],[4,2],[0]),([0,1,2,61,3,4],[3,4],[]),([93,2,3,4],[2,1],[0]),([70,0,2,3,4,18],[],[]),([106,0,1,2,3,12],[17,3],[]),([118,0,1,2,3,4],[3,4],[]),([0,1,2,119,61,3],[4],[0]),([120,0,1,2,3,4],[3,4],[]),([0,1,61,3,5,4],[9,5],[0]),([22,2,19,30,3,4],[8,0],[]),([21,0,1,61,3,4],[3],[]),([0,1,61,3,4,18],[3],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert121 : checkNodes cert38 cert10 cert131 cert20 cert45 cert88 5 cert170 = true := by decide +kernel
+def cert187 : List NodeSpec := cert168 ++ cert169 ++ cert170
+lemma cert118 : checkNodes cert38 cert10 cert131 cert20 cert45 cert88 5 cert187 = true := by
+  unfold cert187 checkNodes
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨⟨cert119, cert120⟩, cert121⟩
+def cert90 : Array (List (List Nat)) := buildBuckets 36 cert38 cert187
+lemma cert91 : ∀ i (hi : i < cert90.size), ∀ xs ∈ cert90[i], Impossible cert10 5 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert89 cert118
+def cert171 : List NodeSpec := [([0,1,2,3,27,4],[9,0,21,4,5,6,8],[]),([28,0,1,2,3,4],[4,5,6,3,0,17,9,8,22],[0,1]),([29,0,1,2,3,4],[9,0,5,6,8,3,4,23,13],[]),([15,14,0,1,2,3],[3,24,13,10,2],[]),([22,0,1,2,3,5,4],[8,17,5,2,10,9],[0]),([0,1,2,19,30,3,4],[8,0,6,25,13,26],[0,1]),([15,24,0,1,4],[8,17,2,13],[]),([31,0,1,2,3,4],[8,5,6,9,10,4,3],[]),([14,0,1,2,3,5],[27,13,10,2],[]),([17,32,0,1,2,3,4],[5,0,6,9,8],[0]),([0,1,2,5,12],[2,10,13],[0,1]),([33,0,1,2,3,5,4],[10,9],[0]),([34,0,1,2,3,4],[9,6,5,17,0,8,4,3,10],[]),([32,26,0,2,3,4],[6,0,2,5,8,13],[0]),([0,1,2,3,5,4],[10,2,8,13],[]),([1,2,35,3,4],[8,0,17,13],[]),([21,0,1,23,2,3,4],[4,0,3,28],[0]),([0,36,1,2,3,4],[0,13,17,10],[]),([37,0,1,2,3,4],[4,5,6,8,13,0,3,9,10],[]),([15,22,0,1,2,3,4],[8,5,0,9,6,2,10],[0]),([38,1,2,3,4],[9,2,8,13],[]),([7,0,1,2,3,4,18],[4,3,0],[0]),([0,1,2,3,39],[0,13,17],[]),([0,1,2,40,3,4],[2,0,3,4],[]),([25,0,1,2,3,4,18],[9,4,10],[0]),([25,7,1,2,4],[10,2,7],[0]),([0,1,2,41,3,4],[6,9,0,2,29,4],[]),([21,0,1,2,3,10,4],[0,4,30],[0]),([42,0,1,2,3,4],[5,9,17,4,3],[0]),([0,1,2,3,10,4,18],[0,4],[0]),([43,0,1,2,3,4],[5,0,9,6,17,4,3,8,13],[0]),([44,0,1,2,3,4],[0,8,17,10,3,4,5,13],[]),([45,0,1,2,3,4],[0,5,6,8,10,3,4,31],[]),([46,0,1,2,3,10,4],[0,4,5,6,2],[0]),([21,11,0,1,2,3,4],[4,17,8,3,32],[0]),([24,0,1,2,12],[17,13,2],[]),([11,0,1,2,3,4,18],[8,4,3,17,9,0],[0]),([0,1,2,47,3,4],[2,9,10,11,4],[0]),([32,0,1,2,19,3,4],[0,5,6,8,33,13],[0]),([0,1,47,3,4],[2,9,10,11],[0])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert123 : checkNodes cert38 cert10 cert131 cert20 cert45 cert90 6 cert171 = true := by decide +kernel
+def cert172 : List NodeSpec := [([46,25,0,1,2,3,4],[4,10,9,2],[]),([25,17,1,2,3,4],[8,17,9,10,2],[]),([48,0,2,3,4],[5,2,9,10,15],[0]),([49,0,1,2,3,4],[5,9,8,2,4,3,10],[0]),([0,50,2,3,4],[6,9,10,14],[0]),([51,0,1,2,3,4],[4,5,6,0,3,17,9,13,34],[0]),([0,52,1,2,3,4],[0,6,5,10,4,3],[0,1]),([0,53,2,3,4],[0,6,8,2],[]),([14,17,0,1,2,3],[3,35,13,2,10],[0]),([0,1,2,3,12],[2,13],[]),([17,0,1,2,3,12],[13,2,10],[0]),([17,0,1,2,3,5,4],[10,9,13],[0]),([16,0,1,2,3,54,4],[6,17,8,9,0],[0]),([55,0,1,2,3,4],[0,6,17,2,3,4],[0]),([17,0,1,56,2,3,4],[9,5,0],[0]),([0,1,2,3,57],[9,2,13],[]),([58,0,1,2,3],[0,4,10,13],[]),([22,0,1,2,3,12],[2,10,13,36],[0,1]),([17,0,1,2,3,54,4],[6,9,10],[0]),([14,16,0,1,2,3],[3,37,13,10,2],[0]),([17,0,1,2,3,4],[8,5,6,0,17,10,3,4,9],[]),([59,0,1,3,4],[8,9,2,13],[]),([21,26,0,1,2,3,4],[4,6,3,38],[0]),([21,22,0,1,2,3,4],[4,5,0,9,6,8,3,36],[0]),([60,17,0,1,2,3,4],[5,2,9,0,10],[]),([26,0,1,2,3,4,18],[6,4,9,0],[0]),([17,13,1,3,4],[0,9,10,13],[0]),([21,25,0,1,2,3,4],[4,10,9,3,39],[0]),([0,1,2,61,3,4],[9,0,5,6,17,3,4],[0]),([0,1,23,2,3,4,18],[0,6,4],[0,1]),([62,22,0,1,2,3,4],[0,6,8,5,9],[0]),([0,1,2,3,63],[2,8,4],[]),([17,1,2,3,10,4],[2,0,8,9,10,13],[0]),([22,0,1,2,3,4,12],[17,3,4,5,2,9,0,36],[0]),([0,64,1,2,3,4],[3,0,5,9,13,17,40],[0,1]),([22,0,1,2,3,65,4],[2,10,5],[0]),([0,66,1,2,3,4],[0,5,2,8,4,3],[0]),([33,0,1,2,3,4],[9,6,5,10,4,3],[]),([22,0,1,2,3,4],[6,0,8,5,2,4,3,9],[0]),([22,0,1,2,61,3,4],[5,8,9,0,6,36],[0])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert124 : checkNodes cert38 cert10 cert131 cert20 cert45 cert90 6 cert172 = true := by decide +kernel
+def cert173 : List NodeSpec := [([0,1,2,3,67,4],[10,5,6,9,3,4],[0]),([17,0,68,1,2,3,4],[6,5,9,0],[0]),([0,1,2,3,69],[2,13],[]),([22,0,1,2,3,4,18],[8,4,3,5],[0]),([60,16,0,1,2,3,4],[8,2,5,10],[]),([14,22,0,1,2,3],[3,36,2,10,13],[0,1]),([22,23,2,3,4],[0,5,2,20],[0]),([0,68,1,2,3,4],[8,0,5,9,17,4,3,41],[0,1]),([0,1,2,3,5,12],[10,2,13],[]),([21,7,0,1,2,3,4],[0,4,3,42],[0]),([22,1,2,19,3,4],[0,8,10,13,6,9],[0]),([70,0,2,3,4],[0,6,2,19],[0]),([0,66,2,3,4],[0,2,5,10,12],[0]),([26,71,2,3,4],[6,0,2,43],[0]),([0,1,2,3,65,4],[2,10,8,5,3,4],[0,1]),([34,0,1,2,3,5,4],[17,8,0,10,9],[0]),([17,0,1,2,3,67,4],[10,9],[]),([44,0,2,3,4],[0,8,5,10,13],[]),([22,0,1,2,3,4,72],[5,3],[0]),([37,0,1,2,3,12],[4,2,13,3,10],[0]),([0,1,2,3,73,4],[13,9,0,10,5,6],[]),([0,1,2,3,74,4],[10,8,5,6,13],[0]),([17,22,1,2,3,4],[6,8,9,0,2,13,10],[0,1])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert125 : checkNodes cert38 cert10 cert131 cert20 cert45 cert90 6 cert173 = true := by decide +kernel
+def cert188 : List NodeSpec := cert171 ++ cert172 ++ cert173
+lemma cert122 : checkNodes cert38 cert10 cert131 cert20 cert45 cert90 6 cert188 = true := by
+  unfold cert188 checkNodes
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨⟨cert123, cert124⟩, cert125⟩
+def cert92 : Array (List (List Nat)) := buildBuckets 35 cert38 cert188
+lemma cert93 : ∀ i (hi : i < cert92.size), ∀ xs ∈ cert92[i], Impossible cert10 6 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert91 cert122
+def cert189 : List NodeSpec := [([0,1,2,3,5,4],[2,10,8,27,13],[0,1]),([6,0,1,2,3,4],[3,4,6,13,17,9,0,10],[0,1]),([7,0,1,2,3,4],[0,6,2,8,4,3,42],[0]),([0,1,8,2,3,4],[2,0,10,8,4,3],[0,1]),([0,1,2,3,4,9],[0,13,10,6],[0]),([0,1,2,3,10,4],[0,2,30,10,8,4],[0,1]),([11,0,1,2,3,4],[17,10,6,2,8,4,3,32],[0]),([0,1,2,3,4,12],[2,10,13,3],[0,1]),([13,0,1,2,3,4],[0,6,8,10,4,3,13],[0]),([14,0,1,2,3],[3,2,10],[0,1]),([15,0,1,2,3,4],[8,0,6,4,3,2,10,13],[0,1]),([16,0,1,2,3,4],[8,6,17,4,3,9,0,10,13],[0]),([17,0,1,2,3,4],[8,9,6,0,17,10,3,4,13,35],[0,1]),([0,1,2,3,4,18],[8,13,0,6,3,17],[0,1]),([0,1,2,19,3,4],[0,8,10,13,6,26,3],[0]),([20,0,1,2,3,4],[4,0,10,6,2,13,3],[0]),([0,1,2,3,12],[2,10,13,3],[0,1]),([21,0,1,2,3,4],[4,0,6,3,17,8],[0,1]),([22,0,1,2,3,4],[6,0,8,5,17,2,3,4,36,9,10],[0,1]),([0,1,23,2,3,4],[0,6,2,8,3,4,28],[0]),([24,0,1,2,3,4],[17,0,10,6,2,4,3,8,13],[0]),([25,0,1,2,3,4],[17,9,6,2,10,8,3,4,39],[0,1]),([26,0,1,2,3,4],[6,8,2,4,3,0,9,38],[0])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert126 : checkNodes cert38 cert10 cert131 cert20 cert45 cert92 7 cert189 = true := by decide +kernel
+def cert94 : Array (List (List Nat)) := buildBuckets 8 cert38 cert189
+lemma cert95 : ∀ i (hi : i < cert94.size), ∀ xs ∈ cert94[i], Impossible cert10 7 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert93 cert126
+def cert190 : List NodeSpec := [([0,1,2,3,4],[3],[0,1])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert127 : checkNodes cert38 cert10 cert131 cert20 cert45 cert94 8 cert190 = true := by decide +kernel
+def cert96 : Array (List (List Nat)) := buildBuckets 1 cert38 cert190
+lemma cert97 : ∀ i (hi : i < cert96.size), ∀ xs ∈ cert96[i], Impossible cert10 8 xs.toFinset :=
+  buildBuckets_sound (by decide) cert143 cert39 cert21 cert46 cert95 cert127
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert139 : forestRootCheck cert28 cert10 [(VAR 1,14,12),(VAR 2,14,10),(VAR 3,14,6),(VAR 4,18,2),(VAR 5,38,6)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert138 : bucketContains cert96 cert28 = true := by decide +kernel
+lemma cert161 : Lower cert28 cert10 9 := lower_of_forest cert139 cert97 cert138
+def cert293 : Nat := 0xfcfcfcfcc0c0c0c0fcfcfcfcc0c0c0c0
+def cert306 : List Nat := varsOf 38
+def cert421 : List Nat := [6,6,34,34,36,36,6,34,36]
+def cert408 : List Nat := [4,2,32,2,32,4,32,4,2]
+def cert318 : List Decor := [(0xcccccccccccccccccccccccccccccccc,0xcf,0x10a),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x173,0xa1),(0xffffffff00000000ffffffff00000000,0x1bc,0x54)]
+def cert307 : Array Decor := buildWires cert318 cert227
+def cert300 : Array (Option BoundPool) := buildPools cert307 cert306 cert221 cert195
+lemma cert388 : goodPairs cert293 cert421 cert408 := goodPairs_of (by decide +kernel)
+lemma cert319 : ∀ x ∈ cert318, faithful cert421 cert408 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert308 : ∀ x ∈ cert307.toList, faithful cert421 cert408 x ∧ x.1 < 2^128 := buildWires_faithful cert319
+lemma cert313 : ∀ sw ∈ cert40.toList, swapsValid sw = true ∧ permWord sw cert293 = cert293 := autos_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+lemma cert442 : ∀ i (hi : i < cert221.size), Slice cert306 cert293 cert221[i].1 cert221[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert306 cert293 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert301 : ∀ i (hi : i < cert300.size), ∀ c, cert300[i] = some c → ValidPool cert306 cert293 c := buildPools_sound cert442
+lemma cert330 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert293 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert360 : checkNodes cert307 cert293 cert128 cert300 cert40 cert61 0 cert178 = true := by decide +kernel
+def cert324 : Array (List (List Nat)) := buildBuckets 1 cert307 cert178
+lemma cert325 : ∀ i (hi : i < cert324.size), ∀ xs ∈ cert324[i], Impossible cert293 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert388 cert308 cert301 cert313 cert330 cert360
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert361 : checkNodes cert307 cert293 cert128 cert300 cert40 cert324 1 cert178 = true := by decide +kernel
+lemma cert326 : ∀ i (hi : i < cert324.size), ∀ xs ∈ cert324[i], Impossible cert293 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert388 cert308 cert301 cert313 cert325 cert361
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert362 : checkNodes cert307 cert293 cert128 cert300 cert40 cert324 2 cert178 = true := by decide +kernel
+lemma cert327 : ∀ i (hi : i < cert324.size), ∀ xs ∈ cert324[i], Impossible cert293 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert388 cert308 cert301 cert313 cert326 cert362
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert363 : checkNodes cert307 cert293 cert128 cert300 cert40 cert324 3 cert179 = true := by decide +kernel
+def cert328 : Array (List (List Nat)) := buildBuckets 1 cert307 cert179
+lemma cert329 : ∀ i (hi : i < cert328.size), ∀ xs ∈ cert328[i], Impossible cert293 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert388 cert308 cert301 cert313 cert327 cert363
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert383 : forestRootCheck cert306 cert293 [(VAR 1,6,4),(VAR 2,6,2),(VAR 5,34,2)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert382 : bucketContains cert328 cert306 = true := by decide +kernel
+lemma cert391 : Lower cert306 cert293 4 := lower_of_forest cert383 cert329 cert382
+lemma cert400 : carryOK [(3,4),(3,5)] cert22 cert0 cert306 cert293 = true := by decide +kernel
+lemma cert399 : Lower cert22 cert0 4 := carry_of cert400 cert391
+lemma cert402 : carryOK [(4,5)] cert29 cert11 cert306 cert293 = true := by decide +kernel
+lemma cert401 : Lower cert29 cert11 4 := carry_of cert402 cert391
+def cert298 : Nat := 0xfcfcc0c0c0c0c0c0fcfcc0c0c0c0c0c0
+lemma cert404 : liftCheck 0 16 cert26 cert298 cert306 cert293 [(VAR 4,50,34)] = true := by decide +kernel
+lemma cert403 : Lower cert26 cert298 5 := lift_of cert404 cert391
+def cert299 : Nat := 0xfff0f0f0f0f0f000fff0f0f0f0f0f000
+def cert423 : List Nat := [12,12,20,20,28,36,36,44,52,56,56,56,12,12,12,20,20,20,36,36,36,56]
+def cert410 : List Nat := [8,4,16,4,24,32,4,40,48,48,40,24,24,40,48,24,40,48,24,40,48,4]
+def cert322 : List Decor := [(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x1ff1ff,0x20004a),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x207e93,0xdbc91),(0xffff0000ffff0000ffff0000ffff0000,0x238f1c,0x16db14),(0xffffffff00000000ffffffff00000000,0x3c0fe0,0x1b67a0)]
+def cert447 : List (Nat × Nat × Nat) := [(1,1,2),(0,0,1),(0,1,2),(3,0,1),(2,0,1),(2,1,2),(1,0,1),(3,1,2),(2,10,2),(3,9,3),(0,10,2),(3,5,2),(1,9,3),(1,5,2),(3,6,4)]
+def cert311 : Array Decor := buildWires cert322 cert447
+def cert316 : Array (List (Nat × Nat)) := #[[],[(4,5)],[(3,4)],[(3,5),(3,4)],[(3,4),(3,5)],[(3,5)]]
+def cert304 : Array (Option BoundPool) := buildPools cert311 cert25 cert221 cert195
+lemma cert390 : goodPairs cert299 cert423 cert410 := goodPairs_of (by decide +kernel)
+lemma cert323 : ∀ x ∈ cert322, faithful cert423 cert410 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert312 : ∀ x ∈ cert311.toList, faithful cert423 cert410 x ∧ x.1 < 2^128 := buildWires_faithful cert323
+lemma cert317 : ∀ sw ∈ cert316.toList, swapsValid sw = true ∧ permWord sw cert299 = cert299 := autos_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+lemma cert445 : ∀ i (hi : i < cert221.size), Slice cert25 cert299 cert221[i].1 cert221[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert25 cert299 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert305 : ∀ i (hi : i < cert304.size), ∀ c, cert304[i] = some c → ValidPool cert25 cert299 c := buildPools_sound cert445
+lemma cert359 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert299 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert375 : checkNodes cert311 cert299 cert130 cert304 cert316 cert61 0 cert178 = true := by decide +kernel
+def cert348 : Array (List (List Nat)) := buildBuckets 1 cert311 cert178
+lemma cert349 : ∀ i (hi : i < cert348.size), ∀ xs ∈ cert348[i], Impossible cert299 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert390 cert312 cert305 cert317 cert359 cert375
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert376 : checkNodes cert311 cert299 cert130 cert304 cert316 cert348 1 cert178 = true := by decide +kernel
+lemma cert350 : ∀ i (hi : i < cert348.size), ∀ xs ∈ cert348[i], Impossible cert299 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert390 cert312 cert305 cert317 cert349 cert376
+def cert417 : List NodeSpec := [([18,0,3],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert377 : checkNodes cert311 cert299 cert130 cert304 cert316 cert348 2 cert417 = true := by decide +kernel
+def cert351 : Array (List (List Nat)) := buildBuckets 1 cert311 cert417
+lemma cert352 : ∀ i (hi : i < cert351.size), ∀ xs ∈ cert351[i], Impossible cert299 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert390 cert312 cert305 cert317 cert350 cert377
+def cert418 : List NodeSpec := [([9,11,0,3],[],[0]),([0,6,4,3],[],[0]),([12,0,1,3],[],[]),([0,1,2,13],[],[]),([0,1,14,3],[],[]),([15,0,1,3],[],[]),([8,7,2,3],[],[]),([0,1,2,16],[],[]),([0,1,17,3],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert378 : checkNodes cert311 cert299 cert130 cert304 cert316 cert351 3 cert418 = true := by decide +kernel
+def cert353 : Array (List (List Nat)) := buildBuckets 4 cert311 cert418
+lemma cert354 : ∀ i (hi : i < cert353.size), ∀ xs ∈ cert353[i], Impossible cert299 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert390 cert312 cert305 cert317 cert352 cert378
+def cert419 : List NodeSpec := [([0,1,2,4,3],[],[0]),([5,0,1,2,3],[],[0,1]),([0,6,1,2,3],[],[0]),([7,0,1,2,3],[],[0]),([8,0,1,2,3],[],[0]),([9,0,1,2,3],[],[0]),([0,1,10,2,3],[],[0,1])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert379 : checkNodes cert311 cert299 cert130 cert304 cert316 cert353 4 cert419 = true := by decide +kernel
+def cert355 : Array (List (List Nat)) := buildBuckets 3 cert311 cert419
+lemma cert356 : ∀ i (hi : i < cert355.size), ∀ xs ∈ cert355[i], Impossible cert299 4 xs.toFinset :=
+  buildBuckets_sound (by decide) cert390 cert312 cert305 cert317 cert354 cert379
+def cert420 : List NodeSpec := [([0,1,2,3],[],[0,2,3,1,4,5])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert380 : checkNodes cert311 cert299 cert130 cert304 cert316 cert355 5 cert420 = true := by decide +kernel
+def cert357 : Array (List (List Nat)) := buildBuckets 1 cert311 cert420
+lemma cert358 : ∀ i (hi : i < cert357.size), ∀ xs ∈ cert357[i], Impossible cert299 5 xs.toFinset :=
+  buildBuckets_sound (by decide) cert390 cert312 cert305 cert317 cert356 cert380
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert387 : forestRootCheck cert25 cert299 [(VAR 2,12,8),(VAR 3,12,4),(VAR 4,20,4),(VAR 5,36,4)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert386 : bucketContains cert357 cert25 = true := by decide +kernel
+lemma cert405 : Lower cert25 cert299 6 := lower_of_forest cert387 cert358 cert386
+def cert294 : Nat := 0xfcc0c0c0fcc0c0c0fcc0c0c0fcc0c0c0
+lemma cert393 : carryOK [(3,5),(3,4)] cert23 cert294 cert26 cert298 = true := by decide +kernel
+lemma cert392 : Lower cert23 cert294 5 := carry_of cert393 cert403
+def cert295 : Nat := 0xfcc0fcc0c0c0c0c0fcc0fcc0c0c0c0c0
+lemma cert395 : carryOK [(3,4)] cert24 cert295 cert26 cert298 = true := by decide +kernel
+lemma cert394 : Lower cert24 cert295 5 := carry_of cert395 cert403
+def cert296 : Nat := 0xffcccccccccccc00ffcccccccccccc00
+lemma cert397 : carryOK [(1,2)] cert27 cert296 cert25 cert299 = true := by decide +kernel
+lemma cert396 : Lower cert27 cert296 6 := carry_of cert397 cert405
+def cert297 : Nat := 0xfcc0c0c0c0c0c000fcc0c0c0c0c0c000
+def cert422 : List Nat := [14,14,14,22,22,22,30,30,38,38,38,46,46,54,54,58,58,58,58,60,60,60,60,14,14,14,14,14,14,14,22,22,22,22,22,22,22,38,38,38,38,38,38,38,58,58,58,58,60,60,60,60]
+def cert409 : List Nat := [12,10,6,20,18,6,28,26,36,34,6,44,42,52,50,56,50,42,26,56,52,44,28,26,28,42,44,50,52,56,26,28,42,44,50,52,56,26,28,42,44,50,52,56,6,28,44,52,6,26,42,50]
+def cert381 : Nat := fullMask 52
+def cert320 : List Decor := [(0xcccccccccccccccccccccccccccccccc,0xffffff87ffff,0xf12a54a8756b6),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0xf0ffffff87fff,0x1f54a95702d6d),(0xff00ff00ff00ff00ff00ff00ff00ff00,0xff0003fff98c7,0x669f3e7ee98c3),(0xffff0000ffff0000ffff0000ffff0000,0xff01fc07fe0f8,0xaae7cf9dde0d8),(0xffffffff00000000ffffffff00000000,0xfffe0007fff00,0xccf9f3e3bfb00)]
+def cert446 : List (Nat × Nat × Nat) := [(2,0,2),(2,2,3),(0,0,2),(1,2,3),(0,2,3),(0,0,1),(3,2,3),(3,6,4),(1,6,4),(0,0,8),(0,7,3),(0,1,3),(2,1,2),(0,1,2),(3,7,3),(0,10,2),(3,7,1),(3,10,2),(0,9,4),(0,3,4),(3,6,0),(2,10,2),(3,5,1),(1,10,2),(3,25,1),(3,11,1),(1,11,7),(3,9,8),(1,7,16),(1,17,7),(0,19,4),(3,15,2),(3,15,4),(3,19,1),(0,15,4),(3,14,1),(3,15,1),(3,21,3),(0,21,3),(3,20,3),(3,6,10),(3,20,0),(3,26,0),(0,22,3),(3,19,4),(0,28,3),(2,28,3),(1,20,3),(3,22,3),(3,10,8),(3,11,4),(1,6,10),(0,20,3),(0,10,8),(2,0,23),(3,39,1),(3,58,4),(3,20,28),(3,57,2),(3,20,4),(3,57,4),(3,53,4),(1,11,20),(3,48,8)]
+def cert309 : Array Decor := buildWires cert320 cert446
+def cert314 : Array (List (Nat × Nat)) := #[[],[(3,4)],[(3,4),(1,2)],[(4,5)],[(1,2)],[(4,5),(1,2)],[(3,5),(3,4)],[(3,5),(3,4),(1,2)],[(3,4),(3,5)],[(3,5)]]
+def cert441 : List (Nat × Nat) := [(subcube 0 2,6),(subcube 0 24,4),(subcube 0 48,4),(subcube 0 4,6),(subcube 0 40,4),(subcube 0 8,5),(subcube 0 16,5),(subcube 0 32,5)]
+def cert443 : Array (Nat × Nat) := cert441.toArray
+def cert424 : List PoolSpec := [(0,[(0,2,3),(1,2,3),(3,9,8)]),(1,[]),(2,[]),(0,[]),(3,[]),(4,[]),(5,[]),(3,[(0,2,3),(1,2,3),(3,9,8)]),(6,[]),(3,[(0,0,2),(3,7,3)]),(7,[]),(0,[(2,2,3),(3,6,4)]),(0,[(2,2,3),(1,6,4)]),(0,[(0,2,3),(1,2,3)]),(0,[(2,2,3),(3,2,3)]),(0,[(1,10,2),(0,28,3)]),(0,[(1,10,2),(2,28,3)]),(0,[(0,10,2),(1,20,3)]),(0,[(2,10,2),(3,10,2)]),(0,[(3,2,3),(3,11,4)]),(0,[(0,10,2),(3,20,3)]),(3,[(2,2,3),(3,2,3)]),(3,[(2,2,3),(3,6,4)]),(3,[(2,2,3),(1,6,4)]),(0,[(1,2,3)]),(3,[(0,2,3),(1,2,3)]),(3,[(0,0,2)]),(0,[(0,7,3)]),(0,[(3,2,3)]),(0,[(0,1,2)]),(0,[(3,7,3)]),(0,[(0,10,2)]),(0,[(3,7,1)]),(0,[(3,10,2)]),(3,[(3,10,2)]),(0,[(0,2,3)]),(0,[(2,2,3)]),(0,[(2,10,2)]),(0,[(3,5,1)]),(0,[(1,10,2)]),(3,[(0,10,2)]),(3,[(2,2,3)]),(3,[(1,2,3)]),(3,[(0,2,3)])]
+def cert302 : Array (Option BoundPool) := buildPools cert309 cert28 cert443 cert424
+lemma cert389 : goodPairs cert297 cert422 cert409 := goodPairs_of (by decide +kernel)
+lemma cert321 : ∀ x ∈ cert320, faithful cert422 cert409 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert310 : ∀ x ∈ cert309.toList, faithful cert422 cert409 x ∧ x.1 < 2^128 := buildWires_faithful cert321
+lemma cert315 : ∀ sw ∈ cert314.toList, swapsValid sw = true ∧ permWord sw cert297 = cert297 := autos_of (by decide +kernel)
+lemma cert426 : sliceDirectCheck 0 2 0 cert28 cert297 cert25 cert299 = true := by decide +kernel
+lemma cert425 : Slice cert28 cert297 (subcube 0 2) 6 := slice_direct cert426 cert405
+lemma cert428 : sliceDirectCheck 0 24 0 cert28 cert297 cert306 cert293 = true := by decide +kernel
+lemma cert427 : Slice cert28 cert297 (subcube 0 24) 4 := slice_direct cert428 cert391
+lemma cert430 : sliceDirectCheck 0 48 0 cert28 cert297 cert22 cert0 = true := by decide +kernel
+lemma cert429 : Slice cert28 cert297 (subcube 0 48) 4 := slice_direct cert430 cert399
+lemma cert432 : sliceDirectCheck 0 4 0 cert28 cert297 cert27 cert296 = true := by decide +kernel
+lemma cert431 : Slice cert28 cert297 (subcube 0 4) 6 := slice_direct cert432 cert396
+lemma cert434 : sliceDirectCheck 0 40 0 cert28 cert297 cert29 cert11 = true := by decide +kernel
+lemma cert433 : Slice cert28 cert297 (subcube 0 40) 4 := slice_direct cert434 cert401
+lemma cert436 : sliceDirectCheck 0 8 0 cert28 cert297 cert26 cert298 = true := by decide +kernel
+lemma cert435 : Slice cert28 cert297 (subcube 0 8) 5 := slice_direct cert436 cert403
+lemma cert438 : sliceDirectCheck 0 16 0 cert28 cert297 cert24 cert295 = true := by decide +kernel
+lemma cert437 : Slice cert28 cert297 (subcube 0 16) 5 := slice_direct cert438 cert394
+lemma cert440 : sliceDirectCheck 0 32 0 cert28 cert297 cert23 cert294 = true := by decide +kernel
+lemma cert439 : Slice cert28 cert297 (subcube 0 32) 5 := slice_direct cert440 cert392
+set_option maxRecDepth 200000 in
+lemma cert444 : ∀ i (hi : i < cert443.size), Slice cert28 cert297 cert443[i].1 cert443[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert28 cert297 p.1 p.2) (forall_cons cert425 (forall_cons cert427 (forall_cons cert429 (forall_cons cert431 (forall_cons cert433 (forall_cons cert435 (forall_cons cert437 (forall_cons cert439 (fun _ h => (List.not_mem_nil h).elim)))))))))
+lemma cert303 : ∀ i (hi : i < cert302.size), ∀ c, cert302[i] = some c → ValidPool cert28 cert297 c := buildPools_sound cert444
+lemma cert347 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert297 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert364 : checkNodes cert309 cert297 cert381 cert302 cert314 cert61 0 cert178 = true := by decide +kernel
+def cert331 : Array (List (List Nat)) := buildBuckets 1 cert309 cert178
+lemma cert332 : ∀ i (hi : i < cert331.size), ∀ xs ∈ cert331[i], Impossible cert297 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert347 cert364
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert365 : checkNodes cert309 cert297 cert381 cert302 cert314 cert331 1 cert178 = true := by decide +kernel
+lemma cert333 : ∀ i (hi : i < cert331.size), ∀ xs ∈ cert331[i], Impossible cert297 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert332 cert365
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert366 : checkNodes cert309 cert297 cert381 cert302 cert314 cert331 2 cert178 = true := by decide +kernel
+lemma cert334 : ∀ i (hi : i < cert331.size), ∀ xs ∈ cert331[i], Impossible cert297 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert333 cert366
+def cert411 : List NodeSpec := [([10,33,9,4],[],[]),([68,0,1,4],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert367 : checkNodes cert309 cert297 cert381 cert302 cert314 cert331 3 cert411 = true := by decide +kernel
+def cert335 : Array (List (List Nat)) := buildBuckets 1 cert309 cert411
+lemma cert336 : ∀ i (hi : i < cert335.size), ∀ xs ∈ cert335[i], Impossible cert297 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert334 cert367
+def cert412 : List NodeSpec := [([40,0,1,9,4],[],[]),([0,1,33,9,4],[],[0]),([60,0,2,3,4],[],[]),([36,19,0,1,4],[],[]),([61,0,1,2,3],[],[]),([32,10,0,1,4],[0],[]),([58,0,1,9,4],[1,2],[]),([10,7,16,9,4],[],[0]),([10,33,2,3,4],[3,4],[0]),([19,10,18,3,4],[],[]),([20,0,1,55,3],[2],[]),([10,15,18,3,4],[4],[]),([22,0,1,3,13],[],[]),([6,53,0,1,4],[],[0]),([48,0,1,8,4],[],[0]),([10,7,1,50,4],[],[]),([21,0,1,55,3],[],[]),([10,7,1,55,3],[],[]),([62,0,1,3,4],[],[]),([10,14,1,9,4],[1],[]),([63,0,1,3,4],[],[]),([44,64,0,1,2],[],[]),([10,7,30,3,4],[],[]),([64,0,1,2,52],[],[]),([22,25,1,3,4],[],[]),([65,0,1,2,3],[],[]),([66,0,1,2,3],[],[]),([46,22,1,3,4],[],[]),([67,0,1,3,4],[],[]),([22,0,1,52,4],[],[]),([20,0,1,50,4],[1,5],[]),([46,21,2,3,4],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert368 : checkNodes cert309 cert297 cert381 cert302 cert314 cert335 4 cert412 = true := by decide +kernel
+def cert337 : Array (List (List Nat)) := buildBuckets 11 cert309 cert412
+lemma cert338 : ∀ i (hi : i < cert337.size), ∀ xs ∈ cert337[i], Impossible cert297 4 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert336 cert368
+def cert406 : List NodeSpec := [([29,0,1,2,3,4],[],[]),([7,0,30,1,3,4],[],[0]),([7,0,31,1,3,4],[6],[]),([32,0,1,4],[1,0,7,2],[0]),([0,1,33,2,3,4],[3,4],[0]),([7,0,34,1,3,4],[6],[]),([19,7,0,1,9,4],[8],[]),([35,0,1,2,3,4],[],[]),([19,0,18,1,3,4],[],[0]),([36,7,0,1,3,4],[3],[0]),([15,0,18,1,3,4],[4],[0]),([37,0,1,2,3,4],[],[]),([38,0,1,2,3,4],[9],[1]),([39,0,1,2,3,4],[4],[0]),([21,7,0,18,3,4],[6],[]),([11,21,0,1,3,4],[],[0]),([21,0,1,9,3,4],[8],[]),([40,0,1,2,3,4],[],[0]),([41,0,1,2,3,4],[],[]),([0,42,1,2,3,4],[],[]),([19,0,1,2,24,4],[10],[]),([10,0,1,2,3,12],[8,11],[1,2]),([43,0,1,2,3,4],[],[]),([44,7,0,1,2,4],[],[]),([10,14,1,2,3,4],[4],[0]),([10,0,1,2,3,13],[5,12],[0]),([10,25,1,2,3,4],[4],[0,2]),([10,7,1,28,3,4],[3],[0,3]),([10,15,1,2,3,4],[4],[0,1]),([45,0,1,2,3,4],[],[0]),([44,0,1,2,3,4],[],[]),([10,0,1,9,8,4],[1,13],[0,4]),([11,10,7,1,3,4],[],[0]),([44,20,0,1,2,4],[8],[3]),([10,7,1,9,3,4],[],[4,0]),([46,10,1,2,3,4],[3],[0]),([10,7,18,3,4],[4,6,3],[0,3,4,5]),([6,11,10,0,1,4],[14],[0]),([7,0,1,23,3,4],[3,2,5],[]),([36,15,0,1,3,4],[3,1],[0])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert370 : checkNodes cert309 cert297 cert381 cert302 cert314 cert337 5 cert406 = true := by decide +kernel
+def cert407 : List NodeSpec := [([19,10,1,2,3,4],[4,9],[0]),([22,20,0,1,3,4],[3],[0,4,3]),([22,10,7,1,3,4],[3],[]),([6,22,0,1,3,4],[],[0,4]),([10,47,1,2,3,4],[3],[]),([46,7,1,2,3,4],[3],[0]),([48,0,1,2,3,4],[],[0]),([49,0,1,2,3,4],[6],[]),([10,7,16,2,3,4],[],[0,1,4]),([22,0,1,3,8,4],[],[0]),([11,20,0,1,3,4],[8,2],[0]),([10,0,1,2,50,4],[6,15],[0,4]),([7,0,16,1,9,4],[],[0]),([22,7,0,1,3,4],[3],[4]),([51,10,0,1,2,4],[16],[]),([14,0,1,9,4],[6,1,2,13],[0]),([20,0,1,9,3,4],[8,2],[]),([10,7,18,2,3,4],[4,3,6],[]),([10,0,1,2,52,4],[1,17],[0]),([26,22,0,1,3,4],[18],[0]),([20,0,1,28,3,4],[1,5],[0,3]),([21,10,7,2,3,4],[4,3],[]),([53,0,1,2,3,4],[10],[0]),([46,20,1,2,3,4],[3],[0]),([54,0,1,2,3,4],[],[]),([20,0,1,2,52,4],[2],[0,1]),([22,0,1,2,3,4],[],[]),([7,0,1,55,3],[6,2,19],[0]),([56,0,1,2,3,4],[6],[]),([57,0,1,2,3,4],[10],[0,1]),([58,0,1,2,3,4],[6,8,10],[0]),([20,0,1,2,3,4],[8,10],[1,6]),([59,0,1,2,3,4],[],[]),([44,10,0,1,2,4],[20],[]),([44,0,1,2,4],[],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert371 : checkNodes cert309 cert297 cert381 cert302 cert314 cert337 5 cert407 = true := by decide +kernel
+def cert413 : List NodeSpec := cert406 ++ cert407
+lemma cert369 : checkNodes cert309 cert297 cert381 cert302 cert314 cert337 5 cert413 = true := by
+  unfold cert413 checkNodes
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨cert370, cert371⟩
+def cert339 : Array (List (List Nat)) := buildBuckets 26 cert309 cert413
+lemma cert340 : ∀ i (hi : i < cert339.size), ∀ xs ∈ cert339[i], Impossible cert297 5 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert338 cert369
+def cert414 : List NodeSpec := [([6,11,0,1,4],[8,6,14,21,2],[0]),([0,1,2,3,12],[11,22,1,2],[0,1,2]),([0,1,2,3,13],[12,23,5,8],[0]),([14,0,1,2,3,4],[6,4,3,8,2,24],[0]),([0,1,9,8,4],[13,25,1,2],[0,4]),([10,7,1,2,3,4],[4,6,3,26],[0,3]),([15,0,1,2,3,4],[1,4,10,27],[0,1]),([11,7,0,1,3,4],[6,3,1,5,28],[0]),([7,0,16,1,2,3,4],[8,6],[0,2,1,4]),([17,7,0,1,3,4],[6,3,26,1,5],[0]),([7,0,18,1,3,4],[6,3,4,26,29],[0,3,4,5]),([19,0,1,2,3,4],[6,3,4,1,10,30,9],[0,1]),([20,10,0,1,2,3,4],[6,31],[0,4,3]),([21,7,0,1,2,3,4],[4,6,3,26],[4,0]),([21,0,1,2,3,4],[6,3,8,10,32,26],[4,0,3]),([20,7,0,1,2,3,4],[4,1,5,26],[0,3,4]),([22,0,1,2,3,4],[4,3,8,10,33,34],[0,3]),([10,0,1,2,3,8,4],[6,8,24,4],[0,1,4]),([19,7,0,1,2,3,4],[8,3,6,1],[1,0]),([0,1,23,2,3,4],[3,5,2,4,1],[0,1,6,4,2,7]),([10,0,1,9,2,3,4],[1,35,4],[0,1,4,2]),([7,0,1,2,24,3,4],[2,6,5,1],[0,3]),([6,10,0,1,2,3,4],[8,3,4,6,36],[0,4,1,2]),([25,0,1,2,3,4],[8,4,1,2,36],[0,2]),([7,0,18,1,2,3,4],[3,4,6],[0,4]),([15,7,0,1,2,3,4],[8,1],[0,1]),([7,0,1,9,3,4],[6,3,8,1,2,35,5],[0,4]),([22,10,0,1,2,3,4],[6,4,3,33],[0,4]),([26,10,0,1,2,3,4],[6,37],[0,4]),([0,27,1,2,3,4],[3,38,6,1,5],[0]),([10,0,1,2,28,3,4],[6,39,4],[0,4,3]),([20,0,1,2,3,4],[31,40,8,10],[0,4,3])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert372 : checkNodes cert309 cert297 cert381 cert302 cert314 cert339 6 cert414 = true := by decide +kernel
+def cert341 : Array (List (List Nat)) := buildBuckets 11 cert309 cert414
+lemma cert342 : ∀ i (hi : i < cert341.size), ∀ xs ∈ cert341[i], Impossible cert297 6 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert340 cert372
+def cert415 : List NodeSpec := [([5,0,1,2,3,4],[6,3,4,8,1,10,5],[0,4]),([6,0,1,2,3,4],[8,3,4,1,10,2,36,41],[0,4,1,2]),([7,0,1,2,3,4],[6,4,26,3,8,1,10,5],[0,3]),([0,1,2,3,8,4],[24,42,6,8,2],[0,4]),([0,1,9,2,3,4],[35,43,1,2,5],[0,1,6,4,2,7]),([10,0,1,2,3,4],[4,3,6,8,10],[0,1,6,4,2,7,3,8,9])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert373 : checkNodes cert309 cert297 cert381 cert302 cert314 cert341 7 cert415 = true := by decide +kernel
+def cert343 : Array (List (List Nat)) := buildBuckets 3 cert309 cert415
+lemma cert344 : ∀ i (hi : i < cert343.size), ∀ xs ∈ cert343[i], Impossible cert297 7 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert342 cert373
+def cert416 : List NodeSpec := [([0,1,2,3,4],[3,4],[0,1,6,4,2,7,3,8,9])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert374 : checkNodes cert309 cert297 cert381 cert302 cert314 cert343 8 cert416 = true := by decide +kernel
+def cert345 : Array (List (List Nat)) := buildBuckets 1 cert309 cert416
+lemma cert346 : ∀ i (hi : i < cert345.size), ∀ xs ∈ cert345[i], Impossible cert297 8 xs.toFinset :=
+  buildBuckets_sound (by decide) cert389 cert310 cert303 cert315 cert344 cert374
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert385 : forestRootCheck cert28 cert297 [(VAR 1,14,12),(VAR 2,14,10),(VAR 3,14,6),(VAR 4,22,6),(VAR 5,38,6)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert384 : bucketContains cert345 cert28 = true := by decide +kernel
+lemma cert398 : Lower cert28 cert297 9 := lower_of_forest cert385 cert346 cert384
+def cert623 (entries : List (List Nat × List Nat)) : List NodeSpec :=
+  entries.map (fun entry => (entry.1, entry.2, [0]))
 
-def G_3 : Nat := 0xfafaa0a0fafaa0a0fafaa0a0fafaa0a0
-def R_3 : List Nat := varsOf 21
-lemma low_3_ok : carryOK [(0,1)] R_3 G_3 R_0 G_0 = true := by decide +kernel
-lemma low_3 : Lower R_3 G_3 4 := carry_of low_3_ok low_0
+def cert478 : List Nat := varsOf 15
+def cert468 : Nat := 0xeaa8eaa8eaa8eaa8eaa8eaa8eaa8eaa8
+def cert477 : List Nat := [5,14,5,9,3,5,14,9,14,3,3,7,7]
+def cert470 : List Nat := [4,12,6,8,2,1,10,1,6,1,0,6,1]
+def cert469 : Nat := fullMask 13
+def cert451 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,7869,4768),(0xcccccccccccccccccccccccccccccccc,8018,2388),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,6503,2311),(0xff00ff00ff00ff00ff00ff00ff00ff00,458,74)]
+def cert482 : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(3,0,1),(0,1,2),(1,1,2),(2,1,2),(1,2,4),(2,2,4),(0,2,5),(3,2,5),(1,3,10),(2,3,10)]
+def cert486 : BT Decor := buildWiresBT 5 cert451 cert482
+def cert448 : List (List (Nat × Nat)) := [[],[(2,3)],[(1,2)],[(1,3)],[(2,3),(1,2)],[(2,3),(1,3)]]
+def cert449 : BT (List (Nat × Nat)) := btOfList 3 cert448
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert474 : goodPairs cert468 cert477 cert470 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert452 : ∀ x ∈ cert451, faithful cert477 cert470 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert487 : btAll (fun x => faithful cert477 cert470 x ∧ x.1 < 2^128) cert486 := buildWiresBT_faithful cert452
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert450 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert468 = cert468) cert449 := btAll_ofList (autos_of (by decide +kernel))
+def cert479 : List (Option (Nat × Nat)) := []
+def cert480 : BT (Option (Nat × Nat)) := btOfList 1 cert479
+def cert475 : BT (Option BoundPool) := buildPoolsBT 1 cert486 cert478 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert481 : btAll (fun o => ∀ p, o = some p → Slice cert478 cert468 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert478 cert468 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert476 : btAll (fun o => ∀ c, o = some c → ValidPool cert478 cert468 c) cert475 := buildPoolsBT_sound cert481
+def cert466 : BT (List (List Nat)) := BT.empty
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert467 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert468 (3 - 1) xs.toFinset) cert466 := trivial
+def cert453 : List NodeSpec := cert623 [([0,1,3,11],[]),([0,1,3,12],[]),([0,1,3,13],[]),([0,1,3,14],[]),([0,3,8,9],[]),([0,1,2,15],[]),([0,1,2,16],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert483 : checkNodesBT cert486 cert468 cert469 cert475 cert449 cert466 3 cert453 = true := by decide +kernel
+def cert471 : List NodeSpec := cert453
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert463 : checkNodesBT cert486 cert468 cert469 cert475 cert449 cert466 3 cert471 = true := cert483
+def cert457 : BT (List (List Nat)) := buildBucketsBT cert486 cert471
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert458 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert468 3 xs.toFinset) cert457 := buildBucketsBT_sound (by decide) cert474 cert487 cert476 cert450 cert467 cert463
+def cert454 : List NodeSpec := [([0,1,2,3,4],[],[0,1]),([0,1,2,3,5],[],[0,1]),([0,1,2,3,6],[],[0]),([0,1,2,3,7],[],[0]),([0,1,2,3,8],[],[0]),([0,1,2,3,9],[],[0]),([0,1,2,3,10],[],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert484 : checkNodesBT cert486 cert468 cert469 cert475 cert449 cert457 4 cert454 = true := by decide +kernel
+def cert472 : List NodeSpec := cert454
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert464 : checkNodesBT cert486 cert468 cert469 cert475 cert449 cert457 4 cert472 = true := cert484
+def cert459 : BT (List (List Nat)) := buildBucketsBT cert486 cert472
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert460 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert468 4 xs.toFinset) cert459 := buildBucketsBT_sound (by decide) cert474 cert487 cert476 cert450 cert458 cert464
+def cert455 : List NodeSpec := [([0,1,2,3],[],[0,1,2,3,4,5])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert485 : checkNodesBT cert486 cert468 cert469 cert475 cert449 cert459 5 cert455 = true := by decide +kernel
+def cert473 : List NodeSpec := cert455
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert465 : checkNodesBT cert486 cert468 cert469 cert475 cert449 cert459 5 cert473 = true := cert485
+def cert461 : BT (List (List Nat)) := buildBucketsBT cert486 cert473
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert462 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert468 5 xs.toFinset) cert461 := buildBucketsBT_sound (by decide) cert474 cert487 cert476 cert450 cert460 cert465
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert456 : Lower cert478 cert468 6 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,1,5),(VAR 3,1,9)]) (by decide +kernel) cert462 (by decide +kernel)
+def cert490 : List Nat := varsOf 23
+def cert489 : Nat := 0xeaeaa8a8eaeaa8a8eaeaa8a8eaeaa8a8
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert488 : Lower cert490 cert489 6 := carry_of (swaps := [(3,4)]) (roots2 := cert478) (T2 := cert468) (by decide +kernel) cert456
+def cert493 : List Nat := varsOf 27
+def cert492 : Nat := 0xeeaaaa88eeaaaa88eeaaaa88eeaaaa88
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert491 : Lower cert493 cert492 6 := carry_of (swaps := [(3,4),(2,3)]) (roots2 := cert478) (T2 := cert468) (by decide +kernel) cert456
+def cert513 : List Nat := varsOf 28
+def cert505 : Nat := 0xfff0f000fff0f000fff0f000fff0f000
+def cert512 : List Nat := [20,24,12,12,24,20]
+def cert507 : List Nat := [16,16,4,8,8,4]
+def cert506 : Nat := fullMask 6
+def cert497 : List Decor := [(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,45,36),(0xff00ff00ff00ff00ff00ff00ff00ff00,30,24),(0xffff0000ffff0000ffff0000ffff0000,51,3)]
+def cert516 : BT Decor := buildWiresBT 2 cert497 cert227
+def cert494 : List (List (Nat × Nat)) := [[],[(3,4)],[(2,3)],[(2,4)],[(3,4),(2,3)],[(3,4),(2,4)]]
+def cert495 : BT (List (Nat × Nat)) := btOfList 3 cert494
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert509 : goodPairs cert505 cert512 cert507 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert498 : ∀ x ∈ cert497, faithful cert512 cert507 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert517 : btAll (fun x => faithful cert512 cert507 x ∧ x.1 < 2^128) cert516 := buildWiresBT_faithful cert498
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert496 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert505 = cert505) cert495 := btAll_ofList (autos_of (by decide +kernel))
+def cert510 : BT (Option BoundPool) := buildPoolsBT 1 cert516 cert513 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert514 : btAll (fun o => ∀ p, o = some p → Slice cert513 cert505 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert513 cert505 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert511 : btAll (fun o => ∀ c, o = some c → ValidPool cert513 cert505 c) cert510 := buildPoolsBT_sound cert514
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert504 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert505 (3 - 1) xs.toFinset) cert466 := trivial
+def cert499 : List NodeSpec := cert623 [([0,1,2],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert515 : checkNodesBT cert516 cert505 cert506 cert510 cert495 cert466 3 cert499 = true := by decide +kernel
+def cert508 : List NodeSpec := cert499
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert503 : checkNodesBT cert516 cert505 cert506 cert510 cert495 cert466 3 cert508 = true := cert515
+def cert501 : BT (List (List Nat)) := buildBucketsBT cert516 cert508
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert502 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert505 3 xs.toFinset) cert501 := buildBucketsBT_sound (by decide) cert509 cert517 cert511 cert496 cert504 cert503
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert500 : Lower cert513 cert505 4 := lower_of_forestBT (essPairs := [(VAR 2,8,12),(VAR 3,4,12),(VAR 4,4,20)]) (by decide +kernel) cert502 (by decide +kernel)
+def cert520 : List Nat := varsOf 29
+def cert519 : Nat := 0xfffafaaafffafaaafffafaaafffafaaa
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert518 : Lower cert520 cert519 5 := lift_of (z := 1) (o := 0) (essPairs := [(VAR 0,0,1)]) (by decide +kernel) cert500
+def cert622 : Nat := 0xccc0c000ccc0c000ccc0c000ccc0c000
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert621 : Lower cert23 cert622 5 := lift_of (z := 0) (o := 2) (essPairs := [(VAR 1,12,14)]) (by decide +kernel) cert500
+def cert582 : List Nat := varsOf 31
+def cert569 : Nat := 0xeeeaeaa8eeeaeaa8eeeaeaa8eeeaeaa8
+def cert581 : List Nat := [5,14,5,9,14,5,14,9,22,17,17,3,26,22,3,26,22,7,26,13,11,19,26,3,7,22,9,7,3,13,9,5,17,14,21,11,22,9,25,13,21,14,14,14,25,21,14]
+def cert571 : List Nat := [4,12,6,8,10,1,6,1,6,1,16,2,24,20,1,10,18,6,18,1,10,18,28,0,1,16,10,2,6,12,12,12,28,2,20,1,28,0,1,8,1,8,4,0,24,4,28]
+def cert570 : Nat := fullMask 47
+def cert522 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x31edfdba4ead,0x148010842a0),(0xcccccccccccccccccccccccccccccccc,0x4e1a1bf7f952,0x21c378954),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x6f96ab0b2177,0x6415f0422147),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x5eea645c90da,0x5291e450901a),(0xffff0000ffff0000ffff0000ffff0000,0x31550265b700,0x501502653400)]
+def cert593 : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(3,0,1),(1,0,2),(2,0,2),(1,0,3),(1,1,2),(2,1,2),(0,1,3),(2,1,3),(0,2,3),(1,2,3),(0,0,17),(1,0,17),(2,0,17),(3,0,17),(0,1,17),(1,0,22),(3,0,22),(2,2,3),(1,2,4),(2,2,4),(1,2,5),(1,3,4),(2,3,4),(1,3,28),(3,3,28),(1,4,22),(1,4,5),(1,5,22),(1,3,35),(3,3,35),(1,1,17),(2,1,17),(3,1,17),(0,1,28),(2,1,28),(1,4,17),(3,4,17),(2,1,31),(3,5,17),(2,1,46),(2,1,32),(1,0,13),(1,3,13),(3,4,6),(1,4,13),(3,4,13),(2,6,13),(0,6,17),(1,13,55),(2,6,17),(3,2,6),(3,0,50),(3,2,50),(1,4,50),(3,4,50),(1,0,39),(1,2,39),(1,4,39),(2,4,39),(3,4,39),(2,6,39),(1,2,54),(1,3,58),(1,3,69),(3,3,69),(3,1,71),(3,4,71),(1,0,74),(2,1,74),(3,7,17),(3,3,49),(1,8,39),(1,3,42),(1,4,45),(1,4,9),(3,4,9),(0,9,11),(3,2,11),(0,3,9),(3,3,9),(1,3,85),(0,4,19),(1,4,19),(3,4,19),(3,3,91),(1,9,15),(2,9,15),(3,3,64),(1,2,87),(1,4,87),(1,4,18),(1,4,21),(0,1,29),(0,1,82),(0,29,82),(0,9,29),(3,9,29),(3,0,43),(0,1,43),(3,3,43),(3,2,29),(0,1,90),(0,1,108),(1,4,88),(3,4,88),(0,1,111),(3,10,29),(2,12,108),(1,4,95),(3,4,95),(0,12,29),(1,4,40),(3,13,29),(3,18,19),(1,4,16),(1,4,47),(3,4,23),(3,22,38)]
+def cert619 : BT Decor := buildWiresBT 7 cert522 cert593
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert578 : goodPairs cert569 cert581 cert571 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert523 : ∀ x ∈ cert522, faithful cert581 cert571 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert620 : btAll (fun x => faithful cert581 cert571 x ∧ x.1 < 2^128) cert619 := buildWiresBT_faithful cert523
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert521 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert569 = cert569) cert495 := btAll_ofList (autos_of (by decide +kernel))
+def cert589 : List (Option (Nat × Nat)) := [some (subcubeFast 0 2,5),some (subcubeFast 1 0,5),some (subcubeFast 1 2,4),some (subcubeFast 4 0,6),some (subcubeFast 8 0,6),some (subcubeFast 16 0,6)]
+def cert590 : BT (Option (Nat × Nat)) := btOfList 3 cert589
+def cert592 : List PoolSpec := [(1,[]),(0,[]),(3,[(0,0,1)]),(4,[(0,0,1)]),(5,[(0,0,1)]),(2,[]),(0,[(1,2,5)]),(4,[]),(3,[]),(0,[(1,4,5)]),(3,[(0,0,1),(1,4,5)]),(5,[(1,2,3)]),(3,[(0,0,1),(1,3,28)]),(3,[(0,0,1),(3,5,17)]),(4,[(0,0,1),(1,2,5)]),(5,[(0,0,1),(1,2,5)]),(5,[]),(3,[(1,0,1)]),(4,[(1,0,1)]),(5,[(1,0,1)]),(1,[(2,1,2)]),(3,[(1,0,1),(3,4,6)]),(3,[(1,0,1),(0,6,17)]),(3,[(1,0,1),(2,6,17)]),(1,[(3,2,6)]),(4,[(1,0,1),(3,2,6)]),(5,[(1,0,1),(3,2,6)]),(4,[(1,0,1),(2,6,17)]),(3,[(2,0,1)]),(4,[(2,0,1)]),(5,[(2,0,1)]),(3,[(3,0,1)]),(4,[(3,0,1)]),(5,[(3,0,1)]),(0,[(1,0,13)]),(1,[(2,1,28)]),(4,[(1,0,2)]),(5,[(1,0,2)]),(1,[(0,1,28)]),(0,[(1,0,2)]),(4,[(1,0,2),(3,4,9)]),(4,[(1,0,2),(0,9,29)]),(4,[(1,0,17),(3,4,19)]),(3,[(1,0,17)]),(5,[(1,0,3),(3,2,11)]),(4,[(1,0,17)]),(3,[(3,3,9)]),(5,[(1,0,2),(3,3,9)]),(4,[(2,0,2)]),(5,[(2,0,2)]),(3,[(1,0,3)]),(4,[(3,2,11)]),(4,[(1,1,2)]),(5,[(1,1,2)]),(3,[(2,1,17)]),(4,[(2,1,2)]),(5,[(2,1,2)]),(3,[(1,0,13)]),(4,[(2,1,2),(1,4,13)]),(4,[(2,1,2),(1,4,50)]),(4,[(2,1,2),(3,13,29)]),(3,[(1,3,13)]),(5,[(2,1,2),(1,3,13)]),(4,[(2,1,17)]),(3,[(0,1,17)]),(3,[(0,0,17)]),(3,[(0,0,17),(1,4,18)]),(3,[(1,0,17),(3,4,19)]),(3,[(2,0,17)]),(3,[(3,0,17)]),(4,[(3,0,17)]),(4,[(0,1,17)]),(3,[(0,1,17),(1,1,17)]),(3,[(1,1,17)]),(3,[(2,1,17),(1,4,39)]),(3,[(3,1,17)]),(3,[(3,1,17),(1,4,40)]),(4,[(1,2,4)]),(3,[(1,3,4)]),(3,[(1,4,17)]),(4,[(1,4,17)]),(3,[(3,4,17)]),(4,[(3,4,17)])]
+def cert579 : BT (Option BoundPool) := buildPoolsBT 7 cert619 cert582 cert590 cert592
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert588 : Slice cert582 cert569 (subcubeFast 16 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) cert456
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert587 : Slice cert582 cert569 (subcubeFast 8 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) cert488
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert586 : Slice cert582 cert569 (subcubeFast 4 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) cert491
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert585 : Slice cert582 cert569 (subcubeFast 1 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) cert500
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert584 : Slice cert582 cert569 (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert621
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert583 : Slice cert582 cert569 (subcubeFast 0 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert518
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert591 : btAll (fun o => ∀ p, o = some p → Slice cert582 cert569 p.1 p.2) cert590 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert582 cert569 p.1 p.2) (forall_cons (fun _ h => by cases h; exact cert583) (forall_cons (fun _ h => by cases h; exact cert584) (forall_cons (fun _ h => by cases h; exact cert585) (forall_cons (fun _ h => by cases h; exact cert586) (forall_cons (fun _ h => by cases h; exact cert587) (forall_cons (fun _ h => by cases h; exact cert588) (fun _ h => (List.not_mem_nil h).elim)))))))
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert580 : btAll (fun o => ∀ c, o = some c → ValidPool cert582 cert569 c) cert579 := buildPoolsBT_sound cert591
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert568 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert569 (3 - 1) xs.toFinset) cert466 := trivial
+def cert524 : List NodeSpec := cert623 [([0,17,29,101],[]),([0,2,35,102],[]),([4,17,56,84],[]),([0,17,56,122],[]),([0,17,79,122],[]),([0,17,35,122],[]),([0,17,73,122],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert594 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert466 3 cert524 = true := by decide +kernel
+def cert572 : List NodeSpec := cert524
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert562 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert466 3 cert572 = true := cert594
+def cert550 : BT (List (List Nat)) := buildBucketsBT cert619 cert572
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert551 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert569 3 xs.toFinset) cert550 := buildBucketsBT_sound (by decide) cert578 cert620 cert580 cert521 cert568 cert562
+def cert525 : List NodeSpec := cert623 [([0,3,4,22,28],[]),([0,2,3,22,34],[]),([0,2,3,4,35],[]),([0,3,4,28,35],[]),([0,3,4,13,55],[]),([0,2,3,6,65],[]),([0,2,3,4,68],[]),([0,1,2,3,74],[]),([0,2,3,8,65],[]),([0,1,2,3,81],[]),([0,1,2,3,91],[]),([0,1,4,17,94],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert595 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert550 4 cert525 = true := by decide +kernel
+def cert526 : List NodeSpec := cert623 [([0,4,14,17,41],[]),([0,1,17,29,82],[7]),([0,1,4,17,103],[7]),([0,3,4,17,101],[]),([0,2,3,4,109],[]),([0,3,4,27,35],[]),([0,3,4,35,85],[]),([0,2,3,35,89],[]),([0,2,3,35,91],[]),([0,2,3,73,89],[]),([0,2,3,73,91],[]),([0,1,3,85,89],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert596 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert550 4 cert526 = true := by decide +kernel
+def cert527 : List NodeSpec := cert623 [([0,2,4,35,86],[]),([0,2,3,4,113],[]),([0,1,3,4,115],[]),([0,4,13,17,100],[]),([0,1,17,29,53],[7]),([0,1,4,17,120],[7]),([0,2,4,22,50],[]),([0,2,3,22,65],[]),([0,1,3,64,66],[]),([1,2,3,4,121],[]),([0,4,16,17,56],[]),([0,4,16,17,79],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert597 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert550 4 cert527 = true := by decide +kernel
+def cert528 : List NodeSpec := cert623 [([0,4,16,17,35],[]),([0,4,16,17,73],[]),([0,1,2,3,123],[]),([0,1,21,26,29],[]),([0,1,2,3,124],[]),([0,1,22,26,29],[]),([0,2,3,4,125],[]),([0,2,3,40,65],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert598 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert550 4 cert528 = true := by decide +kernel
+def cert573 : List NodeSpec := cert525 ++ cert526 ++ cert527 ++ cert528
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert563 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert550 4 cert573 = true := by
+  unfold cert573 checkNodesBT
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨⟨⟨cert595,cert596⟩,cert597⟩,cert598⟩
+def cert552 : BT (List (List Nat)) := buildBucketsBT cert619 cert573
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert553 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert569 4 xs.toFinset) cert552 := buildBucketsBT_sound (by decide) cert578 cert620 cert580 cert521 cert551 cert563
+def cert529 : List NodeSpec := [([0,2,3,4,5,22],[],[0,2]),([0,1,3,4,17,28],[6,7],[0]),([0,1,2,3,17,34],[9,10],[0]),([0,1,2,3,4,31],[12],[0]),([0,1,2,3,4,46],[7,8,13],[0]),([0,1,3,4,28,31],[6,14],[0]),([0,1,3,4,28,32],[],[0]),([0,1,2,3,4,32],[0],[0]),([0,3,4,6,13,17],[],[0]),([0,2,3,4,6,50],[],[0]),([0,2,3,4,6,39],[],[0]),([0,2,3,4,13,54],[8],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert599 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert529 = true := by decide +kernel
+def cert530 : List NodeSpec := [([0,1,3,4,17,58],[7],[0]),([0,1,2,3,17,51],[21],[0]),([0,1,2,3,4,55],[0,7,8,22],[0,2]),([0,1,2,3,4,57],[23],[0]),([0,1,3,4,58,70],[],[0]),([0,1,3,4,57,58],[27],[0]),([0,1,2,3,4,70],[1],[0]),([0,2,3,4,7,22],[],[0]),([0,1,3,4,17,69],[7],[0]),([0,1,2,3,4,71],[1,16],[0]),([0,1,2,3,4,77],[],[0]),([0,1,3,4,25,69],[],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert600 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert530 = true := by decide +kernel
+def cert534 : List NodeSpec := cert623 [([0,1,2,3,4,72],[]),([2,3,4,8,13,49],[34]),([0,3,4,8,13,17],[]),([0,2,3,4,8,50],[]),([0,2,3,4,8,39],[0]),([0,1,3,4,17,42],[7]),([0,1,2,3,4,24],[]),([0,1,2,3,4,45],[16]),([1,2,3,4,42,49],[8]),([0,2,3,4,41,42],[8]),([0,1,3,4,25,42],[]),([0,1,2,3,4,80],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert604 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert534 = true := by decide +kernel
+def cert535 : List NodeSpec := cert623 [([0,1,4,9,11,17],[7,8]),([0,1,3,4,9,85],[8]),([0,1,2,3,4,19],[1,16]),([0,1,4,9,15,17],[7,8]),([0,1,3,4,9,64],[0]),([0,1,2,4,15,87],[1]),([0,1,2,3,4,37],[0]),([0,1,2,3,4,93],[1]),([0,1,2,3,4,94],[]),([0,2,3,4,14,41],[]),([0,1,3,4,17,41],[6,7]),([0,1,2,3,4,36],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert605 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert535 = true := by decide +kernel
+def cert536 : List NodeSpec := [([1,2,3,4,9,49],[8],[0]),([1,3,4,9,17,18],[],[0]),([1,3,4,9,17,21],[],[0]),([0,1,4,9,17,29],[],[0]),([0,1,4,9,17,87],[7],[0]),([0,1,3,4,17,82],[7],[0]),([0,1,3,4,17,83],[7,40],[0]),([0,1,3,4,9,43],[0],[0]),([0,1,3,4,9,44],[],[0]),([0,1,2,3,4,103],[0,7,16,41],[0,1]),([0,1,2,3,4,90],[1],[0,1,3]),([0,1,2,3,4,92],[42],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert606 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert536 = true := by decide +kernel
+def cert537 : List NodeSpec := [([0,1,2,3,4,104],[],[0]),([0,1,2,3,4,21],[],[0]),([1,2,3,4,19,21],[8],[0]),([0,2,3,4,35],[],[0,1,2,4]),([0,1,2,3,4,35],[],[0]),([0,2,3,4,19,35],[1],[0,2]),([0,2,3,4,19,73],[],[0]),([0,1,2,3,4,85],[],[0]),([0,1,3,4,19,85],[8,44],[0]),([0,1,2,3,19,89],[],[0,2]),([0,1,2,3,91],[],[0]),([0,1,2,3,4,91],[],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert607 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert537 = true := by decide +kernel
+def cert538 : List NodeSpec := [([0,1,2,3,19,91],[16],[0]),([1,2,3,4,9,21],[8],[0]),([0,2,3,4,9,35],[],[0,2]),([0,1,2,3,9,91],[],[0]),([0,1,2,3,4,48],[],[0]),([0,1,2,3,4,97],[],[0,1]),([0,1,3,4,10,108],[],[0,3]),([0,1,2,4,29,88],[16],[0]),([0,1,2,3,4,111],[1],[0,3]),([0,1,2,3,4,114],[],[0]),([0,1,2,3,4,112],[],[0]),([0,2,3,4,12,100],[],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert608 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert538 = true := by decide +kernel
+def cert539 : List NodeSpec := [([0,1,3,4,12,108],[],[0]),([0,1,2,4,29,95],[16],[0]),([0,1,2,3,4,118],[],[0]),([0,1,2,3,4,117],[8],[0]),([0,1,2,3,4,64],[],[0]),([0,1,2,3,4,39],[16],[0,3]),([0,1,2,4,30,95],[],[0]),([0,1,2,3,4,116],[],[0]),([0,1,3,4,17,49],[7],[0]),([0,1,2,3,4,78],[],[0]),([0,2,3,4,13,41],[8],[0]),([0,1,4,13,15,17],[7,8],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert609 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert539 = true := by decide +kernel
+def cert540 : List NodeSpec := [([0,1,3,4,13,64],[8],[0]),([0,3,4,13,17,22],[],[0]),([0,3,4,13,17,40],[],[0]),([0,1,4,13,17,29],[],[0]),([0,1,4,13,17,50],[7],[0]),([0,1,3,4,17,52],[7,58],[0]),([0,1,3,4,17,53],[7],[0]),([0,1,3,4,13,43],[1],[0]),([0,1,3,4,13,44],[],[0]),([0,2,3,4,13,100],[8],[0,1]),([0,1,2,3,4,110],[],[0]),([0,1,2,3,4,61],[8,59],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert610 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert540 = true := by decide +kernel
+def cert541 : List NodeSpec := [([0,1,2,3,4,67],[],[0,2,3]),([0,1,2,3,4,120],[1,7,16,60],[0,1]),([0,1,2,3,4,59],[],[0]),([0,1,2,4,39,50],[8,62],[0]),([0,1,2,3,4,62],[],[0,2]),([0,1,2,3,4,63],[],[0]),([0,1,2,3,4,22],[],[0]),([0,2,3,4,22,39],[8],[0,2]),([0,1,2,3,65],[],[0]),([0,1,2,3,4,65],[],[0]),([0,1,2,3,39,65],[16],[0]),([0,1,2,3,39,66],[],[0,2,3])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert611 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert541 = true := by decide +kernel
+def cert531 : List NodeSpec := cert623 [([0,2,3,4,13,22],[8,64]),([0,1,2,3,13,65],[]),([1,2,3,4,18,19],[]),([0,2,3,4,17,56],[]),([0,2,3,4,17,79],[]),([0,1,2,3,17,98],[66]),([0,2,3,4,17,35],[]),([0,2,3,4,17,73],[]),([0,1,3,4,17,85],[8]),([0,1,2,3,17,91],[67]),([1,2,3,4,20,21],[]),([0,1,3,4,17,96],[8])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert601 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert531 = true := by decide +kernel
+def cert532 : List NodeSpec := [([0,1,2,3,4,47],[7,8,16],[0]),([0,1,3,4,21,26],[16],[0]),([0,1,2,3,4,99],[],[0]),([0,1,2,3,4,23],[7,8,16],[0]),([0,1,3,4,22,26],[16],[0,5]),([0,1,2,3,4,33],[],[0]),([0,2,3,4,22,38],[72],[0]),([0,1,3,4,17,60],[8],[0]),([0,2,3,4,39,40],[],[0]),([0,1,3,4,17,64],[8],[0,2]),([0,1,2,3,17,65],[74],[0]),([0,1,2,3,17,119],[76],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert602 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert532 = true := by decide +kernel
+def cert533 : List NodeSpec := [([0,1,17,26,29],[7,8,16,77,78],[0,1,2,3]),([0,1,4,17,26,107],[7,8],[0]),([0,1,2,3,4,105],[],[0]),([0,1,2,3,4,106],[],[0]),([0,1,2,3,4,108],[],[0]),([0,1,3,4,43,108],[8],[0]),([0,1,3,4,17,108],[8],[0]),([0,1,2,3,4,75],[],[0]),([0,1,2,3,4,76],[],[0,3]),([0,1,2,3,4,43],[],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert603 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert533 = true := by decide +kernel
+def cert574 : List NodeSpec := cert529 ++ cert530 ++ cert534 ++ cert535 ++ cert536 ++ cert537 ++ cert538 ++ cert539 ++ cert540 ++ cert541 ++ cert531 ++ cert532 ++ cert533
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert564 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert552 5 cert574 = true := by
+  unfold cert574 checkNodesBT
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨cert599,cert600⟩,cert604⟩,cert605⟩,cert606⟩,cert607⟩,cert608⟩,cert609⟩,cert610⟩,cert611⟩,cert601⟩,cert602⟩,cert603⟩
+def cert554 : BT (List (List Nat)) := buildBucketsBT cert619 cert574
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert555 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert569 5 xs.toFinset) cert554 := buildBucketsBT_sound (by decide) cert578 cert620 cert580 cert521 cert553 cert564
+def cert542 : List NodeSpec := [([0,1,2,3,4,5,17],[0,1,2,7,8,11],[0,2]),([0,1,3,4,28],[0,2,5,6,14,15],[0,1,3]),([0,1,2,3,4,28],[0,2,5,6,7,8,14,15,16],[0,1]),([0,2,3,4,6,13],[0,1,5,8,17,20],[0,1]),([0,1,2,3,4,6,17],[1,7,8,11,17],[0,2]),([0,1,3,4,58],[1,5,17,24,25,26],[0,1,3]),([0,1,2,3,4,58],[0,1,5,7,8,16,17,24,25,26],[0,1]),([0,1,2,3,4,7,17],[0,1,7,8,28],[0,2]),([0,1,2,3,4,69],[0,1,7,8,16],[0,1]),([0,2,3,4,8,13],[0,1,5,8,20,31],[0,1]),([0,1,2,3,4,8,17],[1,5,7,8,31],[0,2]),([0,1,2,3,4,42],[5,6,7,16,35],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert612 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert554 6 cert542 = true := by decide +kernel
+def cert543 : List NodeSpec := [([0,1,2,3,4,9,11],[7,8],[0,2]),([0,1,2,3,4,9,15],[7,8],[0]),([0,1,2,3,4,41],[0,2,5,6,7,8,16,38],[0,1]),([0,1,2,3,4,9,41],[0,1,5,8,38],[0]),([0,1,2,3,4,9,42],[1,5,35],[0]),([0,1,3,4,9,17],[0,7,8,36,39],[0]),([0,1,2,3,4,9,29],[7,8,16,36],[0,1,3,4]),([0,1,2,3,4,19],[1,16,43,45],[0,1,2,4]),([0,1,2,3,4,9,19],[5,7,37,45],[0,2]),([0,1,2,3,4,87],[0,1,7,8,16,36,46,47],[0,1,2]),([0,1,2,3,4,9,87],[0,7,8,36],[0,2]),([0,1,2,3,4,10,29],[0,7,8,16,48],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert613 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert554 6 cert543 = true := by decide +kernel
+def cert544 : List NodeSpec := [([0,1,2,3,4,88],[0,1,5,7,8,16,50,51],[0]),([0,1,2,3,4,12,29],[1,7,8,16,52],[0,1]),([0,1,2,3,4,95],[0,1,5,7,8,16,54],[0]),([0,1,2,3,4,49],[0,1,5,7,8,16,20,34,57],[0,1,2,5]),([0,1,2,3,4,13,49],[0,1,5,8,34],[0]),([0,1,2,3,4,13,42],[0,5,6],[0]),([0,1,2,3,4,13,15],[7,8],[0,2]),([0,1,3,4,13,17],[1,7,8,20,55],[0,2]),([0,1,2,3,4,13,29],[1,7,8,16,55],[0,1,3,4]),([0,1,2,3,4,50],[0,1,7,8,16,55,61,62],[0,1,2]),([0,1,2,3,4,13,50],[1,7,8,55],[0]),([0,1,2,3,4,39],[0,16,54,63],[0,1,2,4])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert614 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert554 6 cert544 = true := by decide +kernel
+def cert545 : List NodeSpec := [([0,1,2,3,4,13,39],[7,56,63],[0]),([0,1,2,3,4,17,18],[0,7,8,11,65],[0,2]),([0,1,2,3,4,17,19],[0,11,43],[0,2]),([0,1,2,3,4,17,20],[0,68],[0,2]),([0,1,2,3,4,21],[1,7,8,16,69,70],[0,2,3]),([0,1,2,3,4,17,21],[0,7,8,69],[0,2]),([0,1,2,3,4,22],[0,7,8,16,64,71],[0,2,3]),([0,1,2,3,4,17,22],[1,7,8,64],[0,2]),([0,1,2,3,4,17,38],[1,73],[0,2]),([0,1,2,3,4,17,39],[1,11,54],[0,2]),([0,1,2,3,4,17,40],[1,7,8,11,75],[0,2]),([0,1,3,4,17,26],[7,8,11,16,77],[0,1,2,5])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert615 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert554 6 cert545 = true := by decide +kernel
+def cert546 : List NodeSpec := [([0,1,2,3,4,43],[0,1,11,79,80],[0,2,3]),([0,1,2,3,4,17,43],[11,16,79],[0,2,3]),([0,1,2,3,4,44],[0,1,7,8,11,81,82],[0,2,3]),([0,1,2,3,4,17,44],[7,8,11,16,81],[0,1,3,4])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert616 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert554 6 cert546 = true := by decide +kernel
+def cert575 : List NodeSpec := cert542 ++ cert543 ++ cert544 ++ cert545 ++ cert546
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert565 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert554 6 cert575 = true := by
+  unfold cert575 checkNodesBT
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨⟨⟨⟨cert612,cert613⟩,cert614⟩,cert615⟩,cert616⟩
+def cert556 : BT (List (List Nat)) := buildBucketsBT cert619 cert575
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert557 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert569 6 xs.toFinset) cert556 := buildBucketsBT_sound (by decide) cert578 cert620 cert580 cert521 cert555 cert565
+def cert547 : List NodeSpec := [([0,1,2,3,4,5],[0,1,2,3,4,5,7,8,16],[0,1,2,3]),([0,1,2,3,4,6],[0,1,5,7,8,16,17,18,19],[0,1,2,3]),([0,1,2,3,4,7],[0,1,7,8,16,28,29,30],[0,1,2,3]),([0,1,2,3,4,8],[0,1,5,7,8,16,31,32,33],[0,1,2,3]),([0,1,2,3,4,9],[0,1,5,7,8,16,36,37],[0,1]),([0,1,2,3,4,10],[0,1,5,7,8,16,48,49],[0,1]),([0,1,2,3,4,12],[0,1,5,7,8,16,52,53],[0,1]),([0,1,2,3,4,13],[0,1,5,7,8,16,55,56],[0,1,2,5]),([0,1,2,3,4,17],[0,1,7,8,11,16],[0,2,3])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert617 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert556 7 cert547 = true := by decide +kernel
+def cert576 : List NodeSpec := cert547
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert566 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert556 7 cert576 = true := cert617
+def cert558 : BT (List (List Nat)) := buildBucketsBT cert619 cert576
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert559 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert569 7 xs.toFinset) cert558 := buildBucketsBT_sound (by decide) cert578 cert620 cert580 cert521 cert557 cert566
+def cert548 : List NodeSpec := [([0,1,2,3,4],[7,8,16],[0,1,2,3])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert618 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert558 8 cert548 = true := by decide +kernel
+def cert577 : List NodeSpec := cert548
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert567 : checkNodesBT cert619 cert569 cert570 cert579 cert495 cert558 8 cert577 = true := cert618
+def cert560 : BT (List (List Nat)) := buildBucketsBT cert619 cert577
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert561 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert569 8 xs.toFinset) cert560 := buildBucketsBT_sound (by decide) cert578 cert620 cert580 cert521 cert559 cert567
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert549 : Lower cert582 cert569 9 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,1,5),(VAR 3,1,9),(VAR 4,1,17)]) (by decide +kernel) cert561 (by decide +kernel)
+def cert811 : List Nat := varsOf 7
+def cert805 : Nat := 0xe8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8
+def cert810 : List Nat := [5,6,3,3,6,5]
+def cert806 : List Nat := [4,4,1,2,2,1]
+def cert798 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,45,36),(0xcccccccccccccccccccccccccccccccc,30,24),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,51,3)]
+def cert814 : BT Decor := buildWiresBT 2 cert798 cert227
+def cert795 : List (List (Nat × Nat)) := [[],[(1,2)],[(0,1)],[(0,2)],[(1,2),(0,1)],[(1,2),(0,2)]]
+def cert796 : BT (List (Nat × Nat)) := btOfList 3 cert795
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert807 : goodPairs cert805 cert810 cert806 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert799 : ∀ x ∈ cert798, faithful cert810 cert806 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert815 : btAll (fun x => faithful cert810 cert806 x ∧ x.1 < 2^128) cert814 := buildWiresBT_faithful cert799
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert797 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert805 = cert805) cert796 := btAll_ofList (autos_of (by decide +kernel))
+def cert808 : BT (Option BoundPool) := buildPoolsBT 1 cert814 cert811 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert812 : btAll (fun o => ∀ p, o = some p → Slice cert811 cert805 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert811 cert805 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert809 : btAll (fun o => ∀ c, o = some c → ValidPool cert811 cert805 c) cert808 := buildPoolsBT_sound cert812
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert804 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert805 (3 - 1) xs.toFinset) cert466 := trivial
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert813 : checkNodesBT cert814 cert805 cert506 cert808 cert796 cert466 3 cert499 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert803 : checkNodesBT cert814 cert805 cert506 cert808 cert796 cert466 3 cert508 = true := cert813
+def cert801 : BT (List (List Nat)) := buildBucketsBT cert814 cert508
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert802 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert805 3 xs.toFinset) cert801 := buildBucketsBT_sound (by decide) cert807 cert815 cert809 cert797 cert804 cert803
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert800 : Lower cert811 cert805 4 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,1,5)]) (by decide +kernel) cert802 (by decide +kernel)
+def cert835 : Nat := 0xe8a8e8a8e8a8e8a8e8a8e8a8e8a8e8a8
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert834 : Lower cert478 cert835 5 := lift_of (z := 0) (o := 8) (essPairs := [(VAR 3,6,14)]) (by decide +kernel) cert800
+def cert847 : Nat := 0xeeaaee00eeaaee00eeaaee00eeaaee00
+def cert854 : List Nat := [9,19,9,10,10,19,17,26]
+def cert849 : List Nat := [8,18,1,2,8,3,1,18]
+def cert848 : Nat := fullMask 8
+def cert839 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,103,100),(0xcccccccccccccccccccccccccccccccc,186,170),(0xff00ff00ff00ff00ff00ff00ff00ff00,157,17),(0xffff0000ffff0000ffff0000ffff0000,226,130)]
+def cert857 : BT Decor := buildWiresBT 2 cert839 cert227
+def cert836 : List (List (Nat × Nat)) := [[],[(1,4),(0,3)]]
+def cert837 : BT (List (Nat × Nat)) := btOfList 1 cert836
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert851 : goodPairs cert847 cert854 cert849 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert840 : ∀ x ∈ cert839, faithful cert854 cert849 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert858 : btAll (fun x => faithful cert854 cert849 x ∧ x.1 < 2^128) cert857 := buildWiresBT_faithful cert840
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert838 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert847 = cert847) cert837 := btAll_ofList (autos_of (by decide +kernel))
+def cert852 : BT (Option BoundPool) := buildPoolsBT 1 cert857 cert493 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert855 : btAll (fun o => ∀ p, o = some p → Slice cert493 cert847 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert493 cert847 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert853 : btAll (fun o => ∀ c, o = some c → ValidPool cert493 cert847 c) cert852 := buildPoolsBT_sound cert855
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert846 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert847 (3 - 1) xs.toFinset) cert466 := trivial
+def cert841 : List NodeSpec := cert623 [([0,1,2,3],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert856 : checkNodesBT cert857 cert847 cert848 cert852 cert837 cert466 3 cert841 = true := by decide +kernel
+def cert850 : List NodeSpec := cert841
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert845 : checkNodesBT cert857 cert847 cert848 cert852 cert837 cert466 3 cert850 = true := cert856
+def cert843 : BT (List (List Nat)) := buildBucketsBT cert857 cert850
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert844 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert847 3 xs.toFinset) cert843 := buildBucketsBT_sound (by decide) cert851 cert858 cert853 cert838 cert846 cert845
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert842 : Lower cert493 cert847 4 := lower_of_forestBT (essPairs := [(VAR 0,8,9),(VAR 1,8,10),(VAR 3,1,9),(VAR 4,1,17)]) (by decide +kernel) cert844 (by decide +kernel)
+def cert691 : List Nat := [12,12,36,36,40,40,12,36,40]
+def cert685 : List Nat := [8,4,32,4,32,8,32,8,4]
+def cert639 : List Decor := [(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0xcf,0x10a),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x173,0xa1),(0xffffffff00000000ffffffff00000000,0x1bc,0x54)]
+def cert629 : BT Decor := buildWiresBT 2 cert639 cert227
+def cert633 : List (List (Nat × Nat)) := []
+def cert635 : BT (List (Nat × Nat)) := btOfList 1 cert633
+def cert625 : BT (Option BoundPool) := buildPoolsBT 1 cert629 cert31 cert480 cert195
+lemma cert675 : goodPairs cert13 cert691 cert685 := goodPairs_of (by decide +kernel)
+lemma cert640 : ∀ x ∈ cert639, faithful cert691 cert685 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 500000 in
+lemma cert630 : btAll (fun x => faithful cert691 cert685 x ∧ x.1 < 2^128) cert629 := buildWiresBT_faithful cert640
+set_option maxRecDepth 500000 in
+lemma cert636 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert13 = cert13) cert635 := btAll_ofList (autos_of (by decide +kernel))
+set_option maxRecDepth 500000 in
+lemma cert703 : btAll (fun o => ∀ p, o = some p → Slice cert31 cert13 p.1 p.2) cert480 :=
+  btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert31 cert13 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 500000 in
+lemma cert626 : btAll (fun o => ∀ c, o = some c → ValidPool cert31 cert13 c) cert625 := buildPoolsBT_sound cert703
+lemma cert649 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert13 (0 - 1) xs.toFinset) cert466 := trivial
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert663 : checkNodesBT cert629 cert13 cert128 cert625 cert635 cert466 0 cert178 = true := by decide +kernel
+def cert643 : BT (List (List Nat)) := buildBucketsBT cert629 cert178
+set_option maxRecDepth 500000 in
+lemma cert644 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert13 0 xs.toFinset) cert643 :=
+  buildBucketsBT_sound (by decide) cert675 cert630 cert626 cert636 cert649 cert663
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert664 : checkNodesBT cert629 cert13 cert128 cert625 cert635 cert643 1 cert178 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert645 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert13 1 xs.toFinset) cert643 :=
+  buildBucketsBT_sound (by decide) cert675 cert630 cert626 cert636 cert644 cert664
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert665 : checkNodesBT cert629 cert13 cert128 cert625 cert635 cert643 2 cert178 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert646 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert13 2 xs.toFinset) cert643 :=
+  buildBucketsBT_sound (by decide) cert675 cert630 cert626 cert636 cert645 cert665
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert666 : checkNodesBT cert629 cert13 cert128 cert625 cert635 cert643 3 cert179 = true := by decide +kernel
+def cert647 : BT (List (List Nat)) := buildBucketsBT cert629 cert179
+set_option maxRecDepth 500000 in
+lemma cert648 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert13 3 xs.toFinset) cert647 :=
+  buildBucketsBT_sound (by decide) cert675 cert630 cert626 cert636 cert646 cert666
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert708 : forestRootCheck cert31 cert13 [(VAR 2,12,8),(VAR 3,12,4),(VAR 5,36,4)] = true := by decide +kernel
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert707 : bucketContainsBT cert647 cert31 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert677 : Lower cert31 cert13 4 := lower_of_forestBT cert708 cert648 cert707
 
-def G_7 : Nat := 0xfefee8e8fefee8e8fefee8e8fefee8e8
-def R_7 : List Nat := varsOf 23
-def pos_7 : List Nat := [3,3,5,5,6,6,17,17,18,18,20,20,3,3,5,5,6,6,17,17,18,18,20,20]
-def neg_7 : List Nat := [2,1,4,1,4,2,16,1,16,2,16,4,4,16,2,16,1,16,2,4,1,4,1,2]
-def fmask_7 : Nat := fullMask 24
-def base_7 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xcf0cf,0x51008a),(0xcccccccccccccccccccccccccccccccc,0x333333,0x844221),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0xc3cc3c,0x281814),(0xffff0000ffff0000ffff0000ffff0000,0xfc0fc0,0x2a540)]
-def steps_7 : List (Nat × Nat × Nat) := [(1,0,1),(2,4,2),(1,4,2),(1,0,2),(2,6,3),(1,1,2)]
-def W_7 : Array Decor := buildWires base_7 steps_7
-def autos_7 : Array (List (Nat × Nat)) := #[[],[(2,4)],[(0,1)],[(2,4),(0,1)],[(1,2)],[(1,4),(1,2)],[(0,1),(0,2)],[(1,4),(0,1),(0,2)],[(1,4),(0,2)]]
-def slicesL_7 : List (Nat × Nat) := [(subcube 2 0,4),(subcube 1 0,4),(subcube 16 0,4),(subcube 4 0,4)]
-def slices_7 : Array (Nat × Nat) := slicesL_7.toArray
-def ps_7 : List PoolSpec := [(0,[]),(1,[]),(2,[]),(3,[])]
-def P_7 : Array (Option BoundPool) := buildPools W_7 R_7 slices_7 ps_7
-lemma gp_7 : goodPairs G_7 pos_7 neg_7 := goodPairs_of (by decide +kernel)
-lemma base_7_ok : ∀ x ∈ base_7, faithful pos_7 neg_7 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma W_7_ok : ∀ x ∈ W_7.toList, faithful pos_7 neg_7 x ∧ x.1 < 2^128 := buildWires_faithful base_7_ok
-lemma autos_7_ok : ∀ sw ∈ autos_7.toList, swapsValid sw = true ∧ permWord sw G_7 = G_7 := autos_of (by decide +kernel)
-lemma sl_7_0_ok : sliceDirectCheck 2 0 0 R_7 G_7 R_3 G_3 = true := by decide +kernel
-lemma sl_7_0 : Slice R_7 G_7 (subcube 2 0) 4 := slice_direct sl_7_0_ok low_3
-lemma sl_7_1_ok : sliceDirectCheck 1 0 0 R_7 G_7 R_0 G_0 = true := by decide +kernel
-lemma sl_7_1 : Slice R_7 G_7 (subcube 1 0) 4 := slice_direct sl_7_1_ok low_0
-lemma sl_7_2_ok : sliceDirectCheck 16 0 0 R_7 G_7 R_1 G_1 = true := by decide +kernel
-lemma sl_7_2 : Slice R_7 G_7 (subcube 16 0) 4 := slice_direct sl_7_2_ok low_1
-lemma sl_7_3_ok : sliceDirectCheck 4 0 0 R_7 G_7 R_2 G_2 = true := by decide +kernel
-lemma sl_7_3 : Slice R_7 G_7 (subcube 4 0) 4 := slice_direct sl_7_3_ok low_2
-set_option maxRecDepth 200000 in
-lemma slices_7_ok : ∀ i (hi : i < slices_7.size), Slice R_7 G_7 slices_7[i].1 slices_7[i].2 :=
-  array_forall_of_list (P := fun (p : Nat × Nat) => Slice R_7 G_7 p.1 p.2) (forall_cons sl_7_0 (forall_cons sl_7_1 (forall_cons sl_7_2 (forall_cons sl_7_3 (fun _ h => (List.not_mem_nil h).elim)))))
-lemma P_7_ok : ∀ i (hi : i < P_7.size), ∀ c, P_7[i] = some c → ValidPool R_7 G_7 c := buildPools_sound slices_7_ok
-def bk_7_init : Array (List (List Nat)) := #[]
-lemma bk_7_init_ok : ∀ i (hi : i < bk_7_init.size), ∀ xs ∈ bk_7_init[i], Impossible G_7 (0 - 1) xs.toFinset := by intro i hi; simp [bk_7_init] at hi
-def nodes_7_0 : List NodeSpec := []
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma chk_7_0 : checkNodes W_7 G_7 fmask_7 P_7 autos_7 bk_7_init 0 nodes_7_0 = true := by decide +kernel
-def bk_7_0 : Array (List (List Nat)) := buildBuckets 1 W_7 nodes_7_0
-lemma bk_7_0_ok : ∀ i (hi : i < bk_7_0.size), ∀ xs ∈ bk_7_0[i], Impossible G_7 0 xs.toFinset :=
-  buildBuckets_sound (by decide) gp_7 W_7_ok P_7_ok autos_7_ok bk_7_init_ok chk_7_0
-def nodes_7_1 : List NodeSpec := []
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma chk_7_1 : checkNodes W_7 G_7 fmask_7 P_7 autos_7 bk_7_0 1 nodes_7_1 = true := by decide +kernel
-def bk_7_1 : Array (List (List Nat)) := buildBuckets 1 W_7 nodes_7_1
-lemma bk_7_1_ok : ∀ i (hi : i < bk_7_1.size), ∀ xs ∈ bk_7_1[i], Impossible G_7 1 xs.toFinset :=
-  buildBuckets_sound (by decide) gp_7 W_7_ok P_7_ok autos_7_ok bk_7_0_ok chk_7_1
-def nodes_7_2 : List NodeSpec := []
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma chk_7_2 : checkNodes W_7 G_7 fmask_7 P_7 autos_7 bk_7_1 2 nodes_7_2 = true := by decide +kernel
-def bk_7_2 : Array (List (List Nat)) := buildBuckets 1 W_7 nodes_7_2
-lemma bk_7_2_ok : ∀ i (hi : i < bk_7_2.size), ∀ xs ∈ bk_7_2[i], Impossible G_7 2 xs.toFinset :=
-  buildBuckets_sound (by decide) gp_7 W_7_ok P_7_ok autos_7_ok bk_7_1_ok chk_7_2
-def nodes_7_3 : List NodeSpec := [([8,0,1,2],[],[]),([4,7,9,3],[0,1],[])]
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma chk_7_3 : checkNodes W_7 G_7 fmask_7 P_7 autos_7 bk_7_2 3 nodes_7_3 = true := by decide +kernel
-def bk_7_3 : Array (List (List Nat)) := buildBuckets 1 W_7 nodes_7_3
-lemma bk_7_3_ok : ∀ i (hi : i < bk_7_3.size), ∀ xs ∈ bk_7_3[i], Impossible G_7 3 xs.toFinset :=
-  buildBuckets_sound (by decide) gp_7 W_7_ok P_7_ok autos_7_ok bk_7_2_ok chk_7_3
-def nodes_7_4 : List NodeSpec := [([5,0,1,2,3],[],[]),([0,1,2,6,3],[2],[0]),([1,4,2,7,3],[0,3],[0])]
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma chk_7_4 : checkNodes W_7 G_7 fmask_7 P_7 autos_7 bk_7_3 4 nodes_7_4 = true := by decide +kernel
-def bk_7_4 : Array (List (List Nat)) := buildBuckets 2 W_7 nodes_7_4
-lemma bk_7_4_ok : ∀ i (hi : i < bk_7_4.size), ∀ xs ∈ bk_7_4[i], Impossible G_7 4 xs.toFinset :=
-  buildBuckets_sound (by decide) gp_7 W_7_ok P_7_ok autos_7_ok bk_7_3_ok chk_7_4
-def nodes_7_5 : List NodeSpec := [([0,1,4,2,3],[0,1,3,2],[0,1,2,3])]
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma chk_7_5 : checkNodes W_7 G_7 fmask_7 P_7 autos_7 bk_7_4 5 nodes_7_5 = true := by decide +kernel
-def bk_7_5 : Array (List (List Nat)) := buildBuckets 1 W_7 nodes_7_5
-lemma bk_7_5_ok : ∀ i (hi : i < bk_7_5.size), ∀ xs ∈ bk_7_5[i], Impossible G_7 5 xs.toFinset :=
-  buildBuckets_sound (by decide) gp_7 W_7_ok P_7_ok autos_7_ok bk_7_4_ok chk_7_5
-def nodes_7_6 : List NodeSpec := [([0,1,2,3],[0,1,3,2],[0,4,5,6,7,8])]
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma chk_7_6 : checkNodes W_7 G_7 fmask_7 P_7 autos_7 bk_7_5 6 nodes_7_6 = true := by decide +kernel
-def bk_7_6 : Array (List (List Nat)) := buildBuckets 1 W_7 nodes_7_6
-lemma bk_7_6_ok : ∀ i (hi : i < bk_7_6.size), ∀ xs ∈ bk_7_6[i], Impossible G_7 6 xs.toFinset :=
-  buildBuckets_sound (by decide) gp_7 W_7_ok P_7_ok autos_7_ok bk_7_5_ok chk_7_6
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma root_7_ok : forestRootCheck R_7 G_7 [(VAR 0,3,2),(VAR 1,3,1),(VAR 2,5,1),(VAR 4,17,1)] = true := by decide +kernel
-set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
-lemma root_7_in : bucketContains bk_7_6 R_7 = true := by decide +kernel
-lemma low_7 : Lower R_7 G_7 7 := lower_of_forest root_7_ok bk_7_6_ok root_7_in
+lemma cert684 : carryOK [(1,4),(1,5),(1,3),(1,2)] cert22 cert0 cert31 cert13 = true := by decide +kernel
+lemma cert683 : Lower cert22 cert0 4 := carry_of cert684 cert677
 
-end Cofactor12068
-def h49R : List Nat := varsOf 53
-def h49G : Nat := 0xfffffafafafaa0a0fffffafafafaa0a0
-lemma h49Bound : Lower h49R h49G 7 := carry_of (swaps := [(4,5),(2,3),(3,4),(1,2)]) (roots2 := Cofactor12068.R_7) (T2 := Cofactor12068.G_7) (by decide +kernel) Cofactor12068.low_7
-def h50R : List Nat := varsOf 60
-def h50G : Nat := 0xfffffff0fff0f000fffffff0fff0f000
-lemma h50Bound : Lower h50R h50G 7 := carry_of (swaps := [(2,3),(0,1),(1,2)]) (roots2 := h49R) (T2 := h49G) (by decide +kernel) h49Bound
-def h51R : List Nat := varsOf 21
-def h51G : Nat := 0xfafaa0a0fafaa0a0fafaa0a0fafaa0a0
-lemma h51Bound : Lower h51R h51G 4 := carry_of (swaps := [(4,5),(1,2),(2,3),(0,1)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h52R : List Nat := varsOf 29
-def h52G : Nat := 0xfafaa0aafafaa0aafafaa0aafafaa0aa
-lemma h52Bound : Lower h52R h52G 5 := lift_of (z := 0) (o := 8) (essPairs := [(VAR 3,1,9)]) (by decide +kernel) h51Bound
-def h53R : List Nat := varsOf 45
-def h53G : Nat := 0xaafaaafaa0aaa0aaaafaaafaa0aaa0aa
-lemma h53Bound : Lower h53R h53G 6 := carry_of (swaps := [(1,2),(2,3),(3,4),(0,1)]) (roots2 := h35R) (T2 := h35G) (by decide +kernel) h35Bound
-def h54R : List Nat := varsOf 52
-def h54G : Nat := 0xfffff0f0f0f00000fffff0f0f0f00000
-lemma h54Bound : Lower h54R h54G 4 := carry_of (swaps := [(3,4)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h55R : List Nat := varsOf 53
-def h55G : Nat := 0xfffffafafafaaaaafffffafafafaaaaa
-lemma h55Bound : Lower h55R h55G 5 := carry_of (swaps := [(3,4)]) (roots2 := h39R) (T2 := h39G) (by decide +kernel) h39Bound
-def h56R : List Nat := varsOf 57
-def h56G : Nat := 0xaaffaaaaaaaa00aaaaffaaaaaaaa00aa
-lemma h56Bound : Lower h56R h56G 6 := carry_of (swaps := [(3,4),(1,2),(0,1)]) (roots2 := h35R) (T2 := h35G) (by decide +kernel) h35Bound
-def h57R : List Nat := varsOf 28
-def h57G : Nat := 0xf0ff00f0f0ff00f0f0ff00f0f0ff00f0
-lemma h57Bound : Lower h57R h57G 4 := carry_of (swaps := [(4,5),(3,4),(1,2)]) (roots2 := h10R) (T2 := h10G) (by decide +kernel) h10Bound
-def h58R : List Nat := varsOf 60
-def h58G : Nat := 0xf0ff00f0f0f00000f0ff00f0f0f00000
-lemma h58Bound : Lower h58R h58G 5 := carry_of (swaps := [(3,4)]) (roots2 := h44R) (T2 := h44G) (by decide +kernel) h44Bound
-def h59R : List Nat := varsOf 29
-def h59G : Nat := 0xfaffaafafaffaafafaffaafafaffaafa
-lemma h59Bound : Lower h59R h59G 5 := carry_of (swaps := [(3,4)]) (roots2 := h45R) (T2 := h45G) (by decide +kernel) h45Bound
-def h60R : List Nat := varsOf 53
-def h60G : Nat := 0xfafaaaaafafaa0a0fafaaaaafafaa0a0
-lemma h60Bound : Lower h60R h60G 5 := carry_of (swaps := [(2,3),(3,4),(4,5),(0,1),(1,2)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h48R : List Nat := varsOf 61
-def h48G : Nat := 0xfaffaafafafaa0aafaffaafafafaa0aa
-def h48Pos : List Nat := [1,20,5,13,1,36,1,13,20,25,36,41,48,25,48,57,45,1,36,17,28,20,48,28,5,28,60,60,41,17,33,41,1,52,48,52,17,1,5,41,52,33,45,28,28,28,28]
-def h48Neg : List Nat := [0,16,4,9,4,44,9,12,4,9,4,9,56,24,16,56,44,16,32,16,9,0,32,12,0,24,44,56,44,9,32,32,32,32,0,4,0,8,9,40,16,0,9,16,8,44,56]
-def h48Mask : Nat := fullMask 47
-def h48Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x6f1f10baadd,0x44020100a48),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x7d4a0fb505ae,0x2008148105b4),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x7c809e91aa88,0x74e03e91bae8),(0xffff0000ffff0000ffff0000ffff0000,0x791e2ef8f302,0x49000a0af002),(0xffffffff00000000ffffffff00000000,0x78edc45dc20,0x6083dc459020)]
-def h48Steps : List (Nat × Nat × Nat) := [(1,0,1),(2,0,1),(0,0,2),(1,0,2),(1,0,3),(1,1,2),(3,1,2),(0,1,3),(1,1,3),(2,2,4),(3,2,4),(1,2,5),(3,2,5),(0,2,13),(1,2,13),(2,2,13),(3,2,13),(0,4,5),(2,4,5),(0,4,13),(1,4,13),(2,4,13),(3,4,13),(0,5,9),(1,5,9),(2,5,13),(3,1,3),(1,1,4),(3,1,4),(3,1,9),(1,2,3),(2,2,3),(1,3,4),(3,3,4),(3,3,5),(3,3,9),(1,3,34),(0,0,4),(1,0,4),(2,0,4),(3,0,4),(0,0,13),(3,0,13),(0,2,29),(3,2,29),(0,4,29),(3,4,29),(1,1,40),(2,5,40),(2,2,46),(1,4,46),(2,4,46),(3,1,35),(3,0,57),(1,3,57),(0,5,35),(1,0,15),(1,1,61),(3,1,61),(1,1,15),(3,0,64),(1,3,64),(3,3,64),(1,3,15),(3,3,62),(2,5,15),(3,0,16),(1,3,71),(1,1,38),(1,0,73),(3,3,73),(2,5,38),(1,1,22),(1,0,23),(3,1,78),(3,3,78),(1,1,7),(1,3,81),(3,3,81),(3,7,13),(0,3,77),(1,3,77),(2,3,77),(3,3,77),(2,13,42),(3,3,43),(0,13,43),(3,13,43),(1,3,92),(1,3,33),(3,0,94),(3,1,94),(1,1,44),(1,3,97),(3,3,97),(2,13,44),(1,1,36),(3,3,10),(1,0,102),(3,11,37),(2,29,46),(2,13,15),(1,4,18),(0,4,19),(3,18,19),(3,24,25),(1,2,26),(2,2,27)]
-def h48W : BT Decor := buildWiresBT 7 h48Base h48Steps
-def h48AutoList : List (List (Nat × Nat)) := [[],[(2,4)]]
-def h48Autos : BT (List (Nat × Nat)) := btOfList 1 h48AutoList
-lemma h48Pairs : goodPairs h48G h48Pos h48Neg := goodPairs_of (by decide +kernel)
-lemma h48BaseOk : ∀ x ∈ h48Base, faithful h48Pos h48Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h48WOk : btAll (fun x => faithful h48Pos h48Neg x ∧ x.1 < 2^128) h48W := buildWiresBT_faithful h48BaseOk
-lemma h48AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h48G = h48G) h48Autos := btAll_ofList (autos_of (by decide +kernel))
-def h48SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 8,5),some (subcubeFast 0 32,5),some (subcubeFast 1 0,5),some (subcubeFast 1 32,4),some (subcubeFast 4 0,6),some (subcubeFast 8 0,5),some (subcubeFast 9 0,4),some (subcubeFast 16 0,6),some (subcubeFast 32 0,5),some (subcubeFast 32 8,4),some (0xaa55aa55aa55aa55aa55aa55aa55aa55,7),some (0xff00ffff00ff0000ff00ffff00ff00,7)]
-def h48Slices : BT (Option (Nat × Nat)) := btOfList 4 h48SliceList
-def h48Specs : List PoolSpec := poolSteps h48Steps [(4,[]),(2,[]),(6,[]),(10,[0]),(7,[0]),(4,[4]),(5,[0,4]),(1,[0,4]),(7,[]),(3,[]),(10,[]),(0,[]),(8,[]),(1,[]),(5,[0]),(1,[0]),(10,[30]),(10,[10]),(10,[0,12]),(9,[]),(7,[0,44]),(7,[0,45]),(4,[34]),(5,[]),(10,[1]),(7,[1]),(7,[29]),(4,[2]),(7,[2]),(10,[76]),(4,[3]),(7,[3]),(4,[37]),(10,[37]),(7,[37]),(10,[8]),(11,[8]),(4,[17,81]),(4,[37,84]),(4,[17]),(11,[]),(4,[38]),(10,[38]),(7,[38]),(4,[38,86]),(4,[38,87]),(5,[38]),(0,[28]),(4,[39]),(10,[39]),(7,[39]),(4,[40]),(10,[40]),(7,[40]),(10,[5]),(7,[5]),(10,[0,66]),(4,[31]),(8,[31]),(8,[5]),(10,[5,97]),(4,[97]),(10,[6]),(7,[6]),(4,[10]),(8,[6]),(2,[10]),(4,[30]),(7,[52]),(4,[41]),(4,[41,49]),(4,[41,50]),(4,[41,51]),(4,[4,44]),(4,[4,45]),(4,[4,46]),(4,[25]),(4,[42]),(7,[42]),(4,[9]),(11,[8,101]),(4,[13]),(11,[8,13]),(4,[13,102]),(4,[14]),(4,[14,103]),(4,[15]),(4,[15,16]),(4,[16]),(4,[19]),(4,[19,20]),(4,[20]),(4,[21]),(7,[68]),(4,[21,106]),(11,[8,22]),(4,[22]),(4,[22,107]),(10,[27]),(7,[27]),(10,[10,27]),(0,[27]),(4,[33]),(0,[33]),(10,[28]),(7,[28]),(4,[89]),(10,[9]),(7,[9]),(7,[10]),(10,[10,56]),(5,[56])]
-def h48Pools : BT (Option BoundPool) := buildPoolsBT 7 h48W h48R h48Slices h48Specs
-set_option maxRecDepth 200000 in
-lemma h48Slice11 : Slice h48R h48G (0xff00ffff00ff0000ff00ffff00ff00) 7 := opposite_slice (oppositeRow 3 5 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h49Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice10 : Slice h48R h48G (0xaa55aa55aa55aa55aa55aa55aa55aa55) 7 := mapped_slice (identifyRow 0 3 60) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h50Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice9 : Slice h48R h48G (subcubeFast 32 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h51Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice8 : Slice h48R h48G (subcubeFast 32 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h52Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice7 : Slice h48R h48G (subcubeFast 16 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h53Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice6 : Slice h48R h48G (subcubeFast 9 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h54Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice5 : Slice h48R h48G (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h55Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice4 : Slice h48R h48G (subcubeFast 4 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h56Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice3 : Slice h48R h48G (subcubeFast 1 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h57Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice2 : Slice h48R h48G (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h58Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice1 : Slice h48R h48G (subcubeFast 0 32) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h59Bound
-set_option maxRecDepth 200000 in
-lemma h48Slice0 : Slice h48R h48G (subcubeFast 0 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h60Bound
-lemma h48SlicesOk : btAll (sliceSpec h48R h48G) h48Slices := btAll_ofList (P := sliceSpec h48R h48G) (sliceSpecCons h48Slice0 (sliceSpecCons h48Slice1 (sliceSpecCons h48Slice2 (sliceSpecCons h48Slice3 (sliceSpecCons h48Slice4 (sliceSpecCons h48Slice5 (sliceSpecCons h48Slice6 (sliceSpecCons h48Slice7 (sliceSpecCons h48Slice8 (sliceSpecCons h48Slice9 (sliceSpecCons h48Slice10 (sliceSpecCons h48Slice11 sliceSpecNil))))))))))))
-set_option maxRecDepth 200000 in
-lemma h48PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h48R h48G c) h48Pools := buildPoolsBT_sound h48SlicesOk
-def h48Empty : BT (List (List Nat)) := BT.empty
-lemma h48EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h48G (3 - 1) xs.toFinset) h48Empty := trivial
-def h48Block3_0 : List NodeSpec := nodesWithIdentity [([2,4,28,92],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test3_0 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Empty 3 h48Block3_0 = true := by decide +kernel
-def h48Nodes3 : List NodeSpec := h48Block3_0
-lemma h48Check3 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Empty 3 h48Nodes3 = true := h48Test3_0
-def h48Bucket3 : BT (List (List Nat)) := buildBucketsBT h48W h48Nodes3
-set_option maxRecDepth 200000 in
-lemma h48Bucket3Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h48G 3 xs.toFinset) h48Bucket3 := buildBucketsBT_sound (by decide) h48Pairs h48WOk h48PoolsOk h48AutosOk h48EmptyOk h48Check3
-def h48Block4_0 : List NodeSpec := indexPairNodes [(1073199,0), (8156219,0), (17333291,0), (1366039,0), (1890327,0), (1370135,0), (6864971,4929), (108020797,0), (337643595,5953), (1367359771,0), (377701191,0), (1663093,0), (1728599,0), (440351,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test4_0 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket3 4 h48Block4_0 = true := by decide +kernel
-def h48Nodes4 : List NodeSpec := h48Block4_0
-lemma h48Check4 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket3 4 h48Nodes4 = true := h48Test4_0
-def h48Bucket4 : BT (List (List Nat)) := buildBucketsBT h48W h48Nodes4
-set_option maxRecDepth 200000 in
-lemma h48Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h48G 4 xs.toFinset) h48Bucket4 := buildBucketsBT_sound (by decide) h48Pairs h48WOk h48PoolsOk h48AutosOk h48Bucket3Ok h48Check4
-def h48Block5_0 : List NodeSpec := indexTripleNodes [(17512,998,2), (3342973,4,2), (17514,518,2), (241899,369,2), (52287,3953,2), (794869,0,2), (35128445,2,2), (36177021,2,2), (55578955,514,2), (860395,369,2), (2422831,369,2), (231487,512,2), (223295,369,2), (925941,1034,2), (975083,1905,2), (239679,6656,2), (544831,0,2), (2179317,369,2), (2244843,4,2), (806959,465,2), (577599,465,2), (593983,512,2), (178239,0,2), (38836341,369,2), (62527,0,2), (2922603,369,2), (40933463,401,2), (43030615,39025,6), (11282975,13521,6), (11807263,433,2), (696565,369,2), (729303,1377,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test5_0 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket4 5 h48Block5_0 = true := by decide +kernel
-def h48Block5_1 : List NodeSpec := indexTripleNodes [(745567,1441,6), (2408693,369,2), (143658091,512,2), (643135,6769,2), (659519,0,2), (651327,0,2), (135269483,74240,2), (675903,209073,2), (700479,499747,2), (142762091,86099221,2), (159539307,3761,2), (176316523,0,2), (193093739,0,2), (195082347,4,2), (692287,4,2), (716863,44549,2), (725055,5953,2), (216024095,1313,2), (60307999,0,2), (141558891,465,2), (203470955,465,2), (733247,465,2), (177212523,512,2), (774207,344721,2), (790591,0,2), (782399,0,2), (561215,0,2), (815167,0,2), (188776983,1569,2), (46668887,465,2), (15076951,2,2), (44830315,401,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test5_1 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket4 5 h48Block5_1 = true := by decide +kernel
-def h48Block5_2 : List NodeSpec := indexTripleNodes [(188756015,1569,2), (823359,0,2), (36739189,0,2), (43519063,18305,2), (11142431,18561,2), (11404575,18817,2), (11275371,675,2), (38276183,19073,2), (9831711,19329,2), (10093855,19585,2), (36743285,0,2), (41421931,675,2), (54004843,512,2), (256063,0,2), (839743,120604817,2), (62551,4161825,2), (49546527,21633,2), (46664811,1917091,2), (50070815,22145,2), (185601131,675,2), (198743,22657,2), (54815,23425,2), (175115371,675,2), (63442027,5472419,2), (206572631,24449,2), (56863,10027297,2), (208669783,25217,2), (38286879,2,2), (15862047,1569,6), (626751,0,2), (749631,0,2), (243775,0,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test5_2 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket4 5 h48Block5_2 = true := by decide +kernel
-def h48Block5_3 : List NodeSpec := nodesWithIdentity [([0,1,2,3,4,65],[]),([0,1,2,3,4,67],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test5_3 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket4 5 h48Block5_3 = true := by decide +kernel
-def h48Nodes5 : List NodeSpec := h48Block5_0 ++ h48Block5_1 ++ h48Block5_2 ++ h48Block5_3
-lemma h48Check5 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket4 5 h48Nodes5 = true := by
-  unfold h48Nodes5 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨h48Test5_0,h48Test5_1⟩,h48Test5_2⟩,h48Test5_3⟩
-def h48Bucket5 : BT (List (List Nat)) := buildBucketsBT h48W h48Nodes5
-set_option maxRecDepth 200000 in
-lemma h48Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h48G 5 xs.toFinset) h48Bucket5 := buildBucketsBT_sound (by decide) h48Pairs h48WOk h48PoolsOk h48AutosOk h48Bucket4Ok h48Check5
-def h48Block6_0 : List NodeSpec := indexTripleNodes [(1148,1646,6), (1150,614,6), (581877,1582,2), (16506,98854,2), (125055,135690,2), (65662,291866,2), (23679,6168,2), (25727,530458,2), (274559,26114,2), (52287,3953,6), (100479,1584,6), (145471,25195046,6), (282751,550,6), (71807,25606,2), (75903,7761,2), (153663,151025230,2), (16702,9586407,6), (634943,680143847,2), (16958,15876493,2), (7734847,253502695,6), (1204331,3605781,2), (602175,554114383,2), (7996991,23437745,2), (2767391,3637552583,2), (618559,2766311,6), (8259135,37233895,6), (766015,3423874383,2), (17040959,10096209,2), (553023,182512267,6), (3476055,63334587019,2), (806975,1855695527655,6), (69686,62680998667,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test6_0 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket5 6 h48Block6_0 = true := by decide +kernel
-def h48Block6_1 : List NodeSpec := indexTripleNodes [(1738559,2767907,2), (227391,14563294543,2), (17565247,289501415,6), (4326975,499781,6), (4589119,154629,6), (178239,807433251,2), (18089535,2277607,6), (49214,373754581905,2), (81982,244998356003,6), (540734,12216715409,2), (427583,13022021777,6), (493119,133187729,6), (4210750,274745489,2), (1508927,5013937,2), (1639999,5145009,6), (1771071,948036017,6), (1902143,1015144881,2), (2296095,0x628126051c63,6), (865823,7831829027,2), (585791,2613085615591,6), (610367,32262,6), (741439,226023874279,6), (235583,116512792399,6), (247871,1392742119,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test6_1 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket5 6 h48Block6_1 = true := by decide +kernel
-def h48Nodes6 : List NodeSpec := h48Block6_0 ++ h48Block6_1
-lemma h48Check6 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket5 6 h48Nodes6 = true := by
-  unfold h48Nodes6 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨h48Test6_0,h48Test6_1⟩
-def h48Bucket6 : BT (List (List Nat)) := buildBucketsBT h48W h48Nodes6
-set_option maxRecDepth 200000 in
-lemma h48Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h48G 6 xs.toFinset) h48Bucket6 := buildBucketsBT_sound (by decide) h48Pairs h48WOk h48PoolsOk h48AutosOk h48Bucket5Ok h48Check6
-def h48Block7_0 : List NodeSpec := indexTripleNodes [(126,32318,2), (190,30693199,6), (318,822111750,6), (574,6460309006,2), (157759,113382270287,6), (161855,4119150415,6), (165951,32617571663,6), (170047,7533313871,2), (2110,136374971019,6), (4158,444538856783,6), (9791,478486247,6), (58431,437015360999,6), (60479,224950195687,6), (32830,0xf20780604a754f,2), (65598,0x2d822030a33e8b,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test7_0 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket6 7 h48Block7_0 = true := by decide +kernel
-def h48Nodes7 : List NodeSpec := h48Block7_0
-lemma h48Check7 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket6 7 h48Nodes7 = true := h48Test7_0
-def h48Bucket7 : BT (List (List Nat)) := buildBucketsBT h48W h48Nodes7
-set_option maxRecDepth 200000 in
-lemma h48Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h48G 7 xs.toFinset) h48Bucket7 := buildBucketsBT_sound (by decide) h48Pairs h48WOk h48PoolsOk h48AutosOk h48Bucket6Ok h48Check7
-def h48Block8_0 : List NodeSpec := [([0,1,2,3,4],[0,8,10,40],[0,1])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h48Test8_0 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket7 8 h48Block8_0 = true := by decide +kernel
-def h48Nodes8 : List NodeSpec := h48Block8_0
-lemma h48Check8 : checkNodesBT h48W h48G h48Mask h48Pools h48Autos h48Bucket7 8 h48Nodes8 = true := h48Test8_0
-def h48Bucket8 : BT (List (List Nat)) := buildBucketsBT h48W h48Nodes8
-set_option maxRecDepth 200000 in
-lemma h48Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h48G 8 xs.toFinset) h48Bucket8 := buildBucketsBT_sound (by decide) h48Pairs h48WOk h48PoolsOk h48AutosOk h48Bucket7Ok h48Check8
-set_option maxRecDepth 200000 in
-lemma h48Bound : Lower h48R h48G 9 := lower_of_forestBT (essPairs := [(VAR 0,0,1),(VAR 2,9,13),(VAR 3,1,9),(VAR 4,4,20),(VAR 5,4,36)]) (by decide +kernel) h48Bucket8Ok (by decide +kernel)
-def h62R : List Nat := varsOf 53
-def h62G : Nat := 0xafafaaaafafaaaaaafafaaaafafaaaaa
-lemma h62Bound : Lower h62R h62G 5 := lift_of (z := 1) (o := 16) (essPairs := [(VAR 0,0,1),(VAR 4,4,20)]) (by decide +kernel) h6Bound
-def h63R : List Nat := varsOf 57
-def h63G : Nat := 0xffffffaaff00aa00ffffffaaff00aa00
-lemma h63Bound : Lower h63R h63G 5 := carry_of (swaps := [(2,3),(3,4),(2,3)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h64R : List Nat := varsOf 53
-def h64G : Nat := 0xffffafaf0a0a0a0affffafaf0a0a0a0a
-lemma h64Bound : Lower h64R h64G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(4,5),(1,2),(2,3),(3,4),(2,3),(0,1)]) (roots2 := h9R) (T2 := h9G) (by decide +kernel) h9Bound
-def h65R : List Nat := varsOf 57
-def h65G : Nat := 0xffaaffaaff00aaaaffaaffaaff00aaaa
-lemma h65Bound : Lower h65R h65G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(1,2),(2,3),(0,1)]) (roots2 := h12R) (T2 := h12G) (by decide +kernel) h12Bound
-def h66R : List Nat := varsOf 60
-def h66G : Nat := 0xfffffff0f000f000fffffff0f000f000
-lemma h66Bound : Lower h66R h66G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(4,5),(1,2),(2,3),(3,4),(0,1),(1,2)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h67R : List Nat := varsOf 29
-def h67G : Nat := 0xfa0aaa0afa0aaa0afa0aaa0afa0aaa0a
-lemma h67Bound : Lower h67R h67G 4 := lift_of (z := 0) (o := 16) (essPairs := [(VAR 4,12,28)]) (by decide +kernel) h4Bound
-def h68R : List Nat := varsOf 45
-def h68G : Nat := 0xafaaafaaaa0aaa0aafaaafaaaa0aaa0a
-lemma h68Bound : Lower h68R h68G 6 := carry_of (swaps := [(1,2),(2,3),(3,4),(2,3),(0,1)]) (roots2 := h35R) (T2 := h35G) (by decide +kernel) h35Bound
-def h69R : List Nat := varsOf 37
-def h69G : Nat := 0xafafafaf0a0a0a0aafafafaf0a0a0a0a
-lemma h69Bound : Lower h69R h69G 4 := carry_of (swaps := [(3,4),(4,5),(3,4),(2,3),(0,1)]) (roots2 := h10R) (T2 := h10G) (by decide +kernel) h10Bound
-def h70R : List Nat := varsOf 53
-def h70G : Nat := 0xafafaaaa0a0a0a0aafafaaaa0a0a0a0a
-lemma h70Bound : Lower h70R h70G 5 := carry_of (swaps := [(2,3),(3,4),(2,3)]) (roots2 := h41R) (T2 := h41G) (by decide +kernel) h41Bound
-def h71R : List Nat := varsOf 28
-def h71G : Nat := 0xff0f0f00ff0f0f00ff0f0f00ff0f0f00
-lemma h71Bound : Lower h71R h71G 4 := carry_of (swaps := [(4,5),(3,4),(1,2),(2,3)]) (roots2 := h10R) (T2 := h10G) (by decide +kernel) h10Bound
-def h72R : List Nat := varsOf 44
-def h72G : Nat := 0xff0fff0ff000f000ff0fff0ff000f000
-lemma h72Bound : Lower h72R h72G 3 := carry_of (swaps := [(0,1),(1,2),(2,3),(3,4),(4,5),(2,3),(1,2)]) (roots2 := h4R) (T2 := h4G) (by decide +kernel) h4Bound
-def h73R : List Nat := varsOf 52
-def h73G : Nat := 0xffff0f0ff0f00000ffff0f0ff0f00000
-lemma h73Bound : Lower h73R h73G 3 := carry_of (swaps := [(0,1),(1,2),(2,3),(3,4),(4,5),(2,3),(3,4),(1,2)]) (roots2 := h4R) (T2 := h4G) (by decide +kernel) h4Bound
-def h74R : List Nat := varsOf 60
-def h74G : Nat := 0xff0f0f00f0000000ff0f0f00f0000000
-def h74Pos : List Nat := [40,48,40,48,28,40,28,40,48,28,28,56]
-def h74Neg : List Nat := [32,52,36,32,12,8,20,44,16,16,24,24]
-def h74Mask : Nat := fullMask 12
-def h74Base : List Decor := [(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,1616,214),(0xff00ff00ff00ff00ff00ff00ff00ff00,3829,3248),(0xffff0000ffff0000ffff0000ffff0000,3930,3906),(0xffffffff00000000ffffffff00000000,2479,143)]
-def h74Steps : List (Nat × Nat × Nat) := [(0,0,1),(3,0,1),(3,0,3),(0,1,2),(2,2,5)]
-def h74W : BT Decor := buildWiresBT 4 h74Base h74Steps
-def h74AutoList : List (List (Nat × Nat)) := [[],[(3,4)]]
-def h74Autos : BT (List (Nat × Nat)) := btOfList 1 h74AutoList
-lemma h74Pairs : goodPairs h74G h74Pos h74Neg := goodPairs_of (by decide +kernel)
-lemma h74BaseOk : ∀ x ∈ h74Base, faithful h74Pos h74Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h74WOk : btAll (fun x => faithful h74Pos h74Neg x ∧ x.1 < 2^128) h74W := buildWiresBT_faithful h74BaseOk
-lemma h74AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h74G = h74G) h74Autos := btAll_ofList (autos_of (by decide +kernel))
-def h74SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 8,3),some (subcubeFast 0 16,3),some (subcubeFast 0 32,4),some (0xf0f0f0ff0f0f0f00f0f0f0ff0f0f0f0,4)]
-def h74Slices : BT (Option (Nat × Nat)) := btOfList 2 h74SliceList
-def h74Specs : List PoolSpec := [(2,[]),(3,[]),(0,[]),(1,[])]
-def h74Pools : BT (Option BoundPool) := buildPoolsBT 2 h74W h74R h74Slices h74Specs
-set_option maxRecDepth 200000 in
-lemma h74Slice3 : Slice h74R h74G (0xf0f0f0ff0f0f0f00f0f0f0ff0f0f0f0) 4 := opposite_slice (oppositeRow 2 5 56) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h37Bound
-set_option maxRecDepth 200000 in
-lemma h74Slice2 : Slice h74R h74G (subcubeFast 0 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h71Bound
-set_option maxRecDepth 200000 in
-lemma h74Slice1 : Slice h74R h74G (subcubeFast 0 16) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h72Bound
-set_option maxRecDepth 200000 in
-lemma h74Slice0 : Slice h74R h74G (subcubeFast 0 8) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h73Bound
-lemma h74SlicesOk : btAll (sliceSpec h74R h74G) h74Slices := btAll_ofList (P := sliceSpec h74R h74G) (sliceSpecCons h74Slice0 (sliceSpecCons h74Slice1 (sliceSpecCons h74Slice2 (sliceSpecCons h74Slice3 sliceSpecNil))))
-lemma h74PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h74R h74G c) h74Pools := buildPoolsBT_sound h74SlicesOk
-def h74Empty : BT (List (List Nat)) := BT.empty
-lemma h74EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h74G (2 - 1) xs.toFinset) h74Empty := trivial
-def h74Block2_0 : List NodeSpec := nodesWithIdentity [([1,6,8],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h74Test2_0 : checkNodesBT h74W h74G h74Mask h74Pools h74Autos h74Empty 2 h74Block2_0 = true := by decide +kernel
-def h74Nodes2 : List NodeSpec := h74Block2_0
-lemma h74Check2 : checkNodesBT h74W h74G h74Mask h74Pools h74Autos h74Empty 2 h74Nodes2 = true := h74Test2_0
-def h74Bucket2 : BT (List (List Nat)) := buildBucketsBT h74W h74Nodes2
-lemma h74Bucket2Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h74G 2 xs.toFinset) h74Bucket2 := buildBucketsBT_sound (by decide) h74Pairs h74WOk h74PoolsOk h74AutosOk h74EmptyOk h74Check2
-def h74Block3_0 : List NodeSpec := indexPairNodes [(172,0), (204,0), (534,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h74Test3_0 : checkNodesBT h74W h74G h74Mask h74Pools h74Autos h74Bucket2 3 h74Block3_0 = true := by decide +kernel
-def h74Nodes3 : List NodeSpec := h74Block3_0
-lemma h74Check3 : checkNodesBT h74W h74G h74Mask h74Pools h74Autos h74Bucket2 3 h74Nodes3 = true := h74Test3_0
-def h74Bucket3 : BT (List (List Nat)) := buildBucketsBT h74W h74Nodes3
-lemma h74Bucket3Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h74G 3 xs.toFinset) h74Bucket3 := buildBucketsBT_sound (by decide) h74Pairs h74WOk h74PoolsOk h74AutosOk h74Bucket2Ok h74Check3
-def h74Block4_0 : List NodeSpec := indexTripleNodes [(62,6,2), (94,16,2), (142,2,6), (286,8,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h74Test4_0 : checkNodesBT h74W h74G h74Mask h74Pools h74Autos h74Bucket3 4 h74Block4_0 = true := by decide +kernel
-def h74Nodes4 : List NodeSpec := h74Block4_0
-lemma h74Check4 : checkNodesBT h74W h74G h74Mask h74Pools h74Autos h74Bucket3 4 h74Nodes4 = true := h74Test4_0
-def h74Bucket4 : BT (List (List Nat)) := buildBucketsBT h74W h74Nodes4
-lemma h74Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h74G 4 xs.toFinset) h74Bucket4 := buildBucketsBT_sound (by decide) h74Pairs h74WOk h74PoolsOk h74AutosOk h74Bucket3Ok h74Check4
-def h74Block5_0 : List NodeSpec := [([0,1,2,3],[0,2,3],[0,1])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h74Test5_0 : checkNodesBT h74W h74G h74Mask h74Pools h74Autos h74Bucket4 5 h74Block5_0 = true := by decide +kernel
-def h74Nodes5 : List NodeSpec := h74Block5_0
-lemma h74Check5 : checkNodesBT h74W h74G h74Mask h74Pools h74Autos h74Bucket4 5 h74Nodes5 = true := h74Test5_0
-def h74Bucket5 : BT (List (List Nat)) := buildBucketsBT h74W h74Nodes5
-lemma h74Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h74G 5 xs.toFinset) h74Bucket5 := buildBucketsBT_sound (by decide) h74Pairs h74WOk h74PoolsOk h74AutosOk h74Bucket4Ok h74Check5
-lemma h74Bound : Lower h74R h74G 6 := lower_of_forestBT (essPairs := [(VAR 2,24,28),(VAR 3,20,28),(VAR 4,12,28),(VAR 5,8,40)]) (by decide +kernel) h74Bucket5Ok (by decide +kernel)
-def h75R : List Nat := varsOf 29
-def h75G : Nat := 0xffafafaaffafafaaffafafaaffafafaa
-lemma h75Bound : Lower h75R h75G 5 := carry_of (swaps := [(3,4),(2,3)]) (roots2 := h45R) (T2 := h45G) (by decide +kernel) h45Bound
-def h76R : List Nat := varsOf 45
-def h76G : Nat := 0xffafffaffa0afa0affafffaffa0afa0a
-def h76Pos : List Nat := [1,12,1,37,1,13,12,32,37,32,40,13,9,44]
-def h76Neg : List Nat := [0,8,5,36,4,5,4,0,5,36,8,8,8,36]
-def h76Mask : Nat := fullMask 14
-def h76Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,6461,292),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x296a,9084),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x3c62,7170),(0xffffffff00000000ffffffff00000000,0x2788,8712)]
-def h76Steps : List (Nat × Nat × Nat) := [(1,0,1),(3,0,1),(1,0,3),(2,1,2),(1,3,5)]
-def h76W : BT Decor := buildWiresBT 4 h76Base h76Steps
-def h76AutoList : List (List (Nat × Nat)) := [[],[(0,5)]]
-def h76Autos : BT (List (Nat × Nat)) := btOfList 1 h76AutoList
-lemma h76Pairs : goodPairs h76G h76Pos h76Neg := goodPairs_of (by decide +kernel)
-lemma h76BaseOk : ∀ x ∈ h76Base, faithful h76Pos h76Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h76WOk : btAll (fun x => faithful h76Pos h76Neg x ∧ x.1 < 2^128) h76W := buildWiresBT_faithful h76BaseOk
-lemma h76AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h76G = h76G) h76Autos := btAll_ofList (autos_of (by decide +kernel))
-def h76SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 1 0,3),some (subcubeFast 8 0,4),some (subcubeFast 32 0,3),some (0xff00ff00ff00ff00ff00ff00ff00ff0,4)]
-def h76Slices : BT (Option (Nat × Nat)) := btOfList 2 h76SliceList
-def h76Specs : List PoolSpec := [(0,[]),(1,[]),(3,[]),(2,[])]
-def h76Pools : BT (Option BoundPool) := buildPoolsBT 2 h76W h76R h76Slices h76Specs
-set_option maxRecDepth 200000 in
-lemma h76Slice3 : Slice h76R h76G (0xff00ff00ff00ff00ff00ff00ff00ff0) 4 := opposite_slice (oppositeRow 2 3 41) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h20Bound
-set_option maxRecDepth 200000 in
-lemma h76Slice2 : Slice h76R h76G (subcubeFast 32 0) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h4Bound
-set_option maxRecDepth 200000 in
-lemma h76Slice1 : Slice h76R h76G (subcubeFast 8 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h69Bound
-set_option maxRecDepth 200000 in
-lemma h76Slice0 : Slice h76R h76G (subcubeFast 1 0) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h72Bound
-lemma h76SlicesOk : btAll (sliceSpec h76R h76G) h76Slices := btAll_ofList (P := sliceSpec h76R h76G) (sliceSpecCons h76Slice0 (sliceSpecCons h76Slice1 (sliceSpecCons h76Slice2 (sliceSpecCons h76Slice3 sliceSpecNil))))
-lemma h76PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h76R h76G c) h76Pools := buildPoolsBT_sound h76SlicesOk
-def h76Empty : BT (List (List Nat)) := BT.empty
-lemma h76EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h76G (2 - 1) xs.toFinset) h76Empty := trivial
-def h76Block2_0 : List NodeSpec := nodesWithIdentity [([0,7,8],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h76Test2_0 : checkNodesBT h76W h76G h76Mask h76Pools h76Autos h76Empty 2 h76Block2_0 = true := by decide +kernel
-def h76Nodes2 : List NodeSpec := h76Block2_0
-lemma h76Check2 : checkNodesBT h76W h76G h76Mask h76Pools h76Autos h76Empty 2 h76Nodes2 = true := h76Test2_0
-def h76Bucket2 : BT (List (List Nat)) := buildBucketsBT h76W h76Nodes2
-lemma h76Bucket2Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h76G 2 xs.toFinset) h76Bucket2 := buildBucketsBT_sound (by decide) h76Pairs h76WOk h76PoolsOk h76AutosOk h76EmptyOk h76Check2
-def h76Block3_0 : List NodeSpec := indexPairNodes [(306,0), (338,0), (526,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h76Test3_0 : checkNodesBT h76W h76G h76Mask h76Pools h76Autos h76Bucket2 3 h76Block3_0 = true := by decide +kernel
-def h76Nodes3 : List NodeSpec := h76Block3_0
-lemma h76Check3 : checkNodesBT h76W h76G h76Mask h76Pools h76Autos h76Bucket2 3 h76Nodes3 = true := h76Test3_0
-def h76Bucket3 : BT (List (List Nat)) := buildBucketsBT h76W h76Nodes3
-lemma h76Bucket3Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h76G 3 xs.toFinset) h76Bucket3 := buildBucketsBT_sound (by decide) h76Pairs h76WOk h76PoolsOk h76AutosOk h76Bucket2Ok h76Check3
-def h76Block4_0 : List NodeSpec := indexTripleNodes [(62,12,2), (94,16,2), (158,2,2), (278,4,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h76Test4_0 : checkNodesBT h76W h76G h76Mask h76Pools h76Autos h76Bucket3 4 h76Block4_0 = true := by decide +kernel
-def h76Nodes4 : List NodeSpec := h76Block4_0
-lemma h76Check4 : checkNodesBT h76W h76G h76Mask h76Pools h76Autos h76Bucket3 4 h76Nodes4 = true := h76Test4_0
-def h76Bucket4 : BT (List (List Nat)) := buildBucketsBT h76W h76Nodes4
-lemma h76Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h76G 4 xs.toFinset) h76Bucket4 := buildBucketsBT_sound (by decide) h76Pairs h76WOk h76PoolsOk h76AutosOk h76Bucket3Ok h76Check4
-def h76Block5_0 : List NodeSpec := [([0,1,2,3],[0,1,3],[0,1])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h76Test5_0 : checkNodesBT h76W h76G h76Mask h76Pools h76Autos h76Bucket4 5 h76Block5_0 = true := by decide +kernel
-def h76Nodes5 : List NodeSpec := h76Block5_0
-lemma h76Check5 : checkNodesBT h76W h76G h76Mask h76Pools h76Autos h76Bucket4 5 h76Nodes5 = true := h76Test5_0
-def h76Bucket5 : BT (List (List Nat)) := buildBucketsBT h76W h76Nodes5
-lemma h76Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h76G 5 xs.toFinset) h76Bucket5 := buildBucketsBT_sound (by decide) h76Pairs h76WOk h76PoolsOk h76AutosOk h76Bucket4Ok h76Check5
-lemma h76Bound : Lower h76R h76G 6 := lower_of_forestBT (essPairs := [(VAR 0,0,1),(VAR 2,1,5),(VAR 3,4,12),(VAR 5,0,32)]) (by decide +kernel) h76Bucket5Ok (by decide +kernel)
-def h77R : List Nat := varsOf 53
-def h77G : Nat := 0xffffafaffafaaaaaffffafaffafaaaaa
-lemma h77Bound : Lower h77R h77G 4 := carry_of (swaps := [(2,3),(3,4),(4,5),(1,2),(2,3),(3,4),(2,3)]) (roots2 := h31R) (T2 := h31G) (by decide +kernel) h31Bound
-def h78R : List Nat := varsOf 57
-def h78G : Nat := 0xffaaaaaaff00aa00ffaaaaaaff00aa00
-lemma h78Bound : Lower h78R h78G 4 := carry_of (swaps := [(2,3),(3,4),(2,3)]) (roots2 := h46R) (T2 := h46G) (by decide +kernel) h46Bound
-def h61R : List Nat := varsOf 61
-def h61G : Nat := 0xffafafaafa0aaa0affafafaafa0aaa0a
-def h61Pos : List Nat := [1,28,1,13,1,40,13,28,48,37,40,9,37,17,37,28,48,17,53,33,9,48,60,40,40,45,60,28,9,33,28,40,40,60,53,13,13,29,48,1,25,13,28,1,17,17,1,56,33,37,25,45,60,48,28,28,13]
-def h61Neg : List Nat := [0,24,5,12,4,32,5,12,32,5,8,8,36,21,32,20,16,16,52,32,5,52,52,36,44,44,44,16,12,5,52,0,12,24,21,8,44,21,24,8,24,4,21,32,20,5,21,24,0,4,21,5,20,36,8,4,21]
-def h61Mask : Nat := fullMask 57
-def h61Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x10f7bbc321e7a5d,0x10c642420102244),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x1da063e4e44d2ca,0x1be763577f4b2dc),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x1dc873bdfd08cea,0x4081db17000c8a),(0xffff0000ffff0000ffff0000ffff0000,0xf4b5664c67a182,0x114d5664867a002),(0xffffffff00000000ffffffff00000000,0x3b8047a7ed5720,0x20081047ec5120)]
-def h61Steps : List (Nat × Nat × Nat) := [(1,0,1),(3,0,1),(0,1,2),(1,1,2),(2,1,2),(0,2,3),(2,2,3),(0,2,4),(1,2,4),(2,2,4),(3,2,4),(0,2,5),(1,2,5),(3,2,5),(1,2,6),(2,2,6),(3,2,6),(1,3,9),(2,3,9),(0,4,5),(2,4,5),(0,4,6),(1,4,6),(2,4,6),(0,4,9),(1,4,9),(2,4,9),(2,5,9),(3,1,2),(0,1,3),(2,1,3),(3,1,3),(0,1,4),(1,1,4),(2,1,4),(3,1,4),(1,0,2),(3,0,2),(1,0,3),(3,0,3),(1,0,4),(2,0,4),(3,0,4),(1,0,7),(1,4,7),(2,4,7),(1,0,50),(2,1,50),(2,2,50),(3,0,8),(0,4,8),(2,4,8),(3,4,8),(1,0,9),(1,0,12),(2,5,12),(1,9,12),(1,0,37),(1,2,37),(2,2,37),(1,1,12),(2,1,12),(1,0,66),(1,0,15),(3,0,15),(1,1,15),(1,0,52),(1,2,52),(2,5,15),(2,4,73),(3,1,17),(1,0,25),(1,2,28),(2,2,28),(3,6,8),(1,0,79),(0,4,59),(1,6,12),(3,20,27),(1,9,33),(2,4,33),(1,2,40),(0,1,59),(3,0,65),(0,2,65),(3,0,70),(3,2,70),(2,1,21),(2,4,21),(1,0,93),(2,1,93),(3,1,77),(1,1,78),(2,1,69),(3,7,41),(3,37,41),(3,1,76),(3,40,41),(2,44,75),(1,1,42),(2,1,42),(2,4,42),(2,1,106),(3,9,43),(0,43,70),(1,7,15),(1,0,55),(1,9,44),(1,33,44),(1,0,85),(0,1,45),(3,7,45),(3,2,45),(2,1,117),(0,8,45),(3,9,45),(3,33,45),(3,37,45),(0,1,63),(3,7,38),(3,15,38),(1,3,91),(2,3,91),(1,7,40),(2,8,37),(2,8,39),(1,9,37),(3,40,63)]
-def h61W : BT Decor := buildWiresBT 8 h61Base h61Steps
-def h61AutoList : List (List (Nat × Nat)) := [[]]
-def h61Autos : BT (List (Nat × Nat)) := btOfList 1 h61AutoList
-lemma h61Pairs : goodPairs h61G h61Pos h61Neg := goodPairs_of (by decide +kernel)
-lemma h61BaseOk : ∀ x ∈ h61Base, faithful h61Pos h61Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h61WOk : btAll (fun x => faithful h61Pos h61Neg x ∧ x.1 < 2^128) h61W := buildWiresBT_faithful h61BaseOk
-lemma h61AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h61G = h61G) h61Autos := btAll_ofList (autos_of (by decide +kernel))
-def h61SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 4,4),some (subcubeFast 0 8,4),some (subcubeFast 0 16,6),some (subcubeFast 0 32,5),some (subcubeFast 1 0,6),some (subcubeFast 1 8,3),some (subcubeFast 1 16,3),some (subcubeFast 1 32,4),some (subcubeFast 8 0,5),some (subcubeFast 8 16,4),some (subcubeFast 16 0,6),some (subcubeFast 32 0,4),some (subcubeFast 32 16,3),some (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5,5),some (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f,5),some (0xff00ff0000ff00ffff00ff0000ff00ff,5),some (0xff00ff00ff00ff00ff00ff00ff00ff0,4),some (0xf0f0f0ff0f0f0f00f0f0f0ff0f0f0f0,5),some (0xff00ffff00ff0000ff00ffff00ff00,5)]
-def h61Slices : BT (Option (Nat × Nat)) := btOfList 5 h61SliceList
-def h61Specs : List PoolSpec := poolSteps h61Steps [(4,[]),(0,[]),(7,[]),(13,[]),(5,[]),(8,[]),(4,[3]),(3,[0]),(4,[4]),(2,[0,4]),(2,[0]),(10,[0]),(3,[]),(11,[]),(1,[]),(15,[]),(4,[12]),(10,[]),(2,[]),(4,[13]),(2,[0,13]),(4,[19]),(4,[20]),(18,[]),(3,[1]),(2,[1,4]),(2,[4,1,22]),(4,[22]),(4,[23]),(2,[1]),(10,[1]),(2,[1,22]),(10,[1,22]),(2,[1,23]),(10,[1,23]),(4,[35]),(4,[14]),(10,[1,14]),(4,[16]),(4,[16,88]),(4,[21]),(4,[2]),(2,[2]),(3,[36]),(3,[64]),(2,[4]),(3,[54]),(10,[36]),(2,[36]),(8,[38]),(14,[]),(6,[]),(4,[7]),(4,[10]),(9,[]),(3,[37]),(10,[37]),(2,[37]),(4,[99]),(4,[100]),(4,[101]),(10,[3]),(2,[3]),(12,[]),(3,[38]),(10,[4]),(4,[4,103]),(8,[38,103]),(4,[32]),(10,[32]),(2,[32]),(10,[35]),(2,[35]),(10,[10]),(2,[10]),(8,[39]),(10,[2]),(3,[39]),(4,[2,45]),(10,[2,45]),(4,[4,107]),(4,[28]),(10,[28]),(10,[7]),(2,[40]),(10,[40]),(10,[40,110]),(4,[32,117]),(4,[110]),(17,[]),(4,[112]),(10,[40,112]),(2,[42]),(10,[42]),(2,[2,43]),(16,[]),(3,[63]),(4,[2,44]),(2,[2,44]),(10,[2,44]),(2,[2,45]),(10,[3,50]),(10,[4,28]),(2,[4,34]),(2,[33]),(10,[33]),(2,[34]),(10,[34]),(4,[4,17]),(8,[17]),(4,[4,18]),(8,[18]),(4,[4,26]),(2,[28]),(3,[57]),(10,[32,58]),(4,[33]),(4,[34]),(10,[34,35]),(2,[35,81]),(2,[7]),(2,[7,54]),(2,[7,60]),(2,[7,61]),(4,[8]),(2,[8]),(10,[8]),(4,[9]),(2,[9]),(10,[9]),(10,[10,65])]
-def h61Pools : BT (Option BoundPool) := buildPoolsBT 8 h61W h61R h61Slices h61Specs
-set_option maxRecDepth 200000 in
-lemma h61Slice18 : Slice h61R h61G (0xff00ffff00ff0000ff00ffff00ff00) 5 := opposite_slice (oppositeRow 3 5 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h62Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice17 : Slice h61R h61G (0xf0f0f0ff0f0f0f00f0f0f0ff0f0f0f0) 5 := opposite_slice (oppositeRow 2 5 57) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h63Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice16 : Slice h61R h61G (0xff00ff00ff00ff00ff00ff00ff00ff0) 4 := opposite_slice (oppositeRow 2 3 41) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h20Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice15 : Slice h61R h61G (0xff00ff0000ff00ffff00ff0000ff00ff) 5 := mapped_slice (identifyRow 3 5 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h64Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice14 : Slice h61R h61G (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f) 5 := mapped_slice (identifyRow 2 4 57) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h65Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice13 : Slice h61R h61G (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5) 5 := mapped_slice (identifyRow 0 2 60) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h66Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice12 : Slice h61R h61G (subcubeFast 32 16) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h4Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice11 : Slice h61R h61G (subcubeFast 32 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h67Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice10 : Slice h61R h61G (subcubeFast 16 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h68Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice9 : Slice h61R h61G (subcubeFast 8 16) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h69Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice8 : Slice h61R h61G (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h70Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice7 : Slice h61R h61G (subcubeFast 1 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h71Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice6 : Slice h61R h61G (subcubeFast 1 16) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h72Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice5 : Slice h61R h61G (subcubeFast 1 8) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h73Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice4 : Slice h61R h61G (subcubeFast 1 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h74Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice3 : Slice h61R h61G (subcubeFast 0 32) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h75Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice2 : Slice h61R h61G (subcubeFast 0 16) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h76Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice1 : Slice h61R h61G (subcubeFast 0 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h77Bound
-set_option maxRecDepth 200000 in
-lemma h61Slice0 : Slice h61R h61G (subcubeFast 0 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h78Bound
-lemma h61SlicesOk : btAll (sliceSpec h61R h61G) h61Slices := btAll_ofList (P := sliceSpec h61R h61G) (sliceSpecCons h61Slice0 (sliceSpecCons h61Slice1 (sliceSpecCons h61Slice2 (sliceSpecCons h61Slice3 (sliceSpecCons h61Slice4 (sliceSpecCons h61Slice5 (sliceSpecCons h61Slice6 (sliceSpecCons h61Slice7 (sliceSpecCons h61Slice8 (sliceSpecCons h61Slice9 (sliceSpecCons h61Slice10 (sliceSpecCons h61Slice11 (sliceSpecCons h61Slice12 (sliceSpecCons h61Slice13 (sliceSpecCons h61Slice14 (sliceSpecCons h61Slice15 (sliceSpecCons h61Slice16 (sliceSpecCons h61Slice17 (sliceSpecCons h61Slice18 sliceSpecNil)))))))))))))))))))
-set_option maxRecDepth 200000 in
-lemma h61PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h61R h61G c) h61Pools := buildPoolsBT_sound h61SlicesOk
-def h61Empty : BT (List (List Nat)) := BT.empty
-lemma h61EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h61G (4 - 1) xs.toFinset) h61Empty := trivial
-def h61Block4_0 : List NodeSpec := indexPairNodes [(108022827,0), (26483017,0), (7922331,1761), (27345563,1761), (99634219,0), (1728559,0), (478273621,0), (339773495,0), (27394871,0), (285488139,0), (1451237531,0), (128982071,0), (80747575,0), (102832171,16513)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test4_0 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Empty 4 h61Block4_0 = true := by decide +kernel
-def h61Nodes4 : List NodeSpec := h61Block4_0
-lemma h61Check4 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Empty 4 h61Nodes4 = true := h61Test4_0
-def h61Bucket4 : BT (List (List Nat)) := buildBucketsBT h61W h61Nodes4
-set_option maxRecDepth 200000 in
-lemma h61Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h61G 4 xs.toFinset) h61Bucket4 := buildBucketsBT_sound (by decide) h61Pairs h61WOk h61PoolsOk h61AutosOk h61EmptyOk h61Check4
-def h61Block5_0 : List NodeSpec := indexPairNodes [(1272,0), (745567,0), (9330,0), (225515,258), (58431,1827), (1007851,0), (532534,0), (231487,0), (778475,465), (569407,64), (2277471,0), (205655,0), (671903,47281), (704671,2769), (729311,2957), (2557355,0), (2688427,0), (9634155,0), (639391,0), (672159,0), (618559,3233), (9394,0), (756923,1697), (2428331,1825), (2559403,1889), (3214523,1697), (606879,12353), (639647,3558409), (860703,12353), (730655,12609), (3506549,64), (3899755,465)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test5_0 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket4 5 h61Block5_0 = true := by decide +kernel
-def h61Block5_1 : List NodeSpec := indexPairNodes [(3965291,2), (643135,433), (8454507,47313), (3047787,867), (651327,794656), (2228767,0), (2490911,0), (984607,103201), (2229791,111457), (725055,0), (370719,5185), (26143,1889), (51914271,12609), (52962847,0), (9765719,1057), (4096855,5825), (981512279,0), (38012503,6081), (931147883,433), (645935211,0), (790591,0), (595636341,72), (880840811,0), (806975,0), (2867435,0), (830533679,6465), (813764655,0), (245426283,1249), (947916907,497), (9109867,2), (545321007,4260163), (264310831,4522179)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test5_1 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket4 5 h61Block5_1 = true := by decide +kernel
-def h61Block5_2 : List NodeSpec := indexPairNodes [(174123115,1249), (749631,16), (774207,0), (847935,8745), (1712175,244917081625), (1124196437,174090125), (230748207,24386073), (39907375,1905027), (9506863,5441), (2393015,0), (61870519,20097), (1714703,53121), (13701167,0), (48304175,0), (193495863,0), (34091831,0), (14202927,0), (1777711,4096225), (612438063,3233), (696324143,0), (1794095,3768545), (9637391,2), (38372751,19585), (180424751,19585), (188813359,0), (222367791,14228395545), (35721263,19585), (14222187,433), (12387179,433), (255869207,0), (14484311,433), (2905119,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test5_2 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket4 5 h61Block5_2 = true := by decide +kernel
-def h61Block5_3 : List NodeSpec := indexPairNodes [(921663,64), (11031583,0), (946239,0), (954431,2), (595669109,64), (692115563,22401), (169890847,0), (962623,0), (489503,22657), (717231135,0), (566290539,0), (45353247,23169), (3953695,23169), (938047,8256), (545276183,8), (48328821,433), (2909215,2957), (3113815,0), (3179351,0), (1318999,10881985), (3703639,465), (197148951,1569), (11076439,2539697), (987199,378665), (12648747,465), (8586071,433), (12067871,0), (198719,8745), (213926167,1057), (1019967,852032), (4031319,24961), (200285271,64)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test5_3 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket4 5 h61Block5_3 = true := by decide +kernel
-def h61Block5_4 : List NodeSpec := indexPairNodes [(228383,0), (687135,465), (194623,64), (12191319,0), (1028159,0), (1036351,0), (880703,0), (37488215,45573), (55083835,26753), (44254007,5953), (40109655,4), (39585367,624449), (49325335,1057), (2241055,23169), (53519639,1569), (13239895,7105), (3027767,0), (13764183,0), (8061755,32804), (8923183,497), (3946543,497), (8927279,0), (741439,247817), (578900085,0), (788733999,2392289), (905279,0), (165680159,87042225), (49294367,0), (57936159,64), (241231959,0), (237041751,0), (2382749783,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test5_4 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket4 5 h61Block5_4 = true := by decide +kernel
-def h61Block5_5 : List NodeSpec := indexPairNodes [(2449858647,0), (42732119,0), (42208855,0), (136326175,465), (16124191,16513), (700460063,64), (775957535,0), (26236971,444899537), (13118495,23169), (684095,0), (692287,433), (260159,0), (708671,794656), (553023,0), (38856811,11473), (138416235,497)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test5_5 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket4 5 h61Block5_5 = true := by decide +kernel
-def h61Nodes5 : List NodeSpec := h61Block5_0 ++ h61Block5_1 ++ h61Block5_2 ++ h61Block5_3 ++ h61Block5_4 ++ h61Block5_5
-lemma h61Check5 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket4 5 h61Nodes5 = true := by
-  unfold h61Nodes5 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨⟨⟨h61Test5_0,h61Test5_1⟩,h61Test5_2⟩,h61Test5_3⟩,h61Test5_4⟩,h61Test5_5⟩
-def h61Bucket5 : BT (List (List Nat)) := buildBucketsBT h61W h61Nodes5
-set_option maxRecDepth 200000 in
-lemma h61Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h61G 5 xs.toFinset) h61Bucket5 := buildBucketsBT_sound (by decide) h61Pairs h61WOk h61PoolsOk h61AutosOk h61Bucket4Ok h61Check5
-def h61Block6_0 : List NodeSpec := indexPairNodes [(252,30), (382,108), (634,486), (1146,1894), (1150,6212), (266367,8460), (8318,68), (65662,122988), (23679,32878), (13887,1040420), (14911,4055158), (27775,6246), (42047,5087582), (79999,8454), (44095,9290060), (446,122), (698,151799), (702,36), (1210,3180179), (1214,8260731), (450751,117785), (516287,1512219), (1130687,48382605), (8382,24658), (65726,90168), (15935,1695218903), (110783,114), (118975,8260731), (35903,688833609), (46143,17738664029), (25119,3307697), (176351,1647133)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test6_0 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket5 6 h61Block6_0 = true := by decide +kernel
-def h61Block6_1 : List NodeSpec := indexPairNodes [(26143,28558221), (50239,52110942302), (184543,226558749), (368831,1639979), (2261847,64752751), (8521303,363898407), (4724799,49232), (411711,65135), (725055,843858), (432035903,32854), (585791,843846), (289429567,204478503), (634943,28337423471), (339761215,106562), (536639,40978704949), (8783447,855999351), (5773375,16480), (1329215,24684), (823359,1359257207), (831551,47395937915), (839743,379436206255), (9306671,0xfe33e12113), (9045551,0xe6184b828213), (13643823,983161137227), (3706927,68669683558475), (14949423,0x662624f8684b), (2458415,8281376970827), (9568815,47564636348691), (9307695,0xa51a05018213), (12113967,0x644b0c282c13), (15740975,23402208319563), (9474095,0x511201028584b)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test6_1 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket5 6 h61Block6_1 = true := by decide +kernel
-def h61Block6_2 : List NodeSpec := indexPairNodes [(34079791,3594628239115), (15473711,22617437263947), (1262015,8256), (4915519,8196), (4784959,832581209), (6581311,210246695), (8918047,29622839), (913471,173008533675), (798783,9216078), (4000031,21765267), (929855,26911354479), (1327551,24648), (5177663,90124), (5047103,866155755), (7629887,217587309), (11015199,58204727), (8522015,84965707), (182335,0xa20b0f093c5b), (822,209895493), (500159,90176), (516543,464025192233), (1065407,8256), (1098175,24644), (1086,2820591265495), (65846,13474248773), (95263,246156909), (97311,405320632107561), (190527,0xb85188120a5e33), (206911,844022), (1590,66102007), (1933631,0), (2064703,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test6_2 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket5 6 h61Block6_2 = true := by decide +kernel
-def h61Block6_3 : List NodeSpec := indexPairNodes [(211007,5292306398247), (6226239,73732), (215103,901158), (6488383,7045), (223295,844406), (3212887,416637272133), (1868607,124272425), (1934143,8875817343957061), (1999679,920672041), (2065215,256931909), (9270,10265606213), (66614,66084069), (574,876774), (886319,0x6b81183190ca19), (951855,481605516823065), (52287,4798637627), (1409855,57408), (56383,3402067443251), (1475391,813873221), (626751,2450078759), (1207359,50817), (1731647,478213), (667711,4900305959), (239679,6392153831575), (106960959,49941318167), (922655,24042177991), (243775,7285271886995), (111155263,81984), (115349567,49216), (149567,293961327), (3082527,59068915309), (1400919,22289621)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test6_3 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket5 6 h61Block6_3 = true := by decide +kernel
-def h61Block6_4 : List NodeSpec := indexPairNodes [(1433687,40972), (716863,893006), (205855,4057470010645), (137279,6779395167), (561215,893002), (593983,44562873439), (306202687,957024527), (3605791,5906029), (3344671,1913458473), (675903,6811909751), (390088767,2021750853), (28330047,57412), (227391,9500144602058903), (251967,37658878589991), (256063,38208634403931), (65598,1191542383), (979007,893018), (757823,893006), (766015,612552303), (1044543,2450208939), (528447,5978830077143), (544831,15100214311), (29101631,128466729), (198719,9597287515), (19664447,122948)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test6_4 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket5 6 h61Block6_4 = true := by decide +kernel
-def h61Nodes6 : List NodeSpec := h61Block6_0 ++ h61Block6_1 ++ h61Block6_2 ++ h61Block6_3 ++ h61Block6_4
-lemma h61Check6 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket5 6 h61Nodes6 = true := by
-  unfold h61Nodes6 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨⟨h61Test6_0,h61Test6_1⟩,h61Test6_2⟩,h61Test6_3⟩,h61Test6_4⟩
-def h61Bucket6 : BT (List (List Nat)) := buildBucketsBT h61W h61Nodes6
-set_option maxRecDepth 200000 in
-lemma h61Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h61G 6 xs.toFinset) h61Bucket6 := buildBucketsBT_sound (by decide) h61Pairs h61WOk h61PoolsOk h61AutosOk h61Bucket5Ok h61Check6
-def h61Block7_0 : List NodeSpec := indexPairNodes [(126,800846), (190,462108843), (153663,2064538827), (157759,3439697099), (323631,19144459), (331823,7947), (170047,6526520883), (178239,27179695307), (318,24758536293939), (574,7215142135), (1086,2820593034899), (60479,0x3f0dc09059c27), (137279,2683901877811), (141375,0x5c7c0f02ce6f), (145471,1449048513739), (149567,3453204642855), (8254,0x25836085049e33), (9791,65834736843), (32830,33118592203), (65598,3608008129683)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test7_0 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket6 7 h61Block7_0 = true := by decide +kernel
-def h61Nodes7 : List NodeSpec := h61Block7_0
-lemma h61Check7 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket6 7 h61Nodes7 = true := h61Test7_0
-def h61Bucket7 : BT (List (List Nat)) := buildBucketsBT h61W h61Nodes7
-set_option maxRecDepth 200000 in
-lemma h61Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h61G 7 xs.toFinset) h61Bucket7 := buildBucketsBT_sound (by decide) h61Pairs h61WOk h61PoolsOk h61AutosOk h61Bucket6Ok h61Check7
-def h61Block8_0 : List NodeSpec := nodesWithIdentity [([0,1,2,3,4],[0,17,18])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h61Test8_0 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket7 8 h61Block8_0 = true := by decide +kernel
-def h61Nodes8 : List NodeSpec := h61Block8_0
-lemma h61Check8 : checkNodesBT h61W h61G h61Mask h61Pools h61Autos h61Bucket7 8 h61Nodes8 = true := h61Test8_0
-def h61Bucket8 : BT (List (List Nat)) := buildBucketsBT h61W h61Nodes8
-set_option maxRecDepth 200000 in
-lemma h61Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h61G 8 xs.toFinset) h61Bucket8 := buildBucketsBT_sound (by decide) h61Pairs h61WOk h61PoolsOk h61AutosOk h61Bucket7Ok h61Check8
-set_option maxRecDepth 200000 in
-lemma h61Bound : Lower h61R h61G 9 := lower_of_forestBT (essPairs := [(VAR 0,0,1),(VAR 2,1,5),(VAR 3,5,13),(VAR 4,12,28),(VAR 5,5,37)]) (by decide +kernel) h61Bucket8Ok (by decide +kernel)
-def h79R : List Nat := varsOf 62
-def h79G : Nat := 0xfcccfffcf0c0fcccfcccfffcf0c0fccc
-lemma h79Bound : Lower h79R h79G 9 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h33R) (T2 := h33G) (by decide +kernel) h33Bound
-def h80R : List Nat := varsOf 62
-def h80G : Nat := 0xfcffccfcf0ccc0ccfcffccfcf0ccc0cc
-lemma h80Bound : Lower h80R h80G 9 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h61R) (T2 := h61G) (by decide +kernel) h61Bound
-def h81R : List Nat := varsOf 62
-def h81G : Nat := 0xffcfcfccffcccc0cffcfcfccffcccc0c
-lemma h81Bound : Lower h81R h81G 9 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h48R) (T2 := h48G) (by decide +kernel) h48Bound
-def h83R : List Nat := varsOf 58
-def h83G : Nat := 0xffffffff33cc0000ffffffff33cc0000
-lemma h83Bound : Lower h83R h83G 5 := carry_of (swaps := [(0,1),(1,2),(2,3),(3,4),(4,5),(3,4)]) (roots2 := h62R) (T2 := h62G) (by decide +kernel) h62Bound
-def h84R : List Nat := varsOf 54
-def h84G : Nat := 0xfffff0f0f3f30000fffff0f0f3f30000
-lemma h84Bound : Lower h84R h84G 5 := carry_of (swaps := [(4,5),(0,1),(1,2),(2,3),(3,4),(1,2)]) (roots2 := h52R) (T2 := h52G) (by decide +kernel) h52Bound
-def h85R : List Nat := varsOf 58
-def h85G : Nat := 0xffffff00ffcc0000ffffff00ffcc0000
-lemma h85Bound : Lower h85R h85G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(0,1),(1,2),(2,3),(0,1)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h86R : List Nat := varsOf 30
-def h86G : Nat := 0xf3c0f000f3c0f000f3c0f000f3c0f000
-lemma h86Bound : Lower h86R h86G 5 := carry_of (swaps := [(4,5),(2,3),(3,4),(2,3),(0,1),(1,2)]) (roots2 := h27R) (T2 := h27G) (by decide +kernel) h27Bound
-def h87R : List Nat := varsOf 54
-def h87G : Nat := 0xfffff0f0c0c00000fffff0f0c0c00000
-lemma h87Bound : Lower h87R h87G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(4,5),(1,2),(2,3),(3,4),(2,3),(0,1),(1,2)]) (roots2 := h24R) (T2 := h24G) (by decide +kernel) h24Bound
-def h88R : List Nat := varsOf 58
-def h88G : Nat := 0xffffff0033000000ffffff0033000000
-lemma h88Bound : Lower h88R h88G 5 := lift_of (z := 2) (o := 0) (essPairs := [(VAR 1,24,26)]) (by decide +kernel) h37Bound
-def h89R : List Nat := varsOf 60
-def h89G : Nat := 0xfffffff0ff00f000fffffff0ff00f000
-lemma h89Bound : Lower h89R h89G 5 := carry_of (swaps := [(2,3),(3,4),(2,3),(0,1),(1,2)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h90R : List Nat := varsOf 46
-def h90G : Nat := 0xfffffffff3c0f3c0fffffffff3c0f3c0
-lemma h90Bound : Lower h90R h90G 4 := carry_of (swaps := [(0,1),(1,2),(2,3),(3,4),(4,5),(3,4),(1,2),(2,3),(0,1),(1,2)]) (roots2 := h31R) (T2 := h31G) (by decide +kernel) h31Bound
-def h91R : List Nat := varsOf 60
-def h91G : Nat := 0xfffffff0f0f0f000fffffff0f0f0f000
-lemma h91Bound : Lower h91R h91G 5 := carry_of (swaps := [(2,3),(3,4),(0,1),(1,2),(2,3),(1,2)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h82R : List Nat := varsOf 62
-def h82G : Nat := 0xfffffff0f3c0f000fffffff0f3c0f000
-def h82Pos : List Nat := [12,24,14,22,12,14,24,22,24,40,36,36,48,40,50,22,58,50,50,48,52,48,38,22,30,38,28,42,14,12,36]
-def h82Neg : List Nat := [8,26,10,20,4,6,8,18,16,8,4,32,32,32,26,6,26,18,34,20,20,16,6,26,26,34,20,34,26,20,20]
-def h82Mask : Nat := fullMask 31
-def h82Base : List Decor := [(0xcccccccccccccccccccccccccccccccc,0x1bc7c0ac,0x1bc7c0a6),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x77d08cbd,0x64588438),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x3d012377,0x11814247),(0xffff0000ffff0000ffff0000ffff0000,0x5bfd1ca,0x75bb418a),(0xffffffff00000000ffffffff00000000,0x4a7f7e00,0xa043800)]
-def h82Steps : List (Nat × Nat × Nat) := [(0,0,3),(1,1,2),(1,1,3),(1,1,4),(1,2,3),(1,2,4),(3,1,10),(1,3,4),(2,3,5),(1,4,5),(3,2,8),(1,4,13),(1,0,4),(3,4,17),(3,4,6),(3,2,7),(3,1,9),(3,1,12),(3,2,12)]
-def h82W : BT Decor := buildWiresBT 5 h82Base h82Steps
-def h82AutoList : List (List (Nat × Nat)) := [[]]
-def h82Autos : BT (List (Nat × Nat)) := btOfList 1 h82AutoList
-lemma h82Pairs : goodPairs h82G h82Pos h82Neg := goodPairs_of (by decide +kernel)
-lemma h82BaseOk : ∀ x ∈ h82Base, faithful h82Pos h82Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h82WOk : btAll (fun x => faithful h82Pos h82Neg x ∧ x.1 < 2^128) h82W := buildWiresBT_faithful h82BaseOk
-lemma h82AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h82G = h82G) h82Autos := btAll_ofList (autos_of (by decide +kernel))
-def h82SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 2,5),some (subcubeFast 0 16,4),some (subcubeFast 2 0,5),some (subcubeFast 4 0,5),some (subcubeFast 6 0,4),some (subcubeFast 8 0,5),some (subcubeFast 8 2,4),some (subcubeFast 16 0,4),some (subcubeFast 16 2,4),some (subcubeFast 18 0,4),some (subcubeFast 32 0,5),some (subcubeFast 32 16,3),some (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3,7),some (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f,5),some (0xff0000ffff0000ffff0000ffff0000ff,5),some (0xff00ff00ff00ff00ff00ff00ff00ff0,5)]
-def h82Slices : BT (Option (Nat × Nat)) := btOfList 4 h82SliceList
-def h82Specs : List PoolSpec := [(12,[]),(2,[]),(0,[]),(3,[(0,0,3)]),(4,[]),(5,[(0,0,3)]),(12,[(0,0,3)]),(7,[]),(10,[(0,0,3)]),(1,[]),(6,[]),(11,[]),(12,[(0,0,3),(2,3,5)]),(3,[(1,0,4)]),(5,[(1,0,4)]),(8,[]),(9,[]),(12,[(1,0,4)]),(10,[]),(12,[(1,0,4),(3,4,17)]),(3,[]),(12,[(1,1,2)]),(5,[]),(13,[]),(15,[]),(12,[(1,1,3)]),(2,[(1,1,3)]),(12,[(1,1,4)]),(0,[(1,2,3)]),(14,[])]
-def h82Pools : BT (Option BoundPool) := buildPoolsBT 5 h82W h82R h82Slices h82Specs
-set_option maxRecDepth 200000 in
-lemma h82Slice15 : Slice h82R h82G (0xff00ff00ff00ff00ff00ff00ff00ff0) 5 := opposite_slice (oppositeRow 2 3 58) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h83Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice14 : Slice h82R h82G (0xff0000ffff0000ffff0000ffff0000ff) 5 := mapped_slice (identifyRow 3 4 54) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h84Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice13 : Slice h82R h82G (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f) 5 := mapped_slice (identifyRow 2 4 58) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h85Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice12 : Slice h82R h82G (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3) 7 := mapped_slice (identifyRow 1 2 60) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h50Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice11 : Slice h82R h82G (subcubeFast 32 16) 3 := slice_fast_direct (zDead := 0) (by decide +kernel) h13Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice10 : Slice h82R h82G (subcubeFast 32 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h86Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice9 : Slice h82R h82G (subcubeFast 18 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice8 : Slice h82R h82G (subcubeFast 16 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice7 : Slice h82R h82G (subcubeFast 16 0) 4 := slice_fast_direct (zDead := 2) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice6 : Slice h82R h82G (subcubeFast 8 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h54Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice5 : Slice h82R h82G (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h87Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice4 : Slice h82R h82G (subcubeFast 6 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h37Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice3 : Slice h82R h82G (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h88Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice2 : Slice h82R h82G (subcubeFast 2 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h89Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice1 : Slice h82R h82G (subcubeFast 0 16) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h90Bound
-set_option maxRecDepth 200000 in
-lemma h82Slice0 : Slice h82R h82G (subcubeFast 0 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h91Bound
-lemma h82SlicesOk : btAll (sliceSpec h82R h82G) h82Slices := btAll_ofList (P := sliceSpec h82R h82G) (sliceSpecCons h82Slice0 (sliceSpecCons h82Slice1 (sliceSpecCons h82Slice2 (sliceSpecCons h82Slice3 (sliceSpecCons h82Slice4 (sliceSpecCons h82Slice5 (sliceSpecCons h82Slice6 (sliceSpecCons h82Slice7 (sliceSpecCons h82Slice8 (sliceSpecCons h82Slice9 (sliceSpecCons h82Slice10 (sliceSpecCons h82Slice11 (sliceSpecCons h82Slice12 (sliceSpecCons h82Slice13 (sliceSpecCons h82Slice14 (sliceSpecCons h82Slice15 sliceSpecNil))))))))))))))))
-set_option maxRecDepth 200000 in
-lemma h82PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h82R h82G c) h82Pools := buildPoolsBT_sound h82SlicesOk
-def h82Empty : BT (List (List Nat)) := BT.empty
-lemma h82EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h82G (4 - 1) xs.toFinset) h82Empty := trivial
-def h82Block4_0 : List NodeSpec := nodesWithIdentity [([0,3,6,8,10],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h82Test4_0 : checkNodesBT h82W h82G h82Mask h82Pools h82Autos h82Empty 4 h82Block4_0 = true := by decide +kernel
-def h82Nodes4 : List NodeSpec := h82Block4_0
-lemma h82Check4 : checkNodesBT h82W h82G h82Mask h82Pools h82Autos h82Empty 4 h82Nodes4 = true := h82Test4_0
-def h82Bucket4 : BT (List (List Nat)) := buildBucketsBT h82W h82Nodes4
-set_option maxRecDepth 200000 in
-lemma h82Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h82G 4 xs.toFinset) h82Bucket4 := buildBucketsBT_sound (by decide) h82Pairs h82WOk h82PoolsOk h82AutosOk h82EmptyOk h82Check4
-def h82Block5_0 : List NodeSpec := indexPairNodes [(2172,1280), (32828,812), (16956,1280), (25717,2316), (698,1505), (2230,1377), (15935,12), (33855,0), (2590,1377), (65598,0), (35903,0), (4158,0), (37951,0), (39999,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h82Test5_0 : checkNodesBT h82W h82G h82Mask h82Pools h82Autos h82Bucket4 5 h82Block5_0 = true := by decide +kernel
-def h82Nodes5 : List NodeSpec := h82Block5_0
-lemma h82Check5 : checkNodesBT h82W h82G h82Mask h82Pools h82Autos h82Bucket4 5 h82Nodes5 = true := h82Test5_0
-def h82Bucket5 : BT (List (List Nat)) := buildBucketsBT h82W h82Nodes5
-set_option maxRecDepth 200000 in
-lemma h82Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h82G 5 xs.toFinset) h82Bucket5 := buildBucketsBT_sound (by decide) h82Pairs h82WOk h82PoolsOk h82AutosOk h82Bucket4Ok h82Check5
-def h82Block6_0 : List NodeSpec := indexPairNodes [(124,1020), (16444,14636), (27765,1034508), (29813,1706284), (190,65539370), (318,229315882), (574,329782570), (1086,1621761292), (2110,1118313740), (8254,11142412)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h82Test6_0 : checkNodesBT h82W h82G h82Mask h82Pools h82Autos h82Bucket5 6 h82Block6_0 = true := by decide +kernel
-def h82Nodes6 : List NodeSpec := h82Block6_0
-lemma h82Check6 : checkNodesBT h82W h82G h82Mask h82Pools h82Autos h82Bucket5 6 h82Nodes6 = true := h82Test6_0
-def h82Bucket6 : BT (List (List Nat)) := buildBucketsBT h82W h82Nodes6
-set_option maxRecDepth 200000 in
-lemma h82Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h82G 6 xs.toFinset) h82Bucket6 := buildBucketsBT_sound (by decide) h82Pairs h82WOk h82PoolsOk h82AutosOk h82Bucket5Ok h82Check6
-def h82Block7_0 : List NodeSpec := nodesWithIdentity [([0,1,2,3,4],[0,1,2,16,18,20,22])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h82Test7_0 : checkNodesBT h82W h82G h82Mask h82Pools h82Autos h82Bucket6 7 h82Block7_0 = true := by decide +kernel
-def h82Nodes7 : List NodeSpec := h82Block7_0
-lemma h82Check7 : checkNodesBT h82W h82G h82Mask h82Pools h82Autos h82Bucket6 7 h82Nodes7 = true := h82Test7_0
-def h82Bucket7 : BT (List (List Nat)) := buildBucketsBT h82W h82Nodes7
-set_option maxRecDepth 200000 in
-lemma h82Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h82G 7 xs.toFinset) h82Bucket7 := buildBucketsBT_sound (by decide) h82Pairs h82WOk h82PoolsOk h82AutosOk h82Bucket6Ok h82Check7
-set_option maxRecDepth 200000 in
-lemma h82Bound : Lower h82R h82G 8 := lower_of_forestBT (essPairs := [(VAR 1,20,22),(VAR 2,8,12),(VAR 3,4,12),(VAR 4,6,22),(VAR 5,4,36)]) (by decide +kernel) h82Bucket7Ok (by decide +kernel)
-namespace Cofactor12116
+lemma cert679 : carryOK [(1,3),(1,2)] cert306 cert293 cert31 cert13 = true := by decide +kernel
+lemma cert678 : Lower cert306 cert293 4 := carry_of cert679 cert677
 
-def R_23 : List Nat := varsOf 46
-def G_23 : Nat := 0xfffcfffcfcc0fcc0fffcfffcfcc0fcc0
-lemma low_23 : Lower R_23 G_23 7 := carry_of (swaps := [(4,5),(2,3),(1,2),(0,1)]) (roots2 := Cofactor12068.R_7) (T2 := Cofactor12068.G_7) (by decide +kernel) Cofactor12068.low_7
+lemma cert681 : carryOK [(1,2)] cert30 cert12 cert31 cert13 = true := by decide +kernel
+lemma cert680 : Lower cert30 cert12 4 := carry_of cert681 cert677
 
-def G_46 : Nat := 0xfefefefee8e8e8e8fefefefee8e8e8e8
-def R_46 : List Nat := varsOf 39
-lemma low_46_ok : carryOK [(0,3),(0,2),(0,1)] R_46 G_46 R_23 G_23 = true := by decide +kernel
-lemma low_46 : Lower R_46 G_46 7 := carry_of low_46_ok low_23
+def cert861 : List Nat := varsOf 49
+def cert860 : Nat := 0xffffaaaaaaaa0000ffffaaaaaaaa0000
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert859 : Lower cert861 cert860 4 := carry_of (swaps := [(2,3),(3,4),(4,5),(1,2),(2,3),(3,4)]) (roots2 := cert811) (T2 := cert805) (by decide +kernel) cert800
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert712 : Lower cert306 cert293 4 := carry_of (swaps := [(2,3),(3,4),(4,5),(1,2),(0,1)]) (roots2 := cert811) (T2 := cert805) (by decide +kernel) cert800
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert711 : Lower cert26 cert298 5 := lift_of (z := 0) (o := 16) (essPairs := [(VAR 4,34,50)]) (by decide +kernel) cert712
+def cert624 : Nat := 0xfffcfffcfcc0fcc0fffcfffcfcc0fcc0
+def cert692 : List Nat := [6,6,10,10,12,12,34,34,36,36,40,40,6,6,10,10,12,12,34,34,36,36,40,40]
+def cert686 : List Nat := [4,2,8,2,8,4,32,2,32,4,32,8,8,32,4,32,2,32,4,8,2,8,2,4]
+def cert674 : Nat := fullMask 24
+def cert641 : List Decor := [(0xcccccccccccccccccccccccccccccccc,0xcf0cf,0x51008a),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x333333,0x844221),(0xff00ff00ff00ff00ff00ff00ff00ff00,0xc3cc3c,0x281814),(0xffffffff00000000ffffffff00000000,0xfc0fc0,0x2a540)]
+def cert706 : List (Nat × Nat × Nat) := [(1,0,1),(2,4,2),(1,4,2),(1,0,2),(2,6,3),(1,1,2)]
+def cert631 : BT Decor := buildWiresBT 4 cert641 cert706
+def cert634 : List (List (Nat × Nat)) := [[],[(3,5)],[(1,2)],[(3,5),(1,2)],[(2,3)],[(2,5),(2,3)],[(1,2),(1,3)],[(2,5),(1,2),(1,3)],[(2,5),(1,3)]]
+def cert637 : BT (List (Nat × Nat)) := btOfList 4 cert634
+def cert702 : List (Option (Nat × Nat)) := [some (subcubeFast 4 0,4),some (subcubeFast 2 0,4),some (subcubeFast 32 0,4),some (subcubeFast 8 0,4)]
+def cert704 : BT (Option (Nat × Nat)) := btOfList 2 cert702
+def cert693 : List PoolSpec := [(0,[]),(1,[]),(2,[]),(3,[])]
+def cert627 : BT (Option BoundPool) := buildPoolsBT 2 cert631 cert24 cert704 cert693
+lemma cert676 : goodPairs cert624 cert692 cert686 := goodPairs_of (by decide +kernel)
+lemma cert642 : ∀ x ∈ cert641, faithful cert692 cert686 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 500000 in
+lemma cert632 : btAll (fun x => faithful cert692 cert686 x ∧ x.1 < 2^128) cert631 := buildWiresBT_faithful cert642
+set_option maxRecDepth 500000 in
+lemma cert638 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert624 = cert624) cert637 := btAll_ofList (autos_of (by decide +kernel))
+lemma cert695 : sliceDirectCheck 4 0 0 cert24 cert624 cert30 cert12 = true := by decide +kernel
+lemma cert694 : Slice cert24 cert624 (subcubeFast 4 0) 4 := slice_fast_direct cert695 cert680
+lemma cert697 : sliceDirectCheck 2 0 0 cert24 cert624 cert31 cert13 = true := by decide +kernel
+lemma cert696 : Slice cert24 cert624 (subcubeFast 2 0) 4 := slice_fast_direct cert697 cert677
+lemma cert699 : sliceDirectCheck 32 0 0 cert24 cert624 cert22 cert0 = true := by decide +kernel
+lemma cert698 : Slice cert24 cert624 (subcubeFast 32 0) 4 := slice_fast_direct cert699 cert683
+lemma cert701 : sliceDirectCheck 8 0 0 cert24 cert624 cert306 cert293 = true := by decide +kernel
+lemma cert700 : Slice cert24 cert624 (subcubeFast 8 0) 4 := slice_fast_direct cert701 cert678
+set_option maxRecDepth 500000 in
+lemma cert705 : btAll (fun o => ∀ p, o = some p → Slice cert24 cert624 p.1 p.2) cert704 :=
+  btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert24 cert624 p.1 p.2) (forall_cons (fun _ h => by cases h; exact cert694) (forall_cons (fun _ h => by cases h; exact cert696) (forall_cons (fun _ h => by cases h; exact cert698) (forall_cons (fun _ h => by cases h; exact cert700) (fun _ h => (List.not_mem_nil h).elim)))))
+set_option maxRecDepth 500000 in
+lemma cert628 : btAll (fun o => ∀ c, o = some c → ValidPool cert24 cert624 c) cert627 := buildPoolsBT_sound cert705
+lemma cert662 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert624 (0 - 1) xs.toFinset) cert466 := trivial
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert667 : checkNodesBT cert631 cert624 cert674 cert627 cert637 cert466 0 cert178 = true := by decide +kernel
+def cert650 : BT (List (List Nat)) := buildBucketsBT cert631 cert178
+set_option maxRecDepth 500000 in
+lemma cert651 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert624 0 xs.toFinset) cert650 :=
+  buildBucketsBT_sound (by decide) cert676 cert632 cert628 cert638 cert662 cert667
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert668 : checkNodesBT cert631 cert624 cert674 cert627 cert637 cert650 1 cert178 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert652 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert624 1 xs.toFinset) cert650 :=
+  buildBucketsBT_sound (by decide) cert676 cert632 cert628 cert638 cert651 cert668
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert669 : checkNodesBT cert631 cert624 cert674 cert627 cert637 cert650 2 cert178 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert653 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert624 2 xs.toFinset) cert650 :=
+  buildBucketsBT_sound (by decide) cert676 cert632 cert628 cert638 cert652 cert669
+def cert687 : List NodeSpec := [([8,0,1,2],[],[]),([4,7,9,3],[0,1],[])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert670 : checkNodesBT cert631 cert624 cert674 cert627 cert637 cert650 3 cert687 = true := by decide +kernel
+def cert654 : BT (List (List Nat)) := buildBucketsBT cert631 cert687
+set_option maxRecDepth 500000 in
+lemma cert655 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert624 3 xs.toFinset) cert654 :=
+  buildBucketsBT_sound (by decide) cert676 cert632 cert628 cert638 cert653 cert670
+def cert688 : List NodeSpec := [([5,0,1,2,3],[],[]),([0,1,2,6,3],[2],[0]),([1,4,2,7,3],[0,3],[0])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert671 : checkNodesBT cert631 cert624 cert674 cert627 cert637 cert654 4 cert688 = true := by decide +kernel
+def cert656 : BT (List (List Nat)) := buildBucketsBT cert631 cert688
+set_option maxRecDepth 500000 in
+lemma cert657 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert624 4 xs.toFinset) cert656 :=
+  buildBucketsBT_sound (by decide) cert676 cert632 cert628 cert638 cert655 cert671
+def cert689 : List NodeSpec := [([0,1,4,2,3],[0,1,3,2],[0,1,2,3])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert672 : checkNodesBT cert631 cert624 cert674 cert627 cert637 cert656 5 cert689 = true := by decide +kernel
+def cert658 : BT (List (List Nat)) := buildBucketsBT cert631 cert689
+set_option maxRecDepth 500000 in
+lemma cert659 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert624 5 xs.toFinset) cert658 :=
+  buildBucketsBT_sound (by decide) cert676 cert632 cert628 cert638 cert657 cert672
+def cert690 : List NodeSpec := [([0,1,2,3],[0,1,3,2],[0,4,5,6,7,8])]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert673 : checkNodesBT cert631 cert624 cert674 cert627 cert637 cert658 6 cert690 = true := by decide +kernel
+def cert660 : BT (List (List Nat)) := buildBucketsBT cert631 cert690
+set_option maxRecDepth 500000 in
+lemma cert661 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert624 6 xs.toFinset) cert660 :=
+  buildBucketsBT_sound (by decide) cert676 cert632 cert628 cert638 cert659 cert673
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert710 : forestRootCheck cert24 cert624 [(VAR 1,6,4),(VAR 2,6,2),(VAR 3,10,2),(VAR 5,34,2)] = true := by decide +kernel
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert709 : bucketContainsBT cert660 cert24 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert682 : Lower cert24 cert624 7 := lower_of_forestBT cert710 cert661 cert709
 
-def G_59 : Nat := 0xfefee8e8e8e8e8e8fefee8e8e8e8e8e8
-def R_59 : List Nat := varsOf 55
-lemma low_59_ok : liftCheck 0 16 R_59 G_59 R_46 G_46 [(VAR 4,49,33)] = true := by decide +kernel
-lemma low_59 : Lower R_59 G_59 8 := lift_of low_59_ok low_46
+def cert714 : Nat := 0xfffcfcc0fffcfcc0fffcfcc0fffcfcc0
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert713 : Lower cert23 cert714 7 := carry_of (swaps := [(4,5)]) (roots2 := cert24) (T2 := cert624) (by decide +kernel) cert682
+def cert717 : List Nat := varsOf 57
+def cert716 : Nat := 0xffffffaaffaaff00ffffffaaffaaff00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert715 : Lower cert717 cert716 5 := lift_of (z := 8) (o := 0) (essPairs := [(VAR 3,0,8)]) (by decide +kernel) cert859
+def cert794 : List Nat := varsOf 43
+def cert793 : Nat := 0xee88ee88ee00ee00ee88ee88ee00ee00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert792 : Lower cert794 cert793 5 := carry_of (swaps := [(3,4),(4,5),(0,1),(1,2),(2,3)]) (roots2 := cert478) (T2 := cert835) (by decide +kernel) cert834
+def cert818 : List Nat := varsOf 51
+def cert817 : Nat := 0xeeee8888aaaa0000eeee8888aaaa0000
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert816 : Lower cert818 cert817 5 := carry_of (swaps := [(2,3),(3,4),(2,3),(0,1),(1,2)]) (roots2 := cert26) (T2 := cert298) (by decide +kernel) cert711
+def cert821 : List Nat := varsOf 25
+def cert820 : Nat := 0xffaaaa00ffaaaa00ffaaaa00ffaaaa00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert819 : Lower cert821 cert820 4 := carry_of (swaps := [(2,3),(3,4),(1,2),(2,3)]) (roots2 := cert811) (T2 := cert805) (by decide +kernel) cert800
+def cert823 : Nat := 0xffaaaa00aaaaaa00ffaaaa00aaaaaa00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert822 : Lower cert717 cert823 5 := carry_of (swaps := [(3,4),(4,5),(2,3),(3,4),(1,2),(2,3)]) (roots2 := cert478) (T2 := cert835) (by decide +kernel) cert834
+def cert826 : List Nat := varsOf 26
+def cert825 : Nat := 0xffcccc00ffcccc00ffcccc00ffcccc00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert824 : Lower cert826 cert825 4 := carry_of (swaps := [(2,3),(3,4),(1,2),(2,3),(0,1)]) (roots2 := cert811) (T2 := cert805) (by decide +kernel) cert800
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert827 : Lower cert30 cert12 4 := carry_of (swaps := [(2,3),(3,4),(4,5),(1,2),(2,3),(0,1)]) (roots2 := cert811) (T2 := cert805) (by decide +kernel) cert800
+def cert829 : Nat := 0xffcccc00cc00cc00ffcccc00cc00cc00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert828 : Lower cert27 cert829 5 := carry_of (swaps := [(2,3)]) (roots2 := cert26) (T2 := cert298) (by decide +kernel) cert711
+def cert831 : Nat := 0xffeeee88ffeeee88ffeeee88ffeeee88
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert830 : Lower cert493 cert831 7 := carry_of (swaps := [(0,1),(1,2)]) (roots2 := cert23) (T2 := cert714) (by decide +kernel) cert713
+def cert833 : Nat := 0xffeeffeeeeaaeeaaffeeffeeeeaaeeaa
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert832 : Lower cert794 cert833 5 := carry_of (swaps := [(2,3),(3,4),(1,2),(0,1)]) (roots2 := cert717) (T2 := cert716) (by decide +kernel) cert715
+def cert761 : List Nat := varsOf 59
+def cert749 : Nat := 0xffeeee88eeaaee00ffeeee88eeaaee00
+def cert760 : List Nat := [9,10,17,10,17,9,50,17,50,35,41,19,50,56,35,26,56,41,11,19,35,56,26,11,17,42,42,25,25,10,9,9,9,49,10,11,49,35,9,41,17,19]
+def cert751 : List Nat := [8,8,18,2,16,1,34,1,18,3,40,18,48,24,33,18,40,33,3,3,34,48,24,8,24,34,40,1,24,24,0,24,3,48,0,1,33,1,33,1,0,1]
+def cert750 : Nat := fullMask 42
+def cert719 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x3fbd99e4eb5,0x2f9080e42a0),(0xcccccccccccccccccccccccccccccccc,0x22c26dcdb4a,0x1021c8b4c),(0xff00ff00ff00ff00ff00ff00ff00ff00,0xcdfee7a42b,0xb5c12403),(0xffff0000ffff0000ffff0000ffff0000,0x3121969b9d4,0x2b160b914),(0xffffffff00000000ffffffff00000000,0xb206337740,0x5206335440)]
+def cert778 : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(3,0,1),(0,0,2),(1,0,2),(2,0,2),(0,0,3),(1,0,3),(2,0,3),(3,0,3),(0,1,2),(1,1,2),(2,1,2),(3,1,2),(0,1,3),(1,1,3),(2,1,3),(3,2,3),(1,2,5),(0,1,24),(2,1,24),(0,4,6),(2,4,7),(1,2,8),(3,0,29),(0,4,10),(2,4,10),(0,4,17),(1,8,23),(1,1,9),(2,1,9),(2,4,9),(1,0,20),(1,2,38),(3,2,38),(2,10,20),(1,0,25),(1,1,12),(2,1,12),(1,2,12),(0,1,45),(1,1,45),(2,1,45),(3,1,45),(2,2,12),(2,4,12),(1,12,16),(1,12,33),(3,12,17),(1,12,19),(2,4,46),(0,4,47),(3,2,13),(0,4,13),(1,1,59),(2,1,59),(1,2,59),(2,2,59),(2,17,59),(0,13,17),(2,13,19),(0,1,62),(3,1,62),(1,2,14),(1,14,19),(0,4,21),(1,2,22)]
+def cert790 : BT Decor := buildWiresBT 7 cert719 cert778
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert757 : goodPairs cert749 cert760 cert751 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert720 : ∀ x ∈ cert719, faithful cert760 cert751 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert791 : btAll (fun x => faithful cert760 cert751 x ∧ x.1 < 2^128) cert790 := buildWiresBT_faithful cert720
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert718 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert749 = cert749) cert837 := btAll_ofList (autos_of (by decide +kernel))
+def cert774 : List (Option (Nat × Nat)) := [some (subcubeFast 0 2,5),some (subcubeFast 0 16,5),some (subcubeFast 0 32,7),some (subcubeFast 1 0,5),some (subcubeFast 1 16,4),some (subcubeFast 1 32,4),some (subcubeFast 2 0,5),some (subcubeFast 2 32,4),some (subcubeFast 8 0,5),some (subcubeFast 8 2,4),some (subcubeFast 16 0,5),some (subcubeFast 32 0,4)]
+def cert775 : BT (Option (Nat × Nat)) := btOfList 4 cert774
+def cert777 : List PoolSpec := [(3,[]),(6,[]),(2,[(0,0,1)]),(4,[]),(2,[(0,0,1),(1,2,5)]),(10,[]),(1,[]),(11,[]),(2,[]),(8,[]),(5,[]),(9,[]),(2,[(1,0,1)]),(0,[]),(2,[(2,0,1)]),(6,[(2,4,7)]),(0,[(1,0,2)]),(2,[(3,0,1)]),(1,[(3,0,1)]),(6,[(0,4,17)]),(8,[(0,4,17)]),(7,[]),(2,[(3,0,1),(1,1,2)]),(2,[(0,0,2)]),(2,[(0,0,2),(1,1,9)]),(2,[(0,0,2),(2,1,9)]),(2,[(1,0,2)]),(2,[(2,0,2)]),(2,[(0,0,3)]),(0,[(1,2,5)]),(2,[(0,1,2)]),(1,[(2,4,12)]),(1,[(1,2,12)]),(2,[(0,0,3),(1,2,12)]),(2,[(1,1,2)]),(2,[(2,1,2)]),(2,[(3,1,2)]),(2,[(0,0,3),(1,1,12)]),(2,[(0,0,3),(2,1,12)]),(2,[(0,0,3),(2,2,12)]),(2,[(1,0,3)]),(10,[(0,4,13)]),(3,[(0,4,13)]),(2,[(2,0,3)]),(2,[(2,0,3),(1,2,14)]),(2,[(3,0,3)]),(2,[(0,1,3)]),(2,[(0,1,3),(1,0,20)]),(2,[(1,1,3)]),(6,[(0,4,21)]),(10,[(0,4,21)]),(2,[(2,1,3)])]
+def cert758 : BT (Option BoundPool) := buildPoolsBT 6 cert790 cert761 cert775 cert777
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert765 : Slice cert761 cert749 (subcubeFast 32 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) cert842
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert764 : Slice cert761 cert749 (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert792
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert773 : Slice cert761 cert749 (subcubeFast 8 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) cert859
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert772 : Slice cert761 cert749 (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert816
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert771 : Slice cert761 cert749 (subcubeFast 2 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) cert819
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert770 : Slice cert761 cert749 (subcubeFast 2 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert822
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert769 : Slice cert761 cert749 (subcubeFast 1 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) cert824
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert768 : Slice cert761 cert749 (subcubeFast 1 16) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) cert827
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert767 : Slice cert761 cert749 (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert828
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert766 : Slice cert761 cert749 (subcubeFast 0 32) 7 := slice_fast_direct (zDead := 0) (by decide +kernel) cert830
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert763 : Slice cert761 cert749 (subcubeFast 0 16) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert832
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert762 : Slice cert761 cert749 (subcubeFast 0 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert715
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert776 : btAll (fun o => ∀ p, o = some p → Slice cert761 cert749 p.1 p.2) cert775 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert761 cert749 p.1 p.2) (forall_cons (fun _ h => by cases h; exact cert762) (forall_cons (fun _ h => by cases h; exact cert763) (forall_cons (fun _ h => by cases h; exact cert766) (forall_cons (fun _ h => by cases h; exact cert767) (forall_cons (fun _ h => by cases h; exact cert768) (forall_cons (fun _ h => by cases h; exact cert769) (forall_cons (fun _ h => by cases h; exact cert770) (forall_cons (fun _ h => by cases h; exact cert771) (forall_cons (fun _ h => by cases h; exact cert772) (forall_cons (fun _ h => by cases h; exact cert773) (forall_cons (fun _ h => by cases h; exact cert764) (forall_cons (fun _ h => by cases h; exact cert765) (fun _ h => (List.not_mem_nil h).elim)))))))))))))
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert759 : btAll (fun o => ∀ c, o = some c → ValidPool cert761 cert749 c) cert758 := buildPoolsBT_sound cert776
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert748 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert749 (4 - 1) xs.toFinset) cert466 := trivial
+def cert721 : List NodeSpec := cert623 [([1,3,4,42,45],[]),([1,2,3,42,51],[]),([1,3,4,30,45],[]),([0,1,3,33,45],[]),([0,1,2,3,53],[]),([0,1,3,45,56],[]),([0,1,3,45,57],[]),([0,1,2,3,64],[]),([0,2,3,59,67],[]),([0,2,3,59,68],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert779 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert466 4 cert721 = true := by decide +kernel
+def cert752 : List NodeSpec := cert721
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert743 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert466 4 cert752 = true := cert779
+def cert733 : BT (List (List Nat)) := buildBucketsBT cert790 cert752
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert734 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert749 4 xs.toFinset) cert733 := buildBucketsBT_sound (by decide) cert757 cert791 cert759 cert718 cert748 cert743
+def cert722 : List NodeSpec := cert623 [([0,1,3,4,10,29],[1,8]),([0,2,3,8,33],[13,19,20]),([0,1,2,3,4,34],[]),([1,2,3,4,10,38],[1,5]),([0,1,2,3,4,39],[1,7,8,13]),([0,1,2,3,4,41],[]),([1,2,3,4,12,42],[1,9,21,29]),([0,1,2,3,16,51],[0,5,7,10,31]),([0,1,2,3,4,52],[0,1,7,8]),([1,2,3,4,12,30],[13]),([0,1,3,4,17,45],[0,5,32,33]),([0,1,2,3,17,51],[7,10])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert780 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert733 5 cert722 = true := by decide +kernel
+def cert723 : List NodeSpec := cert623 [([0,1,2,3,12,33],[7,13,19,20]),([0,1,2,3,4,54],[0,7,8]),([0,1,3,4,18,45],[0]),([0,1,2,3,18,51],[]),([0,1,3,4,19,45],[]),([0,1,2,3,19,51],[]),([0,1,2,3,4,55],[0]),([0,1,3,4,45,46],[0,5,32,33]),([0,1,3,4,45,47],[0,5,32,33]),([0,1,3,4,45,48],[]),([0,1,3,4,45,49],[]),([0,1,2,3,17,59],[7])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert781 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert733 5 cert723 = true := by decide +kernel
+def cert724 : List NodeSpec := cert623 [([0,1,2,3,4,65],[7,8]),([0,1,3,4,18,58],[13]),([0,1,2,3,18,59],[]),([0,1,2,3,19,59],[6,41]),([0,1,2,3,4,66],[]),([0,1,2,3,59,60],[7]),([0,1,2,3,59,61],[]),([0,1,2,3,59,62],[]),([0,1,2,3,59,63],[6,40]),([0,1,2,3,4,62],[1,6,13]),([0,1,2,3,4,70],[]),([0,1,2,3,4,40],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert782 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert733 5 cert724 = true := by decide +kernel
+def cert753 : List NodeSpec := cert722 ++ cert723 ++ cert724
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert744 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert733 5 cert753 = true := by
+  unfold cert753 checkNodesBT
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨⟨cert780,cert781⟩,cert782⟩
+def cert735 : BT (List (List Nat)) := buildBucketsBT cert790 cert753
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert736 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert749 5 xs.toFinset) cert735 := buildBucketsBT_sound (by decide) cert757 cert791 cert759 cert718 cert734 cert744
+def cert725 : List NodeSpec := [([0,1,2,3,4,24],[0,1,3,4,5,6,7,8],[0]),([0,1,2,3,4,27],[0,1,5,6,7,8,9,11,12,13],[0]),([0,1,2,3,28],[0,3,7,10,13,14,15],[0]),([0,1,2,3,4,8,10],[1,9,13,16],[0]),([0,2,3,4,8,17],[0,1,9,13,18,21,22],[0]),([0,1,2,3,4,8,23],[1,3,5,6,13],[0]),([0,1,2,3,4,29],[0,1,5,6,7,8,11,13],[0]),([0,2,3,4,35],[0,9,13,24],[0]),([0,2,3,4,36],[0,1,9,25],[0]),([0,1,2,3,37],[0,3,7,9,10,23],[0]),([0,1,2,3,4,10,20],[0,1,5,6,9,13],[0,1]),([0,1,2,3,4,10,25],[0,1,9,11,13],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert783 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert735 6 cert725 = true := by decide +kernel
+def cert726 : List NodeSpec := [([0,1,2,3,4,10,26],[1,11,13],[0]),([0,1,2,3,4,31],[0,1,5,6,7,8,9,13,26],[0]),([0,1,2,3,4,32],[1,5,6,7,10,13,26],[0]),([0,1,2,3,4,10],[0,1,5,6,7,8,13,26],[0]),([0,1,2,3,4,12,16],[0,1,5,6,9,13,28,30],[0,1]),([0,1,2,3,4,12,17],[0,1,5,6,9,13,28,34],[0]),([0,1,2,3,4,12,18],[0,1,9,11,13,35],[0]),([0,1,2,3,4,12,19],[0,1,9,13,36],[0]),([0,2,3,4,43],[0,5,13,37],[0]),([0,2,3,4,44],[0,1,5,38],[0]),([0,1,3,4,45],[0,5,33],[0]),([0,1,2,3,4,45],[0,1,5,7,8,9,13,33],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert784 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert735 6 cert726 = true := by decide +kernel
+def cert727 : List NodeSpec := [([0,1,3,4,50],[0,5,9,39],[0]),([0,1,2,3,51],[0,5,7,10,28],[0]),([0,1,2,3,4,13,17],[6,13,34,40],[0,1]),([0,1,2,3,4,13,18],[1,6,9,11,35],[0]),([0,1,2,3,4,13,19],[1,5,6,13,36],[0]),([0,1,2,3,4,58],[0,1,3,5,6,7,8,9,13],[0,1]),([0,1,2,3,59],[3,6,7,40,41,42],[0,1]),([0,1,2,3,4,59],[0,1,5,6,7,8,9,13,40],[0]),([0,1,2,3,4,14,18],[0,1,11,13],[0]),([0,1,2,3,4,14,19],[0,13],[0]),([0,1,2,3,4,69],[0,1,6,7,8,9,13,44],[0]),([0,1,2,3,4,15,18],[1,3,5],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert785 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert735 6 cert727 = true := by decide +kernel
+def cert728 : List NodeSpec := cert623 [([0,1,2,3,4,38],[0,1,3,5,7,8,9,13,47]),([0,1,2,3,71],[3,6,7,11,13,48,49,50]),([0,1,2,3,4,71],[0,1,3,7,8,9,11,13,48]),([0,1,2,3,4,72],[0,1,3,6,7,8,9,13])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert786 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert735 6 cert728 = true := by decide +kernel
+def cert754 : List NodeSpec := cert725 ++ cert726 ++ cert727 ++ cert728
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert745 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert735 6 cert754 = true := by
+  unfold cert754 checkNodesBT
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨⟨⟨cert783,cert784⟩,cert785⟩,cert786⟩
+def cert737 : BT (List (List Nat)) := buildBucketsBT cert790 cert754
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert738 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert749 6 xs.toFinset) cert737 := buildBucketsBT_sound (by decide) cert757 cert791 cert759 cert718 cert736 cert745
+def cert729 : List NodeSpec := [([0,1,2,3,4,5],[0,1,2,3,5,6,8,9,10],[0]),([0,1,2,3,4,6],[0,1,3,5,6,8,9,11,12,13],[0]),([0,1,2,3,4,7],[0,1,3,5,6,8,9,10,11,13,14],[0]),([0,1,2,3,4,8],[0,1,3,5,6,8,9,11,13,17,21],[0]),([0,1,2,3,4,9],[0,1,3,5,6,8,9,10,13,23],[0,1]),([0,1,2,3,4,10],[0,1,3,5,6,8,9,11,13,26],[0,1]),([0,1,2,3,4,11],[0,1,3,5,6,8,9,10,11,13,27],[0]),([0,1,2,3,4,12],[0,1,5,8,9,10,13,28],[0]),([0,1,2,3,4,13],[0,1,3,5,6,8,9,13,40],[0,1]),([0,1,2,3,4,14],[0,1,5,6,8,9,10,13,43],[0,1]),([0,1,2,3,4,15],[0,1,3,5,6,8,9,13,45],[0,1]),([0,1,2,3,4,20],[0,1,3,5,8,9,11,13,21,46],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert787 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert737 7 cert729 = true := by decide +kernel
+def cert730 : List NodeSpec := cert623 [([0,1,2,3,4,21],[0,1,3,5,6,8,9,11,13,48]),([0,1,2,3,4,22],[0,1,3,5,6,8,9,13,21,51])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert788 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert737 7 cert730 = true := by decide +kernel
+def cert755 : List NodeSpec := cert729 ++ cert730
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert746 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert737 7 cert755 = true := by
+  unfold cert755 checkNodesBT
+  simp only [List.all_append, Bool.and_eq_true]
+  exact ⟨cert787,cert788⟩
+def cert739 : BT (List (List Nat)) := buildBucketsBT cert790 cert755
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert740 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert749 7 xs.toFinset) cert739 := buildBucketsBT_sound (by decide) cert757 cert791 cert759 cert718 cert738 cert746
+def cert731 : List NodeSpec := [([0,1,2,3,4],[8],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert789 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert739 8 cert731 = true := by decide +kernel
+def cert756 : List NodeSpec := cert731
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert747 : checkNodesBT cert790 cert749 cert750 cert758 cert837 cert739 8 cert756 = true := cert789
+def cert741 : BT (List (List Nat)) := buildBucketsBT cert790 cert756
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert742 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert749 8 xs.toFinset) cert741 := buildBucketsBT_sound (by decide) cert757 cert791 cert759 cert718 cert740 cert747
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert732 : Lower cert761 cert749 9 := lower_of_forestBT (essPairs := [(VAR 0,8,9),(VAR 1,8,10),(VAR 3,1,9),(VAR 4,1,17),(VAR 5,3,35)]) (by decide +kernel) cert742 (by decide +kernel)
+def cert881 : List Nat := [18,24,10,10,24,18]
+def cert877 : List Nat := [16,16,2,8,8,2]
+def cert870 : List Decor := [(0xcccccccccccccccccccccccccccccccc,45,36),(0xff00ff00ff00ff00ff00ff00ff00ff00,30,24),(0xffff0000ffff0000ffff0000ffff0000,51,3)]
+def cert884 : BT Decor := buildWiresBT 2 cert870 cert227
+def cert867 : List (List (Nat × Nat)) := [[],[(3,4)],[(1,3)],[(1,4)],[(3,4),(1,3)],[(3,4),(1,4)]]
+def cert868 : BT (List (Nat × Nat)) := btOfList 3 cert867
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert878 : goodPairs cert825 cert881 cert877 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert871 : ∀ x ∈ cert870, faithful cert881 cert877 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert885 : btAll (fun x => faithful cert881 cert877 x ∧ x.1 < 2^128) cert884 := buildWiresBT_faithful cert871
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert869 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert825 = cert825) cert868 := btAll_ofList (autos_of (by decide +kernel))
+def cert879 : BT (Option BoundPool) := buildPoolsBT 1 cert884 cert826 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert882 : btAll (fun o => ∀ p, o = some p → Slice cert826 cert825 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert826 cert825 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert880 : btAll (fun o => ∀ c, o = some c → ValidPool cert826 cert825 c) cert879 := buildPoolsBT_sound cert882
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert876 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert825 (3 - 1) xs.toFinset) cert466 := trivial
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert883 : checkNodesBT cert884 cert825 cert506 cert879 cert868 cert466 3 cert499 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert875 : checkNodesBT cert884 cert825 cert506 cert879 cert868 cert466 3 cert508 = true := cert883
+def cert873 : BT (List (List Nat)) := buildBucketsBT cert884 cert508
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert874 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert825 3 xs.toFinset) cert873 := buildBucketsBT_sound (by decide) cert878 cert885 cert880 cert869 cert876 cert875
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert872 : Lower cert826 cert825 4 := lower_of_forestBT (essPairs := [(VAR 1,8,10),(VAR 3,2,10),(VAR 4,2,18)]) (by decide +kernel) cert874 (by decide +kernel)
+def cert892 : Nat := 0xaa888800aa888800aa888800aa888800
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert891 : Lower cert493 cert892 5 := lift_of (z := 0) (o := 1) (essPairs := [(VAR 0,10,11)]) (by decide +kernel) cert872
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert894 : Lower cert513 cert505 4 := carry_of (swaps := [(1,2)]) (roots2 := cert826) (T2 := cert825) (by decide +kernel) cert872
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert940 : Lower cert821 cert820 4 := carry_of (swaps := [(0,1)]) (roots2 := cert826) (T2 := cert825) (by decide +kernel) cert872
+def cert942 : Nat := 0xeeaaaa00eeaaaa00eeaaaa00eeaaaa00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert941 : Lower cert493 cert942 5 := lift_of (z := 0) (o := 2) (essPairs := [(VAR 1,24,26)]) (by decide +kernel) cert940
+def cert863 : Nat := 0xfffcfc00fffcfc00fffcfc00fffcfc00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert862 : Lower cert23 cert863 5 := lift_of (z := 2) (o := 0) (essPairs := [(VAR 1,8,10)]) (by decide +kernel) cert894
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert864 : Lower cert478 cert835 5 := carry_of (swaps := [(2,3),(3,4),(1,2),(2,3)]) (roots2 := cert493) (T2 := cert942) (by decide +kernel) cert941
+def cert866 : Nat := 0xe8e8a8a8e8e8a8a8e8e8a8a8e8e8a8a8
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert865 : Lower cert490 cert866 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(1,2),(2,3)]) (roots2 := cert493) (T2 := cert942) (by decide +kernel) cert941
+def cert888 : List Nat := varsOf 19
+def cert887 : Nat := 0xeeee8888eeee8888eeee8888eeee8888
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert886 : Lower cert888 cert887 4 := carry_of (swaps := [(2,3),(0,1),(1,2)]) (roots2 := cert826) (T2 := cert825) (by decide +kernel) cert872
+def cert890 : Nat := 0xee888888ee888888ee888888ee888888
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert889 : Lower cert493 cert890 5 := lift_of (z := 0) (o := 8) (essPairs := [(VAR 3,17,25)]) (by decide +kernel) cert886
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert893 : Lower cert23 cert622 5 := carry_of (swaps := [(1,2),(0,1)]) (roots2 := cert493) (T2 := cert892) (by decide +kernel) cert891
+def cert896 : Nat := 0xeee8eee8eee8eee8eee8eee8eee8eee8
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert895 : Lower cert478 cert896 5 := carry_of (swaps := [(0,1),(1,2),(2,3),(3,4),(1,2),(2,3),(0,1),(1,2)]) (roots2 := cert23) (T2 := cert863) (by decide +kernel) cert862
+def cert898 : Nat := 0xeeeee8e8eeeee8e8eeeee8e8eeeee8e8
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert897 : Lower cert490 cert898 5 := carry_of (swaps := [(2,3),(3,4),(0,1),(1,2),(2,3),(0,1),(1,2)]) (roots2 := cert23) (T2 := cert863) (by decide +kernel) cert862
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert899 : Lower cert520 cert519 5 := lift_of (z := 1) (o := 0) (essPairs := [(VAR 0,0,1)]) (by decide +kernel) cert894
+def cert915 : Nat := 0xeee8e8a8eee8e8a8eee8e8a8eee8e8a8
+def cert922 : List Nat := [5,14,3,3,14,5,7,3,14,13,25,22,21,25,19,26,13,21,26,26,7,22]
+def cert916 : List Nat := [4,12,1,2,10,1,6,6,6,12,17,6,20,9,17,24,9,17,18,10,1,20]
+def cert903 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x1376ed,0x136424),(0xcccccccccccccccccccccccccccccccc,0x3cc9de,0xc09d8),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x331b73,0x201bc3),(0xff00ff00ff00ff00ff00ff00ff00ff00,0xda712,0x9a212),(0xffff0000ffff0000ffff0000ffff0000,0x2efc00,0x26d400)]
+def cert935 : List (Nat × Nat × Nat) := [(1,0,2),(2,1,2)]
+def cert938 : BT Decor := buildWiresBT 3 cert903 cert935
+def cert900 : List (List (Nat × Nat)) := [[],[(3,4)]]
+def cert901 : BT (List (Nat × Nat)) := btOfList 1 cert900
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert919 : goodPairs cert915 cert922 cert916 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert904 : ∀ x ∈ cert903, faithful cert922 cert916 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert939 : btAll (fun x => faithful cert922 cert916 x ∧ x.1 < 2^128) cert938 := buildWiresBT_faithful cert904
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert902 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert915 = cert915) cert901 := btAll_ofList (autos_of (by decide +kernel))
+def cert931 : List (Option (Nat × Nat)) := [some (subcubeFast 0 2,5),some (subcubeFast 0 8,5),some (subcubeFast 0 16,5),some (subcubeFast 1 0,5),some (subcubeFast 1 2,4),some (subcubeFast 4 0,5),some (subcubeFast 8 0,5),some (subcubeFast 16 0,5)]
+def cert932 : BT (Option (Nat × Nat)) := btOfList 3 cert931
+def cert934 : List PoolSpec := [(3,[]),(0,[]),(4,[]),(5,[]),(0,[(1,0,2)]),(6,[]),(1,[]),(7,[]),(2,[]),(3,[(2,1,2)])]
+def cert920 : BT (Option BoundPool) := buildPoolsBT 4 cert938 cert582 cert932 cert934
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert930 : Slice cert582 cert915 (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert864
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert929 : Slice cert582 cert915 (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert865
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert928 : Slice cert582 cert915 (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert889
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert927 : Slice cert582 cert915 (subcubeFast 1 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) cert894
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert926 : Slice cert582 cert915 (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert893
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert925 : Slice cert582 cert915 (subcubeFast 0 16) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert895
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert924 : Slice cert582 cert915 (subcubeFast 0 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert897
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert923 : Slice cert582 cert915 (subcubeFast 0 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert899
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert933 : btAll (fun o => ∀ p, o = some p → Slice cert582 cert915 p.1 p.2) cert932 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert582 cert915 p.1 p.2) (forall_cons (fun _ h => by cases h; exact cert923) (forall_cons (fun _ h => by cases h; exact cert924) (forall_cons (fun _ h => by cases h; exact cert925) (forall_cons (fun _ h => by cases h; exact cert926) (forall_cons (fun _ h => by cases h; exact cert927) (forall_cons (fun _ h => by cases h; exact cert928) (forall_cons (fun _ h => by cases h; exact cert929) (forall_cons (fun _ h => by cases h; exact cert930) (fun _ h => (List.not_mem_nil h).elim)))))))))
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert921 : btAll (fun o => ∀ c, o = some c → ValidPool cert582 cert915 c) cert920 := buildPoolsBT_sound cert933
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert914 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert915 (6 - 1) xs.toFinset) cert466 := trivial
+def cert905 : List NodeSpec := cert623 [([0,1,2,3,4,5],[0,1,2,3,4,5,6,7,8]),([0,1,2,3,4,6],[0,1,2,3,5,6,7,8,9])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert936 : checkNodesBT cert938 cert915 cert130 cert920 cert901 cert466 6 cert905 = true := by decide +kernel
+def cert917 : List NodeSpec := cert905
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert912 : checkNodesBT cert938 cert915 cert130 cert920 cert901 cert466 6 cert917 = true := cert936
+def cert908 : BT (List (List Nat)) := buildBucketsBT cert938 cert917
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert909 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert915 6 xs.toFinset) cert908 := buildBucketsBT_sound (by decide) cert919 cert939 cert921 cert902 cert914 cert912
+def cert906 : List NodeSpec := cert623 [([0,1,2,3,4],[0,1,2,3,5,6,7,8])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert937 : checkNodesBT cert938 cert915 cert130 cert920 cert901 cert908 7 cert906 = true := by decide +kernel
+def cert918 : List NodeSpec := cert906
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert913 : checkNodesBT cert938 cert915 cert130 cert920 cert901 cert908 7 cert918 = true := cert937
+def cert910 : BT (List (List Nat)) := buildBucketsBT cert938 cert918
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert911 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert915 7 xs.toFinset) cert910 := buildBucketsBT_sound (by decide) cert919 cert939 cert921 cert902 cert909 cert913
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert907 : Lower cert582 cert915 8 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,1,5),(VAR 3,6,14),(VAR 4,6,22)]) (by decide +kernel) cert911 (by decide +kernel)
+def cert998 : List Nat := [17,24,9,9,24,17]
+def cert993 : List Nat := [16,16,1,8,8,1]
+def cert985 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,45,36),(0xff00ff00ff00ff00ff00ff00ff00ff00,30,24),(0xffff0000ffff0000ffff0000ffff0000,51,3)]
+def cert1001 : BT Decor := buildWiresBT 2 cert985 cert227
+def cert982 : List (List (Nat × Nat)) := [[]]
+def cert983 : BT (List (Nat × Nat)) := btOfList 1 cert982
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert995 : goodPairs cert820 cert998 cert993 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert986 : ∀ x ∈ cert985, faithful cert998 cert993 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1002 : btAll (fun x => faithful cert998 cert993 x ∧ x.1 < 2^128) cert1001 := buildWiresBT_faithful cert986
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert984 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert820 = cert820) cert983 := btAll_ofList (autos_of (by decide +kernel))
+def cert996 : BT (Option BoundPool) := buildPoolsBT 1 cert1001 cert821 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert999 : btAll (fun o => ∀ p, o = some p → Slice cert821 cert820 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert821 cert820 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert997 : btAll (fun o => ∀ c, o = some c → ValidPool cert821 cert820 c) cert996 := buildPoolsBT_sound cert999
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert992 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert820 (3 - 1) xs.toFinset) cert466 := trivial
+def cert987 : List NodeSpec := [([0,1,2],[],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1000 : checkNodesBT cert1001 cert820 cert506 cert996 cert983 cert466 3 cert987 = true := by decide +kernel
+def cert994 : List NodeSpec := cert987
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert991 : checkNodesBT cert1001 cert820 cert506 cert996 cert983 cert466 3 cert994 = true := cert1000
+def cert989 : BT (List (List Nat)) := buildBucketsBT cert1001 cert994
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert990 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert820 3 xs.toFinset) cert989 := buildBucketsBT_sound (by decide) cert995 cert1002 cert997 cert984 cert992 cert991
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert988 : Lower cert821 cert820 4 := lower_of_forestBT (essPairs := [(VAR 0,8,9),(VAR 3,1,9),(VAR 4,1,17)]) (by decide +kernel) cert990 (by decide +kernel)
+def cert981 : Nat := 0xcc888800cc888800cc888800cc888800
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert980 : Lower cert493 cert981 5 := lift_of (z := 0) (o := 2) (essPairs := [(VAR 1,9,11)]) (by decide +kernel) cert988
+def cert1015 : List Nat := [18,20,6,6,20,18]
+def cert1011 : List Nat := [16,16,2,4,4,2]
+def cert1004 : List Decor := [(0xcccccccccccccccccccccccccccccccc,45,36),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,30,24),(0xffff0000ffff0000ffff0000ffff0000,51,3)]
+def cert1018 : BT Decor := buildWiresBT 2 cert1004 cert227
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1012 : goodPairs cert11 cert1015 cert1011 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1005 : ∀ x ∈ cert1004, faithful cert1015 cert1011 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1019 : btAll (fun x => faithful cert1015 cert1011 x ∧ x.1 < 2^128) cert1018 := buildWiresBT_faithful cert1005
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1003 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert11 = cert11) cert983 := btAll_ofList (autos_of (by decide +kernel))
+def cert1013 : BT (Option BoundPool) := buildPoolsBT 1 cert1018 cert29 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1016 : btAll (fun o => ∀ p, o = some p → Slice cert29 cert11 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert29 cert11 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1014 : btAll (fun o => ∀ c, o = some c → ValidPool cert29 cert11 c) cert1013 := buildPoolsBT_sound cert1016
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1010 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert11 (3 - 1) xs.toFinset) cert466 := trivial
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1017 : checkNodesBT cert1018 cert11 cert506 cert1013 cert983 cert466 3 cert987 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1009 : checkNodesBT cert1018 cert11 cert506 cert1013 cert983 cert466 3 cert994 = true := cert1017
+def cert1007 : BT (List (List Nat)) := buildBucketsBT cert1018 cert994
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1008 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert11 3 xs.toFinset) cert1007 := buildBucketsBT_sound (by decide) cert1012 cert1019 cert1014 cert1003 cert1010 cert1009
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1006 : Lower cert29 cert11 4 := lower_of_forestBT (essPairs := [(VAR 1,4,6),(VAR 2,2,6),(VAR 4,2,18)]) (by decide +kernel) cert1008 (by decide +kernel)
+def cert1021 : Nat := 0xfcfce8e8fcfce8e8fcfce8e8fcfce8e8
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1020 : Lower cert490 cert1021 5 := lift_of (z := 1) (o := 0) (essPairs := [(VAR 0,2,3)]) (by decide +kernel) cert1006
+def cert1023 : Nat := 0xffeeeeccffeeeeccffeeeeccffeeeecc
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1022 : Lower cert493 cert1023 5 := lift_of (z := 2) (o := 0) (essPairs := [(VAR 1,0,2)]) (by decide +kernel) cert988
+def cert1025 : Nat := 0xfffafaf0fffafaf0fffafaf0fffafaf0
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1024 : Lower cert520 cert1025 5 := lift_of (z := 4) (o := 0) (essPairs := [(VAR 2,0,4)]) (by decide +kernel) cert988
+def cert1027 : Nat := 0xfcfcfcc0fcfcfcc0fcfcfcc0fcfcfcc0
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1026 : Lower cert23 cert1027 5 := lift_of (z := 8) (o := 0) (essPairs := [(VAR 3,2,10)]) (by decide +kernel) cert1006
+def cert976 : Nat := 0xe8e8c0c0e8e8c0c0e8e8c0c0e8e8c0c0
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert975 : Lower cert490 cert976 5 := lift_of (z := 0) (o := 1) (essPairs := [(VAR 0,18,19)]) (by decide +kernel) cert1006
+def cert978 : Nat := 0xf0a0a000f0a0a000f0a0a000f0a0a000
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert977 : Lower cert520 cert978 5 := lift_of (z := 0) (o := 4) (essPairs := [(VAR 2,9,13)]) (by decide +kernel) cert988
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert979 : Lower cert23 cert294 5 := lift_of (z := 0) (o := 8) (essPairs := [(VAR 3,18,26)]) (by decide +kernel) cert1006
+def cert952 : Nat := 0xfce8e8c0fce8e8c0fce8e8c0fce8e8c0
+def cert959 : List Nat := [6,13,7,11,6,7,19,26,11,26,19,11,13,13,21,19,21]
+def cert954 : List Nat := [4,12,5,10,2,3,18,18,3,10,3,9,9,5,5,17,17]
+def cert953 : Nat := fullMask 17
+def cert944 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x1fd6e,0x1fd24),(0xcccccccccccccccccccccccccccccccc,0x8ffd,2040),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x17037,0x6007),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x3b8a,6666),(0xffff0000ffff0000ffff0000ffff0000,0x1c6c0,0x180c0)]
+def cert973 : BT Decor := buildWiresBT 3 cert944 cert227
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert956 : goodPairs cert952 cert959 cert954 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert945 : ∀ x ∈ cert944, faithful cert959 cert954 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert974 : btAll (fun x => faithful cert959 cert954 x ∧ x.1 < 2^128) cert973 := buildWiresBT_faithful cert945
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert943 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert952 = cert952) cert983 := btAll_ofList (autos_of (by decide +kernel))
+def cert968 : List (Option (Nat × Nat)) := [some (subcubeFast 0 1,5),some (subcubeFast 0 2,5),some (subcubeFast 0 4,5),some (subcubeFast 0 8,5),some (subcubeFast 1 0,5),some (subcubeFast 2 0,5),some (subcubeFast 4 0,5),some (subcubeFast 8 0,5)]
+def cert969 : BT (Option (Nat × Nat)) := btOfList 3 cert968
+def cert971 : List PoolSpec := [(4,[]),(0,[]),(5,[]),(1,[]),(6,[]),(2,[]),(7,[]),(3,[])]
+def cert957 : BT (Option BoundPool) := buildPoolsBT 3 cert973 cert582 cert969 cert971
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert967 : Slice cert582 cert952 (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert975
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert966 : Slice cert582 cert952 (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert980
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert965 : Slice cert582 cert952 (subcubeFast 2 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert977
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert964 : Slice cert582 cert952 (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert979
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert963 : Slice cert582 cert952 (subcubeFast 0 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert1020
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert962 : Slice cert582 cert952 (subcubeFast 0 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert1022
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert961 : Slice cert582 cert952 (subcubeFast 0 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert1024
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert960 : Slice cert582 cert952 (subcubeFast 0 1) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert1026
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert970 : btAll (fun o => ∀ p, o = some p → Slice cert582 cert952 p.1 p.2) cert969 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert582 cert952 p.1 p.2) (forall_cons (fun _ h => by cases h; exact cert960) (forall_cons (fun _ h => by cases h; exact cert961) (forall_cons (fun _ h => by cases h; exact cert962) (forall_cons (fun _ h => by cases h; exact cert963) (forall_cons (fun _ h => by cases h; exact cert964) (forall_cons (fun _ h => by cases h; exact cert965) (forall_cons (fun _ h => by cases h; exact cert966) (forall_cons (fun _ h => by cases h; exact cert967) (fun _ h => (List.not_mem_nil h).elim)))))))))
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert958 : btAll (fun o => ∀ c, o = some c → ValidPool cert582 cert952 c) cert957 := buildPoolsBT_sound cert970
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert951 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert952 (7 - 1) xs.toFinset) cert466 := trivial
+def cert946 : List NodeSpec := [([0,1,2,3,4],[0,1,2,3,4,5,6,7],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert972 : checkNodesBT cert973 cert952 cert953 cert957 cert983 cert466 7 cert946 = true := by decide +kernel
+def cert955 : List NodeSpec := cert946
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert950 : checkNodesBT cert973 cert952 cert953 cert957 cert983 cert466 7 cert955 = true := cert972
+def cert948 : BT (List (List Nat)) := buildBucketsBT cert973 cert955
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert949 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert952 7 xs.toFinset) cert948 := buildBucketsBT_sound (by decide) cert956 cert974 cert958 cert943 cert951 cert950
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert947 : Lower cert582 cert952 8 := lower_of_forestBT (essPairs := [(VAR 0,10,11),(VAR 1,4,6),(VAR 2,2,6),(VAR 3,3,11),(VAR 4,3,19)]) (by decide +kernel) cert949 (by decide +kernel)
+def cert1103 : List Nat := [12,12,20,20,24,24,12,20,24]
+def cert1097 : List Nat := [8,4,16,4,16,8,16,8,4]
+def cert1049 : List Decor := [(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0xcf,0x10a),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x173,0xa1),(0xffff0000ffff0000ffff0000ffff0000,0x1bc,0x54)]
+def cert1041 : BT Decor := buildWiresBT 2 cert1049 cert227
+def cert1105 : BT (Option PoolSpec) := btOfList 1 []
+lemma cert1075 : goodPairs cert505 cert1103 cert1097 := goodPairs_of (by decide +kernel)
+lemma cert1050 : ∀ x ∈ cert1049, faithful cert1103 cert1097 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 500000 in
+lemma cert1042 : btAll (fun x => faithful cert1103 cert1097 x ∧ x.1 < 2^128) cert1041 := buildWiresBT_faithful cert1050
+set_option maxRecDepth 500000 in
+lemma cert1046 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert505 = cert505) cert635 := btAll_ofList (autos_of (by decide +kernel))
+set_option maxRecDepth 500000 in
+lemma cert1126 : btAll (fun o => ∀ p, o = some p → Slice cert513 cert505 p.1 p.2) cert480 :=
+  btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert513 cert505 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert1053 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert505 2 xs.toFinset) cert466 := trivial
+def cert1035 : BT (Option BoundPool) := buildPoolsSubBT 1 cert1041 cert513 cert480 cert1105 []
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1065 : checkNodesBT cert1041 cert505 cert128 cert1035 cert635 cert466 3 cert179 = true := by decide +kernel
+def cert1054 : BT (List (List Nat)) := buildBucketsBT cert1041 cert179
+set_option maxRecDepth 500000 in
+lemma cert1055 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert505 3 xs.toFinset) cert1054 :=
+  buildBucketsBT_sound (by decide) cert1075 cert1042 (buildPoolsSubBT_sound cert1126) cert1046 cert1053 cert1065
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert1072 : forestRootCheck cert513 cert505 [(VAR 2,12,8),(VAR 3,12,4),(VAR 4,20,4)] = true := by decide +kernel
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert1071 : bucketContainsBT cert1054 cert513 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert1077 : Lower cert513 cert505 4 := lower_of_forestBT cert1072 cert1055 cert1071
+lemma cert1084 : carryOK [(1,3),(0,2)] cert888 cert887 cert513 cert505 = true := by decide +kernel
+lemma cert1078 : Lower cert888 cert887 4 := carry_of cert1084 cert1077
+def cert1031 : Nat := 0xfaa0faa0faa0faa0faa0faa0faa0faa0
+def cert1040 : List Nat := varsOf 13
+lemma cert1086 : carryOK [(1,4),(1,3),(0,1),(0,2)] cert1040 cert1031 cert513 cert505 = true := by decide +kernel
+lemma cert1085 : Lower cert1040 cert1031 4 := carry_of cert1086 cert1077
+lemma cert1088 : carryOK [(1,2)] cert826 cert825 cert513 cert505 = true := by decide +kernel
+lemma cert1087 : Lower cert826 cert825 4 := carry_of cert1088 cert1077
+def cert1032 : Nat := 0xfaa0f000faa0f000faa0f000faa0f000
+lemma cert1090 : liftCheck 0 1 cert520 cert1032 cert513 cert505 [(VAR 0,21,20)] = true := by decide +kernel
+lemma cert1089 : Lower cert520 cert1032 5 := lift_of cert1090 cert1077
+lemma cert1092 : liftCheck 2 0 cert23 cert863 cert513 cert505 [(VAR 1,10,8)] = true := by decide +kernel
+lemma cert1091 : Lower cert23 cert863 5 := lift_of cert1092 cert1077
+def cert1033 : Nat := 0xfffffffffff0f000fffffffffff0f000
+lemma cert1094 : liftCheck 32 0 cert25 cert1033 cert513 cert505 [(VAR 5,32,0)] = true := by decide +kernel
+lemma cert1093 : Lower cert25 cert1033 5 := lift_of cert1094 cert1077
+def cert1034 : Nat := 0xeecc8800eecc8800eecc8800eecc8800
+lemma cert1096 : carryOK [(3,4),(1,2)] cert493 cert1034 cert520 cert1032 = true := by decide +kernel
+lemma cert1095 : Lower cert493 cert1034 5 := carry_of cert1096 cert1089
+def cert1028 : Nat := 0xfeecfeecfeecfeecfeecfeecfeecfeec
+lemma cert1080 : carryOK [(0,4),(0,3),(1,5),(0,2)] cert478 cert1028 cert25 cert1033 = true := by decide +kernel
+lemma cert1079 : Lower cert478 cert1028 5 := carry_of cert1080 cert1093
+def cert1029 : Nat := 0xfefef8f8fefef8f8fefef8f8fefef8f8
+lemma cert1082 : carryOK [(0,1),(0,5),(1,3),(0,2)] cert490 cert1029 cert25 cert1033 = true := by decide +kernel
+lemma cert1081 : Lower cert490 cert1029 5 := carry_of cert1082 cert1093
+def cert1030 : Nat := 0xfeecf800feecf800feecf800feecf800
+def cert1104 : List Nat := [11,11,11,12,12,13,13,14,14,15,18,18,19,19,21,21,21,22,22,23,25,25,25,26,26,28,28,11,11,11,11,12,12,12,12,12,12,18,18,18,18,18,18,21,21,21,21,25,25,25]
+def cert1098 : List Nat := [10,9,3,8,4,9,5,10,6,7,16,2,17,3,20,17,5,20,6,7,24,17,9,24,10,24,20,7,17,20,24,7,9,10,17,20,24,7,9,10,17,20,24,7,9,10,24,7,10,20]
+def cert1070 : Nat := fullMask 50
+def cert1051 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x3f8007879f267,0x99659869b266),(0xcccccccccccccccccccccccccccccccc,0x7e0798e3f87,0x1a8a2890c2b85),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x781f860fc3f8,0x28a28ac0f4350),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x3801ffff003ff,0x174d343d000ab),(0xffff0000ffff0000ffff0000ffff0000,0x3ffe007fffc00,0x2471c76b2d400)]
+def cert1129 : List (Nat × Nat × Nat) := [(3,1,3),(1,1,2),(0,3,4),(0,0,3),(2,0,7),(0,0,4),(3,8,4),(0,8,4),(1,12,1)]
+def cert1043 : BT Decor := buildWiresBT 4 cert1051 cert1129
+def cert1045 : List (List (Nat × Nat)) := [[],[(3,4),(1,2)]]
+def cert1047 : BT (List (Nat × Nat)) := btOfList 1 cert1045
+def cert1125 : List (Option (Nat × Nat)) := [some (subcubeFast 0 16,5),some (subcubeFast 0 8,5),some (subcubeFast 2 0,5),some (subcubeFast 4 0,5),some (subcubeFast 2 1,4),some (subcubeFast 4 8,4),some (subcubeFast 2 16,4),some (subcubeFast 4 1,4),some (subcubeFast 0 1,5)]
+def cert1127 : BT (Option (Nat × Nat)) := btOfList 4 cert1125
+def cert1106 : BT (Option PoolSpec) := btOfList 4 [some (0,[]),some (1,[]),some (2,[]),some (3,[]),some (4,[]),some (5,[]),some (6,[]),some (7,[]),some (8,[])]
+lemma cert1076 : goodPairs cert1030 cert1104 cert1098 := goodPairs_of (by decide +kernel)
+lemma cert1052 : ∀ x ∈ cert1051, faithful cert1104 cert1098 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 500000 in
+lemma cert1044 : btAll (fun x => faithful cert1104 cert1098 x ∧ x.1 < 2^128) cert1043 := buildWiresBT_faithful cert1052
+set_option maxRecDepth 500000 in
+lemma cert1048 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert1030 = cert1030) cert1047 := btAll_ofList (autos_of (by decide +kernel))
+lemma cert1108 : sliceDirectCheck 0 16 0 cert582 cert1030 cert478 cert1028 = true := by decide +kernel
+lemma cert1107 : Slice cert582 cert1030 (subcubeFast 0 16) 5 := slice_fast_direct cert1108 cert1079
+lemma cert1110 : sliceDirectCheck 0 8 0 cert582 cert1030 cert490 cert1029 = true := by decide +kernel
+lemma cert1109 : Slice cert582 cert1030 (subcubeFast 0 8) 5 := slice_fast_direct cert1110 cert1081
+lemma cert1112 : sliceDirectCheck 2 0 0 cert582 cert1030 cert520 cert1032 = true := by decide +kernel
+lemma cert1111 : Slice cert582 cert1030 (subcubeFast 2 0) 5 := slice_fast_direct cert1112 cert1089
+lemma cert1114 : sliceDirectCheck 4 0 0 cert582 cert1030 cert493 cert1034 = true := by decide +kernel
+lemma cert1113 : Slice cert582 cert1030 (subcubeFast 4 0) 5 := slice_fast_direct cert1114 cert1095
+lemma cert1116 : sliceDirectCheck 2 1 0 cert582 cert1030 cert513 cert505 = true := by decide +kernel
+lemma cert1115 : Slice cert582 cert1030 (subcubeFast 2 1) 4 := slice_fast_direct cert1116 cert1077
+lemma cert1118 : sliceDirectCheck 4 8 0 cert582 cert1030 cert888 cert887 = true := by decide +kernel
+lemma cert1117 : Slice cert582 cert1030 (subcubeFast 4 8) 4 := slice_fast_direct cert1118 cert1078
+lemma cert1120 : sliceDirectCheck 2 16 0 cert582 cert1030 cert1040 cert1031 = true := by decide +kernel
+lemma cert1119 : Slice cert582 cert1030 (subcubeFast 2 16) 4 := slice_fast_direct cert1120 cert1085
+lemma cert1122 : sliceDirectCheck 4 1 0 cert582 cert1030 cert826 cert825 = true := by decide +kernel
+lemma cert1121 : Slice cert582 cert1030 (subcubeFast 4 1) 4 := slice_fast_direct cert1122 cert1087
+lemma cert1124 : sliceDirectCheck 0 1 0 cert582 cert1030 cert23 cert863 = true := by decide +kernel
+lemma cert1123 : Slice cert582 cert1030 (subcubeFast 0 1) 5 := slice_fast_direct cert1124 cert1091
+set_option maxRecDepth 500000 in
+lemma cert1128 : btAll (fun o => ∀ p, o = some p → Slice cert582 cert1030 p.1 p.2) cert1127 :=
+  btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert582 cert1030 p.1 p.2) (forall_cons (fun _ h => by cases h; exact cert1107) (forall_cons (fun _ h => by cases h; exact cert1109) (forall_cons (fun _ h => by cases h; exact cert1111) (forall_cons (fun _ h => by cases h; exact cert1113) (forall_cons (fun _ h => by cases h; exact cert1115) (forall_cons (fun _ h => by cases h; exact cert1117) (forall_cons (fun _ h => by cases h; exact cert1119) (forall_cons (fun _ h => by cases h; exact cert1121) (forall_cons (fun _ h => by cases h; exact cert1123) (fun _ h => (List.not_mem_nil h).elim))))))))))
+lemma cert1056 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1030 3 xs.toFinset) cert466 := trivial
+def cert1099 : List NodeSpec := [([0,13,2,3,4],[],[])]
+def cert1036 : BT (Option BoundPool) := buildPoolsSubBT 4 cert1043 cert582 cert1127 cert1106 []
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1066 : checkNodesBT cert1043 cert1030 cert1070 cert1036 cert1047 cert466 4 cert1099 = true := by decide +kernel
+def cert1057 : BT (List (List Nat)) := buildBucketsBT cert1043 cert1099
+set_option maxRecDepth 500000 in
+lemma cert1058 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1030 4 xs.toFinset) cert1057 :=
+  buildBucketsBT_sound (by decide) cert1076 cert1044 (buildPoolsSubBT_sound cert1128) cert1048 cert1056 cert1066
+def cert1100 : List NodeSpec := [([9,0,1,2,3,4],[],[]),([8,10,1,2,3,4],[0,1],[]),([11,0,1,2,3,4],[],[]),([12,0,1,2,3,4],[2,3],[0,1])]
+def cert1037 : BT (Option BoundPool) := buildPoolsSubBT 4 cert1043 cert582 cert1127 cert1106 [0,1,2,3]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1067 : checkNodesBT cert1043 cert1030 cert1070 cert1037 cert1047 cert1057 5 cert1100 = true := by decide +kernel
+def cert1059 : BT (List (List Nat)) := buildBucketsBT cert1043 cert1100
+set_option maxRecDepth 500000 in
+lemma cert1060 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1030 5 xs.toFinset) cert1059 :=
+  buildBucketsBT_sound (by decide) cert1076 cert1044 (buildPoolsSubBT_sound cert1128) cert1048 cert1058 cert1067
+def cert1101 : List NodeSpec := [([5,0,1,2,3,4],[6,5,4],[]),([0,1,2,6,3,4],[7,6,5],[]),([0,1,2,7,3,4],[6,5,8],[0]),([8,0,1,2,3,4],[7,4,1,0],[0])]
+def cert1038 : BT (Option BoundPool) := buildPoolsSubBT 4 cert1043 cert582 cert1127 cert1106 [0,1,4,5,6,7,8]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1068 : checkNodesBT cert1043 cert1030 cert1070 cert1038 cert1047 cert1059 6 cert1101 = true := by decide +kernel
+def cert1061 : BT (List (List Nat)) := buildBucketsBT cert1043 cert1101
+set_option maxRecDepth 500000 in
+lemma cert1062 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1030 6 xs.toFinset) cert1061 :=
+  buildBucketsBT_sound (by decide) cert1076 cert1044 (buildPoolsSubBT_sound cert1128) cert1048 cert1060 cert1068
+def cert1102 : List NodeSpec := [([0,1,2,3,4],[4,5,6,7],[0,1])]
+def cert1039 : BT (Option BoundPool) := buildPoolsSubBT 4 cert1043 cert582 cert1127 cert1106 [4,5,6,7]
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1069 : checkNodesBT cert1043 cert1030 cert1070 cert1039 cert1047 cert1061 7 cert1102 = true := by decide +kernel
+def cert1063 : BT (List (List Nat)) := buildBucketsBT cert1043 cert1102
+set_option maxRecDepth 500000 in
+lemma cert1064 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1030 7 xs.toFinset) cert1063 :=
+  buildBucketsBT_sound (by decide) cert1076 cert1044 (buildPoolsSubBT_sound cert1128) cert1048 cert1062 cert1069
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert1074 : forestRootCheck cert582 cert1030 [(VAR 0,11,10),(VAR 1,11,9),(VAR 2,12,8),(VAR 3,11,3),(VAR 4,18,2)] = true := by decide +kernel
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert1073 : bucketContainsBT cert1063 cert582 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert1083 : Lower cert582 cert1030 8 := lower_of_forestBT cert1074 cert1064 cert1073
+def cert1149 : List Nat := varsOf 21
+def cert1143 : Nat := 0xfafaa0a0fafaa0a0fafaa0a0fafaa0a0
+def cert1148 : List Nat := [17,20,5,5,20,17]
+def cert1144 : List Nat := [16,16,1,4,4,1]
+def cert1136 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,45,36),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,30,24),(0xffff0000ffff0000ffff0000ffff0000,51,3)]
+def cert1152 : BT Decor := buildWiresBT 2 cert1136 cert227
+def cert1133 : List (List (Nat × Nat)) := [[],[(2,4)],[(0,2)],[(0,4)],[(2,4),(0,2)],[(2,4),(0,4)]]
+def cert1134 : BT (List (Nat × Nat)) := btOfList 3 cert1133
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1145 : goodPairs cert1143 cert1148 cert1144 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1137 : ∀ x ∈ cert1136, faithful cert1148 cert1144 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1153 : btAll (fun x => faithful cert1148 cert1144 x ∧ x.1 < 2^128) cert1152 := buildWiresBT_faithful cert1137
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1135 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert1143 = cert1143) cert1134 := btAll_ofList (autos_of (by decide +kernel))
+def cert1146 : BT (Option BoundPool) := buildPoolsBT 1 cert1152 cert1149 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1150 : btAll (fun o => ∀ p, o = some p → Slice cert1149 cert1143 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert1149 cert1143 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1147 : btAll (fun o => ∀ c, o = some c → ValidPool cert1149 cert1143 c) cert1146 := buildPoolsBT_sound cert1150
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1142 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1143 (3 - 1) xs.toFinset) cert466 := trivial
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1151 : checkNodesBT cert1152 cert1143 cert506 cert1146 cert1134 cert466 3 cert499 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1141 : checkNodesBT cert1152 cert1143 cert506 cert1146 cert1134 cert466 3 cert508 = true := cert1151
+def cert1139 : BT (List (List Nat)) := buildBucketsBT cert1152 cert508
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1140 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1143 3 xs.toFinset) cert1139 := buildBucketsBT_sound (by decide) cert1145 cert1153 cert1147 cert1135 cert1142 cert1141
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1138 : Lower cert1149 cert1143 4 := lower_of_forestBT (essPairs := [(VAR 0,4,5),(VAR 2,1,5),(VAR 4,1,17)]) (by decide +kernel) cert1140 (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1130 : Lower cert1040 cert1031 4 := carry_of (swaps := [(3,4)]) (roots2 := cert1149) (T2 := cert1143) (by decide +kernel) cert1138
+def cert1132 : Nat := 0xfae8fae8fae8fae8fae8fae8fae8fae8
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1131 : Lower cert478 cert1132 5 := lift_of (z := 2) (o := 0) (essPairs := [(VAR 1,1,3)]) (by decide +kernel) cert1130
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1154 : Lower cert888 cert887 4 := carry_of (swaps := [(1,2)]) (roots2 := cert1149) (T2 := cert1143) (by decide +kernel) cert1138
+def cert1156 : Nat := 0xeeeeaa88eeeeaa88eeeeaa88eeeeaa88
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1155 : Lower cert493 cert1156 5 := lift_of (z := 8) (o := 0) (essPairs := [(VAR 3,1,9)]) (by decide +kernel) cert1154
+def cert1158 : Nat := 0xfaaafaa0faaafaa0faaafaa0faaafaa0
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1157 : Lower cert520 cert1158 5 := carry_of (swaps := [(3,4),(1,2)]) (roots2 := cert493) (T2 := cert1156) (by decide +kernel) cert1155
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1185 : Lower cert490 cert898 5 := carry_of (swaps := [(3,4),(1,2)]) (roots2 := cert478) (T2 := cert1132) (by decide +kernel) cert1131
+def cert1168 : Nat := 0xfeeefae8feeefae8feeefae8feeefae8
+def cert1174 : List Nat := [5,6,3,3,6,5,12,9,9,18,17,17,26,12,28,26,28]
+def cert1169 : List Nat := [4,4,1,2,2,1,4,1,8,2,1,16,24,8,24,10,20]
+def cert1160 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,3501,1188),(0xcccccccccccccccccccccccccccccccc,0x921e,0x8218),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x16073,0x10043),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x1f1c0,0xf100),(0xffff0000ffff0000ffff0000ffff0000,0x1de00,0x15800)]
+def cert1183 : BT Decor := buildWiresBT 3 cert1160 cert227
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1171 : goodPairs cert1168 cert1174 cert1169 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1161 : ∀ x ∈ cert1160, faithful cert1174 cert1169 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1184 : btAll (fun x => faithful cert1174 cert1169 x ∧ x.1 < 2^128) cert1183 := buildWiresBT_faithful cert1161
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1159 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert1168 = cert1168) cert1047 := btAll_ofList (autos_of (by decide +kernel))
+def cert1179 : List (Option (Nat × Nat)) := [some (subcubeFast 2 0,5),some (subcubeFast 4 0,5),some (subcubeFast 8 0,5),some (subcubeFast 16 0,5)]
+def cert1180 : BT (Option (Nat × Nat)) := btOfList 2 cert1179
+def cert1172 : BT (Option BoundPool) := buildPoolsBT 2 cert1183 cert582 cert1180 cert693
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1178 : Slice cert582 cert1168 (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert1131
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1177 : Slice cert582 cert1168 (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert1185
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1176 : Slice cert582 cert1168 (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert1155
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1175 : Slice cert582 cert1168 (subcubeFast 2 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) cert1157
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1181 : btAll (fun o => ∀ p, o = some p → Slice cert582 cert1168 p.1 p.2) cert1180 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert582 cert1168 p.1 p.2) (forall_cons (fun _ h => by cases h; exact cert1175) (forall_cons (fun _ h => by cases h; exact cert1176) (forall_cons (fun _ h => by cases h; exact cert1177) (forall_cons (fun _ h => by cases h; exact cert1178) (fun _ h => (List.not_mem_nil h).elim)))))
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1173 : btAll (fun o => ∀ c, o = some c → ValidPool cert582 cert1168 c) cert1172 := buildPoolsBT_sound cert1181
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1167 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1168 (6 - 1) xs.toFinset) cert466 := trivial
+def cert1162 : List NodeSpec := cert623 [([0,1,2,3,4],[0,1,2,3])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1182 : checkNodesBT cert1183 cert1168 cert953 cert1172 cert1047 cert466 6 cert1162 = true := by decide +kernel
+def cert1170 : List NodeSpec := cert1162
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1166 : checkNodesBT cert1183 cert1168 cert953 cert1172 cert1047 cert466 6 cert1170 = true := cert1182
+def cert1164 : BT (List (List Nat)) := buildBucketsBT cert1183 cert1170
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1165 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert1168 6 xs.toFinset) cert1164 := buildBucketsBT_sound (by decide) cert1171 cert1184 cert1173 cert1159 cert1167 cert1166
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1163 : Lower cert582 cert1168 7 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,1,5),(VAR 3,1,9),(VAR 4,1,17)]) (by decide +kernel) cert1165 (by decide +kernel)
+def cert1186 : Nat := 0xffffff00ff000000ffffff00ff000000
+def cert1194 : List Nat := varsOf 56
+def cert1258 : List Nat := [24,24,40,40,48,48,24,40,48]
+def cert1256 : List Nat := [16,8,32,8,32,16,32,16,8]
+def cert1205 : List Decor := [(0xff00ff00ff00ff00ff00ff00ff00ff00,0xcf,0x10a),(0xffff0000ffff0000ffff0000ffff0000,0x173,0xa1),(0xffffffff00000000ffffffff00000000,0x1bc,0x54)]
+def cert1198 : Array Decor := buildWires cert1205 cert227
+def cert1190 : Array (Option BoundPool) := buildPools cert1198 cert1194 cert221 cert195
+lemma cert1244 : goodPairs cert1186 cert1258 cert1256 := goodPairs_of (by decide +kernel)
+lemma cert1206 : ∀ x ∈ cert1205, faithful cert1258 cert1256 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert1199 : ∀ x ∈ cert1198.toList, faithful cert1258 cert1256 x ∧ x.1 < 2^128 := buildWires_faithful cert1206
+lemma cert1202 : ∀ sw ∈ cert40.toList, swapsValid sw = true ∧ permWord sw cert1186 = cert1186 := autos_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+lemma cert1269 : ∀ i (hi : i < cert221.size), Slice cert1194 cert1186 cert221[i].1 cert221[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert1194 cert1186 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert1191 : ∀ i (hi : i < cert1190.size), ∀ c, cert1190[i] = some c → ValidPool cert1194 cert1186 c := buildPools_sound cert1269
+lemma cert1215 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert1186 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1229 : checkNodes cert1198 cert1186 cert128 cert1190 cert40 cert61 0 cert178 = true := by decide +kernel
+def cert1209 : Array (List (List Nat)) := buildBuckets 1 cert1198 cert178
+lemma cert1210 : ∀ i (hi : i < cert1209.size), ∀ xs ∈ cert1209[i], Impossible cert1186 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1244 cert1199 cert1191 cert1202 cert1215 cert1229
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1230 : checkNodes cert1198 cert1186 cert128 cert1190 cert40 cert1209 1 cert178 = true := by decide +kernel
+lemma cert1211 : ∀ i (hi : i < cert1209.size), ∀ xs ∈ cert1209[i], Impossible cert1186 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1244 cert1199 cert1191 cert1202 cert1210 cert1230
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1231 : checkNodes cert1198 cert1186 cert128 cert1190 cert40 cert1209 2 cert178 = true := by decide +kernel
+lemma cert1212 : ∀ i (hi : i < cert1209.size), ∀ xs ∈ cert1209[i], Impossible cert1186 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1244 cert1199 cert1191 cert1202 cert1211 cert1231
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1232 : checkNodes cert1198 cert1186 cert128 cert1190 cert40 cert1209 3 cert179 = true := by decide +kernel
+def cert1213 : Array (List (List Nat)) := buildBuckets 1 cert1198 cert179
+lemma cert1214 : ∀ i (hi : i < cert1213.size), ∀ xs ∈ cert1213[i], Impossible cert1186 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1244 cert1199 cert1191 cert1202 cert1212 cert1232
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1241 : forestRootCheck cert1194 cert1186 [(VAR 3,24,16),(VAR 4,24,8),(VAR 5,40,8)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1240 : bucketContains cert1213 cert1194 = true := by decide +kernel
+lemma cert1246 : Lower cert1194 cert1186 4 := lower_of_forest cert1241 cert1214 cert1240
+lemma cert1248 : carryOK [(2,5),(1,4),(0,3)] cert811 cert805 cert1194 cert1186 = true := by decide +kernel
+lemma cert1247 : Lower cert811 cert805 4 := carry_of cert1248 cert1246
+def cert1188 : Nat := 0xeeeeeeee88888888eeeeeeee88888888
+def cert1196 : List Nat := varsOf 35
+lemma cert1251 : carryOK [(1,2),(0,2),(1,4),(0,3)] cert1196 cert1188 cert1194 cert1186 = true := by decide +kernel
+lemma cert1250 : Lower cert1196 cert1188 4 := carry_of cert1251 cert1246
+def cert1189 : Nat := 0xfafafafaa0a0a0a0fafafafaa0a0a0a0
+def cert1197 : List Nat := varsOf 37
+lemma cert1253 : carryOK [(2,4),(0,1),(0,3)] cert1197 cert1189 cert1194 cert1186 = true := by decide +kernel
+lemma cert1252 : Lower cert1197 cert1189 4 := carry_of cert1253 cert1246
+lemma cert1255 : carryOK [(2,4),(1,3)] cert306 cert293 cert1194 cert1186 = true := by decide +kernel
+lemma cert1254 : Lower cert306 cert293 4 := carry_of cert1255 cert1246
+def cert1187 : Nat := 0xfefefefee8e8e8e8fefefefee8e8e8e8
+def cert1195 : List Nat := varsOf 39
+def cert1259 : List Nat := [3,3,5,5,6,6,33,33,34,34,36,36,3,3,5,5,6,6,33,33,34,34,36,36]
+def cert1257 : List Nat := [2,1,4,1,4,2,32,1,32,2,32,4,4,32,2,32,1,32,2,4,1,4,1,2]
+def cert1207 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xcf0cf,0x51008a),(0xcccccccccccccccccccccccccccccccc,0x333333,0x844221),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0xc3cc3c,0x281814),(0xffffffff00000000ffffffff00000000,0xfc0fc0,0x2a540)]
+def cert1200 : Array Decor := buildWires cert1207 cert706
+def cert1203 : Array (List (Nat × Nat)) := #[[],[(2,5)],[(0,1)],[(2,5),(0,1)],[(1,2)],[(1,5),(1,2)],[(0,1),(0,2)],[(1,5),(0,1),(0,2)],[(1,5),(0,2)]]
+def cert1268 : List (Nat × Nat) := [(subcube 2 0,4),(subcube 1 0,4),(subcube 32 0,4),(subcube 4 0,4)]
+def cert1270 : Array (Nat × Nat) := cert1268.toArray
+def cert1192 : Array (Option BoundPool) := buildPools cert1200 cert1195 cert1270 cert693
+lemma cert1245 : goodPairs cert1187 cert1259 cert1257 := goodPairs_of (by decide +kernel)
+lemma cert1208 : ∀ x ∈ cert1207, faithful cert1259 cert1257 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+lemma cert1201 : ∀ x ∈ cert1200.toList, faithful cert1259 cert1257 x ∧ x.1 < 2^128 := buildWires_faithful cert1208
+lemma cert1204 : ∀ sw ∈ cert1203.toList, swapsValid sw = true ∧ permWord sw cert1187 = cert1187 := autos_of (by decide +kernel)
+lemma cert1261 : sliceDirectCheck 2 0 0 cert1195 cert1187 cert1197 cert1189 = true := by decide +kernel
+lemma cert1260 : Slice cert1195 cert1187 (subcube 2 0) 4 := slice_direct cert1261 cert1252
+lemma cert1263 : sliceDirectCheck 1 0 0 cert1195 cert1187 cert306 cert293 = true := by decide +kernel
+lemma cert1262 : Slice cert1195 cert1187 (subcube 1 0) 4 := slice_direct cert1263 cert1254
+lemma cert1265 : sliceDirectCheck 32 0 0 cert1195 cert1187 cert811 cert805 = true := by decide +kernel
+lemma cert1264 : Slice cert1195 cert1187 (subcube 32 0) 4 := slice_direct cert1265 cert1247
+lemma cert1267 : sliceDirectCheck 4 0 0 cert1195 cert1187 cert1196 cert1188 = true := by decide +kernel
+lemma cert1266 : Slice cert1195 cert1187 (subcube 4 0) 4 := slice_direct cert1267 cert1250
+set_option maxRecDepth 200000 in
+lemma cert1271 : ∀ i (hi : i < cert1270.size), Slice cert1195 cert1187 cert1270[i].1 cert1270[i].2 :=
+  array_forall_of_list (P := fun (p : Nat × Nat) => Slice cert1195 cert1187 p.1 p.2) (forall_cons cert1260 (forall_cons cert1262 (forall_cons cert1264 (forall_cons cert1266 (fun _ h => (List.not_mem_nil h).elim)))))
+lemma cert1193 : ∀ i (hi : i < cert1192.size), ∀ c, cert1192[i] = some c → ValidPool cert1195 cert1187 c := buildPools_sound cert1271
+lemma cert1228 : ∀ i (hi : i < cert61.size), ∀ xs ∈ cert61[i], Impossible cert1187 (0 - 1) xs.toFinset := by intro i hi; simp [cert61] at hi
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1233 : checkNodes cert1200 cert1187 cert674 cert1192 cert1203 cert61 0 cert178 = true := by decide +kernel
+def cert1216 : Array (List (List Nat)) := buildBuckets 1 cert1200 cert178
+lemma cert1217 : ∀ i (hi : i < cert1216.size), ∀ xs ∈ cert1216[i], Impossible cert1187 0 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1245 cert1201 cert1193 cert1204 cert1228 cert1233
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1234 : checkNodes cert1200 cert1187 cert674 cert1192 cert1203 cert1216 1 cert178 = true := by decide +kernel
+lemma cert1218 : ∀ i (hi : i < cert1216.size), ∀ xs ∈ cert1216[i], Impossible cert1187 1 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1245 cert1201 cert1193 cert1204 cert1217 cert1234
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1235 : checkNodes cert1200 cert1187 cert674 cert1192 cert1203 cert1216 2 cert178 = true := by decide +kernel
+lemma cert1219 : ∀ i (hi : i < cert1216.size), ∀ xs ∈ cert1216[i], Impossible cert1187 2 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1245 cert1201 cert1193 cert1204 cert1218 cert1235
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1236 : checkNodes cert1200 cert1187 cert674 cert1192 cert1203 cert1216 3 cert687 = true := by decide +kernel
+def cert1220 : Array (List (List Nat)) := buildBuckets 1 cert1200 cert687
+lemma cert1221 : ∀ i (hi : i < cert1220.size), ∀ xs ∈ cert1220[i], Impossible cert1187 3 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1245 cert1201 cert1193 cert1204 cert1219 cert1236
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1237 : checkNodes cert1200 cert1187 cert674 cert1192 cert1203 cert1220 4 cert688 = true := by decide +kernel
+def cert1222 : Array (List (List Nat)) := buildBuckets 2 cert1200 cert688
+lemma cert1223 : ∀ i (hi : i < cert1222.size), ∀ xs ∈ cert1222[i], Impossible cert1187 4 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1245 cert1201 cert1193 cert1204 cert1221 cert1237
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1238 : checkNodes cert1200 cert1187 cert674 cert1192 cert1203 cert1222 5 cert689 = true := by decide +kernel
+def cert1224 : Array (List (List Nat)) := buildBuckets 1 cert1200 cert689
+lemma cert1225 : ∀ i (hi : i < cert1224.size), ∀ xs ∈ cert1224[i], Impossible cert1187 5 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1245 cert1201 cert1193 cert1204 cert1223 cert1238
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1239 : checkNodes cert1200 cert1187 cert674 cert1192 cert1203 cert1224 6 cert690 = true := by decide +kernel
+def cert1226 : Array (List (List Nat)) := buildBuckets 1 cert1200 cert690
+lemma cert1227 : ∀ i (hi : i < cert1226.size), ∀ xs ∈ cert1226[i], Impossible cert1187 6 xs.toFinset :=
+  buildBuckets_sound (by decide) cert1245 cert1201 cert1193 cert1204 cert1225 cert1239
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1243 : forestRootCheck cert1195 cert1187 [(VAR 0,3,2),(VAR 1,3,1),(VAR 2,5,1),(VAR 5,33,1)] = true := by decide +kernel
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert1242 : bucketContains cert1226 cert1195 = true := by decide +kernel
+lemma cert1249 : Lower cert1195 cert1187 7 := lower_of_forest cert1243 cert1227 cert1242
+def cert1274 : List Nat := varsOf 61
+def cert1273 : Nat := 0xfffafafafffaaa00fffafafafffaaa00
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert1272 : Lower cert1274 cert1273 6 := lift_of (z := 36) (o := 0) (essPairs := [(VAR 2,16,20),(VAR 5,1,33)]) (by decide +kernel) cert988
+def cert248 : List Nat := [10,10,34,34,40,40,10,34,40]
+def cert247 : List Nat := [8,2,32,2,32,8,32,8,2]
+def cert235 : List Decor := [(0xcccccccccccccccccccccccccccccccc,0xcf,0x10a),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x173,0xa1),(0xffffffff00000000ffffffff00000000,0x1bc,0x54)]
+def cert232 : BT Decor := buildWiresBT 2 cert235 cert227
+lemma cert243 : goodPairs cert12 cert248 cert247 := goodPairs_of (by decide +kernel)
+lemma cert236 : ∀ x ∈ cert235, faithful cert248 cert247 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 500000 in
+lemma cert233 : btAll (fun x => faithful cert248 cert247 x ∧ x.1 < 2^128) cert232 := buildWiresBT_faithful cert236
+set_option maxRecDepth 500000 in
+lemma cert234 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert12 = cert12) cert635 := btAll_ofList (autos_of (by decide +kernel))
+set_option maxRecDepth 500000 in
+lemma cert249 : btAll (fun o => ∀ p, o = some p → Slice cert30 cert12 p.1 p.2) cert480 :=
+  btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert30 cert12 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert237 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert12 2 xs.toFinset) cert466 := trivial
+def cert231 : BT (Option BoundPool) := buildPoolsSubBT 1 cert232 cert30 cert480 cert1105 []
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert240 : checkNodesBT cert232 cert12 cert128 cert231 cert635 cert466 3 cert179 = true := by decide +kernel
+def cert238 : BT (List (List Nat)) := buildBucketsBT cert232 cert179
+set_option maxRecDepth 500000 in
+lemma cert239 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert12 3 xs.toFinset) cert238 :=
+  buildBucketsBT_sound (by decide) cert243 cert233 (buildPoolsSubBT_sound cert249) cert234 cert237 cert240
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert242 : forestRootCheck cert30 cert12 [(VAR 1,10,8),(VAR 3,10,2),(VAR 5,34,2)] = true := by decide +kernel
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert241 : bucketContainsBT cert238 cert30 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert244 : Lower cert30 cert12 4 := lower_of_forestBT cert242 cert239 cert241
+def cert230 : Nat := 0xffccffcccccccc00ffccffcccccccc00
+lemma cert246 : liftCheck 16 0 cert27 cert230 cert30 cert12 [(VAR 4,18,2)] = true := by decide +kernel
+lemma cert245 : Lower cert27 cert230 5 := lift_of cert246 cert244
+def cert251 : Nat := 0xeaea8080eaea8080eaea8080eaea8080
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert250 : Lower cert490 cert251 5 := lift_of (z := 0) (o := 2) (essPairs := [(VAR 1,5,7)]) (by decide +kernel) cert1138
+def cert254 : BT Decor := buildWiresBT 2 cert47 cert227
+set_option maxRecDepth 500000 in
+lemma cert255 : btAll (fun x => faithful cert191 cert174 x ∧ x.1 < 2^128) cert254 := buildWiresBT_faithful cert48
+set_option maxRecDepth 500000 in
+lemma cert256 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert0 = cert0) cert635 := btAll_ofList (autos_of (by decide +kernel))
+set_option maxRecDepth 500000 in
+lemma cert266 : btAll (fun o => ∀ p, o = some p → Slice cert22 cert0 p.1 p.2) cert480 :=
+  btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert22 cert0 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+lemma cert257 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert0 2 xs.toFinset) cert466 := trivial
+def cert253 : BT (Option BoundPool) := buildPoolsSubBT 1 cert254 cert22 cert480 cert1105 []
+set_option maxRecDepth 200000 in set_option maxHeartbeats 0 in
+lemma cert260 : checkNodesBT cert254 cert0 cert128 cert253 cert635 cert466 3 cert179 = true := by decide +kernel
+def cert258 : BT (List (List Nat)) := buildBucketsBT cert254 cert179
+set_option maxRecDepth 500000 in
+lemma cert259 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert0 3 xs.toFinset) cert258 :=
+  buildBucketsBT_sound (by decide) cert140 cert255 (buildPoolsSubBT_sound cert266) cert256 cert257 cert260
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert262 : forestRootCheck cert22 cert0 [(VAR 1,6,4),(VAR 2,6,2),(VAR 3,10,2)] = true := by decide +kernel
+set_option maxRecDepth 500000 in set_option maxHeartbeats 0 in
+lemma cert261 : bucketContainsBT cert258 cert22 = true := by decide +kernel
+set_option maxRecDepth 500000 in
+lemma cert263 : Lower cert22 cert0 4 := lower_of_forestBT cert262 cert259 cert261
+def cert252 : Nat := 0xfce8fce8fce8fce8fce8fce8fce8fce8
+lemma cert265 : liftCheck 1 0 cert478 cert252 cert22 cert0 [(VAR 0,3,2)] = true := by decide +kernel
+lemma cert264 : Lower cert478 cert252 5 := lift_of cert265 cert263
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert267 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert805 = cert805) cert983 := btAll_ofList (autos_of (by decide +kernel))
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert272 : checkNodesBT cert814 cert805 cert506 cert808 cert983 cert466 3 cert987 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert271 : checkNodesBT cert814 cert805 cert506 cert808 cert983 cert466 3 cert994 = true := cert272
+def cert269 : BT (List (List Nat)) := buildBucketsBT cert814 cert994
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert270 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert805 3 xs.toFinset) cert269 := buildBucketsBT_sound (by decide) cert807 cert815 cert809 cert267 cert804 cert271
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert268 : Lower cert811 cert805 4 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,1,5)]) (by decide +kernel) cert270 (by decide +kernel)
+def cert283 : Nat := 0xeea0eea0eea0eea0eea0eea0eea0eea0
+def cert288 : List Nat := [5,7,9,5,7,9,10,14]
+def cert284 : List Nat := [4,6,8,1,3,1,2,6]
+def cert276 : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,63,56),(0xcccccccccccccccccccccccccccccccc,210,210),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,155,131),(0xff00ff00ff00ff00ff00ff00ff00ff00,228,4)]
+def cert291 : BT Decor := buildWiresBT 2 cert276 cert227
+def cert273 : List (List (Nat × Nat)) := [[],[(1,2),(0,3)]]
+def cert274 : BT (List (Nat × Nat)) := btOfList 1 cert273
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert285 : goodPairs cert283 cert288 cert284 := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert277 : ∀ x ∈ cert276, faithful cert288 cert284 x ∧ x.1 < 2^128 := base_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert292 : btAll (fun x => faithful cert288 cert284 x ∧ x.1 < 2^128) cert291 := buildWiresBT_faithful cert277
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert275 : btAll (fun sw => swapsValid sw = true ∧ permWord sw cert283 = cert283) cert274 := btAll_ofList (autos_of (by decide +kernel))
+def cert286 : BT (Option BoundPool) := buildPoolsBT 1 cert291 cert478 cert480 cert195
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert289 : btAll (fun o => ∀ p, o = some p → Slice cert478 cert283 p.1 p.2) cert480 := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice cert478 cert283 p.1 p.2) (fun _ h => (List.not_mem_nil h).elim)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert287 : btAll (fun o => ∀ c, o = some c → ValidPool cert478 cert283 c) cert286 := buildPoolsBT_sound cert289
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert282 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert283 (3 - 1) xs.toFinset) cert466 := trivial
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert290 : checkNodesBT cert291 cert283 cert848 cert286 cert274 cert466 3 cert841 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert281 : checkNodesBT cert291 cert283 cert848 cert286 cert274 cert466 3 cert850 = true := cert290
+def cert279 : BT (List (List Nat)) := buildBucketsBT cert291 cert850
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert280 : btAll (fun bk => ∀ xs ∈ bk, Impossible cert283 3 xs.toFinset) cert279 := buildBucketsBT_sound (by decide) cert285 cert292 cert287 cert275 cert282 cert281
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma cert278 : Lower cert478 cert283 4 := lower_of_forestBT (essPairs := [(VAR 0,4,5),(VAR 1,8,10),(VAR 2,1,5),(VAR 3,1,9)]) (by decide +kernel) cert280 (by decide +kernel)
 
-end Cofactor12116
-def h92R : List Nat := varsOf 47
-def h92G : Nat := 0xfeeefeeee888e888feeefeeee888e888
-lemma h92Bound : Lower h92R h92G 8 := carry_of (swaps := [(2,3),(3,4),(4,5),(2,3),(3,4)]) (roots2 := Cofactor12116.R_59) (T2 := Cofactor12116.G_59) (by decide +kernel) Cofactor12116.low_59
-def h94R : List Nat := varsOf 54
-def h94G : Nat := 0xfcfcfcfcf0f0ccccfcfcfcfcf0f0cccc
-lemma h94Bound : Lower h94R h94G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(1,2)]) (roots2 := h12R) (T2 := h12G) (by decide +kernel) h12Bound
-def h95R : List Nat := varsOf 39
-def h95G : Nat := 0xfefefefe88888888fefefefe88888888
-lemma h95Bound : Lower h95R h95G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(4,5),(3,4),(2,3),(1,2)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h96R : List Nat := varsOf 53
-def h96G : Nat := 0xffffa0a0fafa0000ffffa0a0fafa0000
-lemma h96Bound : Lower h96R h96G 6 := carry_of (swaps := [(3,4)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h97R : List Nat := varsOf 54
-def h97G : Nat := 0xfffffcfcf0f00000fffffcfcf0f00000
-lemma h97Bound : Lower h97R h97G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(4,5),(0,1),(1,2),(0,1)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h98R : List Nat := varsOf 54
-def h98G : Nat := 0xfcfcf0f0f0f0c0c0fcfcf0f0f0f0c0c0
-lemma h98Bound : Lower h98R h98G 6 := carry_of (swaps := [(2,3),(3,4),(0,1)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h99R : List Nat := varsOf 23
-def h99G : Nat := 0xfafa8888fafa8888fafa8888fafa8888
-lemma h99Bound : Lower h99R h99G 4 := carry_of (swaps := [(4,5),(3,4),(1,2),(2,3),(1,2)]) (roots2 := h46R) (T2 := h46G) (by decide +kernel) h46Bound
-def h100R : List Nat := varsOf 39
-def h100G : Nat := 0xe8e8e8e888888888e8e8e8e888888888
-lemma h100Bound : Lower h100R h100G 5 := lift_of (z := 0) (o := 4) (essPairs := [(VAR 2,33,37)]) (by decide +kernel) h15Bound
-def h101R : List Nat := varsOf 19
-def h101G : Nat := 0xeeee8888eeee8888eeee8888eeee8888
-lemma h101Bound : Lower h101R h101G 4 := carry_of (swaps := [(4,5),(1,2),(2,3),(0,1),(1,2)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h102R : List Nat := varsOf 51
-def h102G : Nat := 0xeeee8888aaaa8888eeee8888aaaa8888
-lemma h102Bound : Lower h102R h102G 5 := carry_of (swaps := [(2,3),(3,4),(0,1)]) (roots2 := h24R) (T2 := h24G) (by decide +kernel) h24Bound
-def h103R : List Nat := varsOf 53
-def h103G : Nat := 0xfafaa0a0fafa0000fafaa0a0fafa0000
-lemma h103Bound : Lower h103R h103G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(1,2)]) (roots2 := h24R) (T2 := h24G) (by decide +kernel) h24Bound
-def h104R : List Nat := varsOf 22
-def h104G : Nat := 0xfcfcc0c0fcfcc0c0fcfcc0c0fcfcc0c0
-lemma h104Bound : Lower h104R h104G 4 := carry_of (swaps := [(4,5),(1,2),(2,3)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h105R : List Nat := varsOf 54
-def h105G : Nat := 0xfcfcc0c0f0f00000fcfcc0c0f0f00000
-lemma h105Bound : Lower h105R h105G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(0,1),(1,2),(0,1)]) (roots2 := h100R) (T2 := h100G) (by decide +kernel) h100Bound
-def h106R : List Nat := varsOf 23
-def h106G : Nat := 0xfefee8e8fefee8e8fefee8e8fefee8e8
-lemma h106Bound : Lower h106R h106G 7 := Cofactor12068.low_7
-def h107R : List Nat := varsOf 51
-def h107G : Nat := 0xffffeeeeffff8888ffffeeeeffff8888
-lemma h107Bound : Lower h107R h107G 5 := carry_of (swaps := [(0,1),(1,2),(2,3),(3,4),(0,1),(1,2)]) (roots2 := h39R) (T2 := h39G) (by decide +kernel) h39Bound
-def h93R : List Nat := varsOf 55
-def h93G : Nat := 0xfefee8e8fafa8888fefee8e8fafa8888
-def h93Pos : List Nat := [17,38,17,20,37,37,20,17,38,37,3,50,22,22,3,21,50,17,35,7,3,20,7,49,19,38,35,50,21,52,37,17,49,3,3,7,21,19,49,3,17,7]
-def h93Neg : List Nat := [16,36,18,16,33,36,4,1,6,5,2,48,18,6,1,5,18,5,34,6,18,0,5,33,18,34,33,34,1,36,1,33,1,0,6,2,16,1,48,5,0,1]
-def h93Mask : Nat := fullMask 42
-def h93Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x3ffd5dec6b5,0x2a1d4c2c290),(0xcccccccccccccccccccccccccccccccc,0x2ae0f5d7d02,0xc0b1d3504),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x2187268b37a,0x84204aa362),(0xffff0000ffff0000ffff0000ffff0000,0x171b9a3b8cd,0x500111180d),(0xffffffff00000000ffffffff00000000,0x416e850b32,0x40ae840832)]
-def h93Steps : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(3,0,1),(0,0,2),(1,0,2),(2,0,2),(3,0,2),(0,0,3),(1,0,3),(2,0,3),(0,1,2),(1,1,2),(2,1,2),(2,1,3),(0,2,3),(1,0,20),(1,2,3),(2,2,3),(3,2,3),(1,2,5),(2,2,5),(1,3,5),(0,1,27),(0,2,27),(1,2,27),(2,2,27),(3,2,27),(2,3,5),(2,4,5),(1,5,20),(3,0,22),(1,3,36),(0,4,22),(1,5,38),(3,5,22),(1,5,24),(2,4,29),(0,4,30),(3,3,6),(0,4,6),(1,2,45),(2,2,45),(1,3,45),(2,3,45),(2,22,45),(0,6,22),(2,6,24),(0,2,48),(3,2,48),(1,3,7),(1,7,24),(1,3,9),(0,4,10),(2,4,11),(0,4,14),(2,4,14),(1,12,19),(1,1,13),(2,1,13),(2,4,13),(1,0,16),(3,3,66),(2,14,16),(0,4,17),(1,0,18)]
-def h93W : BT Decor := buildWiresBT 7 h93Base h93Steps
-def h93AutoList : List (List (Nat × Nat)) := [[],[(1,2),(0,4)]]
-def h93Autos : BT (List (Nat × Nat)) := btOfList 1 h93AutoList
-lemma h93Pairs : goodPairs h93G h93Pos h93Neg := goodPairs_of (by decide +kernel)
-lemma h93BaseOk : ∀ x ∈ h93Base, faithful h93Pos h93Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h93WOk : btAll (fun x => faithful h93Pos h93Neg x ∧ x.1 < 2^128) h93W := buildWiresBT_faithful h93BaseOk
-lemma h93AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h93G = h93G) h93Autos := btAll_ofList (autos_of (by decide +kernel))
-def h93SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 2,5),some (subcubeFast 0 4,5),some (subcubeFast 0 32,7),some (subcubeFast 1 0,5),some (subcubeFast 1 2,4),some (subcubeFast 1 32,4),some (subcubeFast 2 0,5),some (subcubeFast 2 32,4),some (subcubeFast 4 0,5),some (subcubeFast 4 32,4),some (subcubeFast 16 0,5),some (subcubeFast 16 4,4),some (subcubeFast 32 0,4),some (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5,6),some (0xaaaaaaaa55555555aaaaaaaa55555555,5),some (0xcccc3333cccc3333cccc3333cccc3333,6),some (0xffff00000000ffffffff00000000ffff,5),some (0x5555aaaa5555aaaa5555aaaa5555aaaa,5)]
-def h93Slices : BT (Option (Nat × Nat)) := btOfList 5 h93SliceList
-def h93Specs : List PoolSpec := poolSteps h93Steps [(3,[]),(6,[]),(2,[0]),(13,[]),(8,[]),(10,[]),(2,[15,16]),(0,[]),(1,[]),(2,[15]),(0,[29]),(5,[]),(12,[]),(15,[]),(2,[]),(0,[22]),(2,[0,22]),(2,[17]),(8,[33]),(10,[33]),(2,[18]),(11,[]),(2,[19]),(2,[0,20]),(2,[0,21]),(16,[]),(2,[0,28]),(4,[]),(2,[1]),(15,[1]),(1,[14]),(15,[1,40]),(3,[40]),(7,[]),(2,[1,14]),(6,[40]),(2,[2]),(2,[2,50]),(2,[3]),(2,[4]),(13,[52]),(2,[4,52]),(2,[5]),(2,[6]),(8,[54]),(1,[9]),(17,[]),(2,[7]),(9,[]),(2,[8]),(2,[8,58]),(2,[8,59]),(2,[9]),(15,[9]),(14,[]),(2,[10]),(2,[11]),(2,[11,61]),(2,[12]),(6,[64]),(8,[64]),(2,[13])]
-def h93Pools : BT (Option BoundPool) := buildPoolsBT 6 h93W h93R h93Slices h93Specs
-set_option maxRecDepth 200000 in
-lemma h93Slice17 : Slice h93R h93G (0x5555aaaa5555aaaa5555aaaa5555aaaa) 5 := opposite_slice (oppositeRow 0 4 54) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h94Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice16 : Slice h93R h93G (0xffff00000000ffffffff00000000ffff) 5 := mapped_slice (identifyRow 4 5 39) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h95Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice15 : Slice h93R h93G (0xcccc3333cccc3333cccc3333cccc3333) 6 := mapped_slice (identifyRow 1 4 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h96Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice14 : Slice h93R h93G (0xaaaaaaaa55555555aaaaaaaa55555555) 5 := mapped_slice (identifyRow 0 5 54) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h97Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice13 : Slice h93R h93G (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5) 6 := mapped_slice (identifyRow 0 2 54) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h98Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice12 : Slice h93R h93G (subcubeFast 32 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h99Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice11 : Slice h93R h93G (subcubeFast 16 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h15Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice10 : Slice h93R h93G (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h100Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice9 : Slice h93R h93G (subcubeFast 4 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h101Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice8 : Slice h93R h93G (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h102Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice7 : Slice h93R h93G (subcubeFast 2 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h51Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice6 : Slice h93R h93G (subcubeFast 2 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h103Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice5 : Slice h93R h93G (subcubeFast 1 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h104Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice4 : Slice h93R h93G (subcubeFast 1 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h54Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice3 : Slice h93R h93G (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h105Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice2 : Slice h93R h93G (subcubeFast 0 32) 7 := slice_fast_direct (zDead := 0) (by decide +kernel) h106Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice1 : Slice h93R h93G (subcubeFast 0 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h107Bound
-set_option maxRecDepth 200000 in
-lemma h93Slice0 : Slice h93R h93G (subcubeFast 0 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h55Bound
-lemma h93SlicesOk : btAll (sliceSpec h93R h93G) h93Slices := btAll_ofList (P := sliceSpec h93R h93G) (sliceSpecCons h93Slice0 (sliceSpecCons h93Slice1 (sliceSpecCons h93Slice2 (sliceSpecCons h93Slice3 (sliceSpecCons h93Slice4 (sliceSpecCons h93Slice5 (sliceSpecCons h93Slice6 (sliceSpecCons h93Slice7 (sliceSpecCons h93Slice8 (sliceSpecCons h93Slice9 (sliceSpecCons h93Slice10 (sliceSpecCons h93Slice11 (sliceSpecCons h93Slice12 (sliceSpecCons h93Slice13 (sliceSpecCons h93Slice14 (sliceSpecCons h93Slice15 (sliceSpecCons h93Slice16 (sliceSpecCons h93Slice17 sliceSpecNil))))))))))))))))))
-set_option maxRecDepth 200000 in
-lemma h93PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h93R h93G c) h93Pools := buildPoolsBT_sound h93SlicesOk
-def h93Empty : BT (List (List Nat)) := BT.empty
-lemma h93EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h93G (4 - 1) xs.toFinset) h93Empty := trivial
-def h93Block4_0 : List NodeSpec := indexPairNodes [(6828117,0), (7083061,0), (19984469,0), (1512207,0), (74783,0), (2036495,0), (4330255,0), (97311,0), (17868823,0), (19965975,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h93Test4_0 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Empty 4 h93Block4_0 = true := by decide +kernel
-def h93Nodes4 : List NodeSpec := h93Block4_0
-lemma h93Check4 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Empty 4 h93Nodes4 = true := h93Test4_0
-def h93Bucket4 : BT (List (List Nat)) := buildBucketsBT h93W h93Nodes4
-set_option maxRecDepth 200000 in
-lemma h93Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h93G 4 xs.toFinset) h93Bucket4 := buildBucketsBT_sound (by decide) h93Pairs h93WOk h93PoolsOk h93AutosOk h93EmptyOk h93Check4
-def h93Block5_0 : List NodeSpec := indexPairNodes [(135413,240), (3802655,7367), (64575,57360), (258293,512), (2893871,6865), (3280415,913), (548959,951345), (149567,5411), (2373679,16), (3019295,0), (935983,0), (2758175,0), (153663,867), (686127,14919), (948271,13667), (2390063,0), (2914351,0), (27788331,462865), (12324383,433), (194623,2737), (45103151,256), (11801119,0), (11277855,233489), (198719,0), (218143,433), (676895,0), (939039,0), (2380831,176145), (182335,800), (215103,0), (239679,0), (55055477,20)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h93Test5_0 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket4 5 h93Block5_0 = true := by decide +kernel
-def h93Block5_1 : List NodeSpec := nodesWithIdentity [([0,1,2,3,4,68],[]),([0,1,2,3,4,67],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h93Test5_1 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket4 5 h93Block5_1 = true := by decide +kernel
-def h93Nodes5 : List NodeSpec := h93Block5_0 ++ h93Block5_1
-lemma h93Check5 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket4 5 h93Nodes5 = true := by
-  unfold h93Nodes5 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨h93Test5_0,h93Test5_1⟩
-def h93Bucket5 : BT (List (List Nat)) := buildBucketsBT h93W h93Nodes5
-set_option maxRecDepth 200000 in
-lemma h93Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h93G 5 xs.toFinset) h93Bucket5 := buildBucketsBT_sound (by decide) h93Pairs h93WOk h93PoolsOk h93AutosOk h93Bucket4Ok h93Check5
-def h93Block6_0 : List NodeSpec := indexTripleNodes [(31871,1902,6), (71807,263038,2), (75903,6308450,2), (79999,238459,2), (88151,508695,2), (92247,42039,2), (96303,14919,2), (48191,67297826,6), (120879,176167,2), (32287,6543,2), (221547,255988903,2), (270527,12071185,6), (286911,967369,2), (303295,8405796,2), (165951,335602466,6), (87071,949947409,6), (170047,604013414,2), (270783,885267,2), (287167,530,2), (211007,6725773075,2), (508223,192677,2), (219199,31695886779,2), (223295,300729837861,2), (115743,3256760731,2), (41022,26610825,2), (492095,30461605,2), (137279,92362347451,2), (487531,78663987,2), (495723,761895,2), (128031,755964467,2), (84543,10095319,6), (1903167,445024883,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h93Test6_0 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket5 6 h93Block6_0 = true := by decide +kernel
-def h93Block6_1 : List NodeSpec := indexPairNodes [(231487,1369482615), (235583,331475209), (32830,5477967003), (256063,0xe1070b0b897), (272415,273846503697), (536639,0x92e089ce227), (544831,1891187070103)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h93Test6_1 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket5 6 h93Block6_1 = true := by decide +kernel
-def h93Nodes6 : List NodeSpec := h93Block6_0 ++ h93Block6_1
-lemma h93Check6 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket5 6 h93Nodes6 = true := by
-  unfold h93Nodes6 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨h93Test6_0,h93Test6_1⟩
-def h93Bucket6 : BT (List (List Nat)) := buildBucketsBT h93W h93Nodes6
-set_option maxRecDepth 200000 in
-lemma h93Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h93G 6 xs.toFinset) h93Bucket6 := buildBucketsBT_sound (by decide) h93Pairs h93WOk h93PoolsOk h93AutosOk h93Bucket5Ok h93Check6
-def h93Block7_0 : List NodeSpec := indexTripleNodes [(126,53886,2), (190,805356406,6), (318,377842391,6), (574,6197267159,6), (1086,13468312279,2), (2110,33373637335,2), (4158,141909256919,2), (8254,225573423831,6), (9791,48364874455,6), (32830,7177065646807,6), (65598,489976851159,2), (12863,3232587424471,6), (13887,270758234839,2), (14911,7839564352215,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h93Test7_0 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket6 7 h93Block7_0 = true := by decide +kernel
-def h93Nodes7 : List NodeSpec := h93Block7_0
-lemma h93Check7 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket6 7 h93Nodes7 = true := h93Test7_0
-def h93Bucket7 : BT (List (List Nat)) := buildBucketsBT h93W h93Nodes7
-set_option maxRecDepth 200000 in
-lemma h93Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h93G 7 xs.toFinset) h93Bucket7 := buildBucketsBT_sound (by decide) h93Pairs h93WOk h93PoolsOk h93AutosOk h93Bucket6Ok h93Check7
-def h93Block8_0 : List NodeSpec := [([0,1,2,3,4],[14],[0,1])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h93Test8_0 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket7 8 h93Block8_0 = true := by decide +kernel
-def h93Nodes8 : List NodeSpec := h93Block8_0
-lemma h93Check8 : checkNodesBT h93W h93G h93Mask h93Pools h93Autos h93Bucket7 8 h93Nodes8 = true := h93Test8_0
-def h93Bucket8 : BT (List (List Nat)) := buildBucketsBT h93W h93Nodes8
-set_option maxRecDepth 200000 in
-lemma h93Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h93G 8 xs.toFinset) h93Bucket8 := buildBucketsBT_sound (by decide) h93Pairs h93WOk h93PoolsOk h93AutosOk h93Bucket7Ok h93Check8
-set_option maxRecDepth 200000 in
-lemma h93Bound : Lower h93R h93G 9 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,16,20),(VAR 4,1,17),(VAR 5,5,37)]) (by decide +kernel) h93Bucket8Ok (by decide +kernel)
-def h108R : List Nat := varsOf 59
-def h108G : Nat := 0xffeeee88ffcc8888ffeeee88ffcc8888
-lemma h108Bound : Lower h108R h108G 9 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h93R) (T2 := h93G) (by decide +kernel) h93Bound
-def h110R : List Nat := varsOf 53
-def h110G : Nat := 0xfffffafafafa0000fffffafafafa0000
-lemma h110Bound : Lower h110R h110G 5 := carry_of (swaps := [(3,4)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h111R : List Nat := varsOf 29
-def h111G : Nat := 0xfa00a000fa00a000fa00a000fa00a000
-lemma h111Bound : Lower h111R h111G 5 := lift_of (z := 0) (o := 8) (essPairs := [(VAR 3,5,13)]) (by decide +kernel) h51Bound
-def h112R : List Nat := varsOf 45
-def h112G : Nat := 0xfffafffaa000a000fffafffaa000a000
-lemma h112Bound : Lower h112R h112G 6 := carry_of (swaps := [(3,4),(4,5),(3,4)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h113R : List Nat := varsOf 57
-def h113G : Nat := 0xffffffaaaa000000ffffffaaaa000000
-lemma h113Bound : Lower h113R h113G 6 := carry_of (swaps := [(3,4),(4,5),(2,3)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h114R : List Nat := varsOf 60
-def h114G : Nat := 0xfffffff0f0000000fffffff0f0000000
-lemma h114Bound : Lower h114R h114G 6 := carry_of (swaps := [(3,4),(4,5),(2,3),(0,1),(1,2)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h115R : List Nat := varsOf 53
-def h115G : Nat := 0xfffffffffafaa0a0fffffffffafaa0a0
-lemma h115Bound : Lower h115R h115G 5 := carry_of (swaps := [(0,1),(1,2),(2,3),(3,4),(4,5),(0,1)]) (roots2 := h39R) (T2 := h39G) (by decide +kernel) h39Bound
-def h109R : List Nat := varsOf 61
-def h109G : Nat := 0xfffffffafa00a000fffffffafa00a000
-def h109Pos : List Nat := [25,28,13,13,28,13,25,25,29,40,33,33,13,48,48,28,44,40,36,25,40,36,41,52,37,48,41,36,49,40,49,13,52,25,40,29,33,48,49,13,33,28,13,13,33,41,56,36,25]
-def h109Neg : List Nat := [24,24,9,12,20,5,17,9,21,8,1,32,0,16,32,12,12,32,4,16,12,32,32,20,5,21,9,12,17,9,32,21,32,1,0,24,17,0,1,8,0,21,4,1,5,8,24,5,21]
-def h109Mask : Nat := fullMask 49
-def h109Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x13ddad5481ded,0x19a52b70005e4),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x8e8989a5913e,0x196008b958138),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x16e8ea45b93ff,0x60882c11828f),(0xffff0000ffff0000ffff0000ffff0000,0x1426b5288e1d3,0x1421892882153),(0xffffffff00000000ffffffff00000000,0xf1757ff76e00,0x140624800)]
-def h109Steps : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(1,0,2),(3,0,2),(0,1,2),(3,1,2),(1,2,3),(2,2,3),(1,2,4),(2,2,4),(3,2,4),(0,2,6),(1,2,6),(2,2,6),(3,2,6),(1,3,4),(3,3,4),(1,3,6),(3,3,6),(1,3,9),(3,3,9),(0,4,6),(1,4,6),(2,4,6),(3,4,6),(1,4,9),(3,4,9),(1,1,3),(0,2,33),(1,6,26),(3,3,33),(3,9,33),(3,1,3),(1,1,4),(3,9,39),(1,6,40),(1,1,9),(3,3,42),(3,4,42),(0,6,15),(1,3,17),(1,4,17),(1,3,20),(3,1,23),(0,2,23),(3,4,23),(2,2,24),(1,4,24),(3,6,25),(3,1,31),(1,1,32),(2,2,32),(1,0,3),(0,2,28),(2,2,30),(3,3,58),(0,39,58),(3,1,28),(1,1,59),(3,3,28),(1,3,30),(1,0,4),(3,3,67),(2,2,63),(1,3,63),(1,6,68),(1,2,27),(1,3,27),(3,0,4),(3,0,12),(2,12,24),(0,6,12),(2,6,13),(1,0,19),(1,4,19),(1,0,16),(3,1,81),(1,16,17),(3,3,41),(2,6,16),(3,0,18),(3,1,18),(3,17,18),(1,5,76),(0,6,21),(3,6,21),(1,0,22),(2,6,22),(3,0,23),(3,0,28),(3,27,28),(1,1,95),(1,0,29),(1,3,87),(3,3,97)]
-def h109W : BT Decor := buildWiresBT 7 h109Base h109Steps
-def h109AutoList : List (List (Nat × Nat)) := [[],[(2,4)],[(0,2)],[(0,4)],[(2,4),(0,2)],[(2,4),(0,4)]]
-def h109Autos : BT (List (Nat × Nat)) := btOfList 3 h109AutoList
-lemma h109Pairs : goodPairs h109G h109Pos h109Neg := goodPairs_of (by decide +kernel)
-lemma h109BaseOk : ∀ x ∈ h109Base, faithful h109Pos h109Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h109WOk : btAll (fun x => faithful h109Pos h109Neg x ∧ x.1 < 2^128) h109W := buildWiresBT_faithful h109BaseOk
-lemma h109AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h109G = h109G) h109Autos := btAll_ofList (autos_of (by decide +kernel))
-def h109SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 8,5),some (subcubeFast 1 0,6),some (subcubeFast 4 0,6),some (subcubeFast 16 0,6),some (subcubeFast 32 0,5),some (subcubeFast 32 8,4),some (0xaa55aa55aa55aa55aa55aa55aa55aa55,5),some (0xf00ff00ff00ff00ff00ff00ff00ff00f,5),some (0xff0000ffff0000ffff0000ffff0000ff,5),some (0x55555555aaaaaaaa55555555aaaaaaaa,5),some (0xf0f0f0ff0f0f0f00f0f0f0ff0f0f0f0,5),some (0xff00ffff00ff0000ff00ffff00ff00,7),some (0xffffffff00000000ffffffff0000,5)]
-def h109Slices : BT (Option (Nat × Nat)) := btOfList 4 h109SliceList
-def h109Specs : List PoolSpec := poolSteps h109Steps [(1,[]),(2,[]),(2,[4]),(11,[1,4]),(0,[]),(2,[4,20]),(4,[4]),(2,[53]),(3,[]),(1,[28]),(3,[1]),(2,[62]),(0,[62]),(0,[27]),(4,[]),(2,[62,63]),(1,[7]),(6,[]),(1,[8]),(8,[]),(1,[21,30]),(1,[8,73]),(11,[1]),(1,[10]),(5,[]),(1,[11]),(1,[12]),(2,[12]),(11,[1,12]),(12,[]),(1,[12,13]),(1,[13]),(1,[14]),(2,[14]),(11,[1,14]),(1,[15]),(1,[15,43]),(1,[16]),(1,[16,85]),(9,[]),(1,[16,86]),(1,[17]),(1,[18]),(2,[18]),(1,[19]),(2,[19]),(1,[22]),(1,[22,67]),(1,[22,68]),(1,[23]),(2,[23]),(1,[23,54]),(2,[23,54]),(1,[23,60]),(1,[24]),(1,[25]),(2,[25]),(2,[3]),(3,[3]),(2,[13]),(7,[]),(3,[4]),(10,[]),(1,[37]),(3,[4,37]),(11,[4,37]),(11,[4]),(0,[26]),(1,[26]),(1,[27]),(3,[62]),(2,[69]),(3,[69]),(11,[]),(2,[10]),(3,[10]),(2,[11]),(3,[11])]
-def h109Pools : BT (Option BoundPool) := buildPoolsBT 7 h109W h109R h109Slices h109Specs
-set_option maxRecDepth 200000 in
-lemma h109Slice12 : Slice h109R h109G (0xffffffff00000000ffffffff0000) 5 := opposite_slice (oppositeRow 4 5 45) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h17Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice11 : Slice h109R h109G (0xff00ffff00ff0000ff00ffff00ff00) 7 := opposite_slice (oppositeRow 3 5 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h49Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice10 : Slice h109R h109G (0xf0f0f0ff0f0f0f00f0f0f0ff0f0f0f0) 5 := opposite_slice (oppositeRow 2 5 57) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h63Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice9 : Slice h109R h109G (0x55555555aaaaaaaa55555555aaaaaaaa) 5 := opposite_slice (oppositeRow 0 5 60) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h89Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice8 : Slice h109R h109G (0xff0000ffff0000ffff0000ffff0000ff) 5 := mapped_slice (identifyRow 3 4 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h110Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice7 : Slice h109R h109G (0xf00ff00ff00ff00ff00ff00ff00ff00f) 5 := mapped_slice (identifyRow 2 3 57) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h63Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice6 : Slice h109R h109G (0xaa55aa55aa55aa55aa55aa55aa55aa55) 5 := mapped_slice (identifyRow 0 3 60) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h89Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice5 : Slice h109R h109G (subcubeFast 32 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h51Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice4 : Slice h109R h109G (subcubeFast 32 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h111Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice3 : Slice h109R h109G (subcubeFast 16 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h112Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice2 : Slice h109R h109G (subcubeFast 4 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h113Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice1 : Slice h109R h109G (subcubeFast 1 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h114Bound
-set_option maxRecDepth 200000 in
-lemma h109Slice0 : Slice h109R h109G (subcubeFast 0 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h115Bound
-lemma h109SlicesOk : btAll (sliceSpec h109R h109G) h109Slices := btAll_ofList (P := sliceSpec h109R h109G) (sliceSpecCons h109Slice0 (sliceSpecCons h109Slice1 (sliceSpecCons h109Slice2 (sliceSpecCons h109Slice3 (sliceSpecCons h109Slice4 (sliceSpecCons h109Slice5 (sliceSpecCons h109Slice6 (sliceSpecCons h109Slice7 (sliceSpecCons h109Slice8 (sliceSpecCons h109Slice9 (sliceSpecCons h109Slice10 (sliceSpecCons h109Slice11 (sliceSpecCons h109Slice12 sliceSpecNil)))))))))))))
-set_option maxRecDepth 200000 in
-lemma h109PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h109R h109G c) h109Pools := buildPoolsBT_sound h109SlicesOk
-def h109Empty : BT (List (List Nat)) := BT.empty
-lemma h109EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h109G (3 - 1) xs.toFinset) h109Empty := trivial
-def h109Block3_0 : List NodeSpec := nodesWithIdentity [([4,33,58,59],[]),([2,4,6,89],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test3_0 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Empty 3 h109Block3_0 = true := by decide +kernel
-def h109Nodes3 : List NodeSpec := h109Block3_0
-lemma h109Check3 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Empty 3 h109Nodes3 = true := h109Test3_0
-def h109Bucket3 : BT (List (List Nat)) := buildBucketsBT h109W h109Nodes3
-set_option maxRecDepth 200000 in
-lemma h109Bucket3Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h109G 3 xs.toFinset) h109Bucket3 := buildBucketsBT_sound (by decide) h109Pairs h109WOk h109PoolsOk h109AutosOk h109EmptyOk h109Check3
-def h109Block4_0 : List NodeSpec := indexPairNodes [(6691145,0), (31605037,4), (516285,4), (1130685,0), (6845377581,0), (1712097325,512), (428255277,0), (1851581,2), (1941669,0), (99619145,0), (32247351,0), (1302615,0), (1318959,0), (1384535,0), (32770615,0), (118490167,0), (4620717,0), (383007,0), (5943349293,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test4_0 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket3 4 h109Block4_0 = true := by decide +kernel
-def h109Nodes4 : List NodeSpec := h109Block4_0
-lemma h109Check4 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket3 4 h109Nodes4 = true := h109Test4_0
-def h109Bucket4 : BT (List (List Nat)) := buildBucketsBT h109W h109Nodes4
-set_option maxRecDepth 200000 in
-lemma h109Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h109G 4 xs.toFinset) h109Bucket4 := buildBucketsBT_sound (by decide) h109Pairs h109WOk h109PoolsOk h109AutosOk h109Bucket3Ok h109Check4
-def h109Block5_0 : List NodeSpec := indexTripleNodes [(5304,6,2), (3214525,0,2), (4000957,6,2), (8785085,4,2), (66740,0,2), (263348,0,2), (2098356,0,2), (951925,32,2), (1017461,0,2), (639349,68,2), (672117,4,2), (835957,4,2), (868725,4,2), (428196141,1798,30), (654360765,0,18), (159760573,6,2), (43527285,512,66), (63998069,512,2), (59811957,512,2), (956350653,6,2), (38584509,4,2), (3375477,3205,2), (186660981,497,2), (182470773,0,2), (4096373,3717,2), (679567797,0,2), (629285301,0,2), (9109877,4,2), (270390,0,2), (3277871,1185,2), (602175,0,2), (206911,38961,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test5_0 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket4 5 h109Block5_0 = true := by decide +kernel
-def h109Block5_1 : List NodeSpec := indexTripleNodes [(278582,512,82), (64575,51249,2), (610367,35895,82), (597079,497,2), (170047,0,2), (9896309,4,2), (58455,0,2), (153663,544,2), (667711,0,2), (174143,0,2), (178239,6559975,2), (60503,2017,2), (10551669,2,2), (618559,0,2), (13887,0,2), (1187887,0,2), (593983,0,2), (626751,0,2), (9634165,2243,2), (64599,0,2), (9240879,1185,2), (2785583,4801,2), (708671,803527,38), (716863,5313,2), (11338101,4,2), (665647,5185,2), (553023,5903897,2), (733247,0,2), (741439,0,2), (599799925,2,2), (190527,0,2), (194623,0,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test5_1 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket4 5 h109Block5_1 = true := by decide +kernel
-def h109Block5_2 : List NodeSpec := indexTripleNodes [(11600245,2,2), (198719,1185,2), (39999,0,2), (202815,5185,2), (8716631,6209,2), (8847663,6337,2), (57887,0,2), (54335,0,2), (749631,0,2), (454743,14913,10), (227391,0,2), (503855,0,2), (251967,0,2), (11731317,2,2), (3506519,6721,2), (3899695,6977,2), (12124533,2,2), (59935,0,2), (231487,47335,2), (256063,0,2), (782399,0,2), (45352565,32,2), (3698795,497,2), (149567,0,2), (14425175,0,2), (161855,1185,2), (165951,0,2), (34645271,17537,2), (211007,0,2), (215103,0,2), (2830453,0,2), (213930091,5185,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test5_2 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket4 5 h109Block5_2 = true := by decide +kernel
-def h109Block5_3 : List NodeSpec := indexPairNodes [(536639,0), (544831,5185), (3310453,9425), (12454487,1185), (247871,1185), (1031802987,0), (790591,0), (643135,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test5_3 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket4 5 h109Block5_3 = true := by decide +kernel
-def h109Nodes5 : List NodeSpec := h109Block5_0 ++ h109Block5_1 ++ h109Block5_2 ++ h109Block5_3
-lemma h109Check5 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket4 5 h109Nodes5 = true := by
-  unfold h109Nodes5 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨h109Test5_0,h109Test5_1⟩,h109Test5_2⟩,h109Test5_3⟩
-def h109Bucket5 : BT (List (List Nat)) := buildBucketsBT h109W h109Nodes5
-set_option maxRecDepth 200000 in
-lemma h109Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h109G 5 xs.toFinset) h109Bucket5 := buildBucketsBT_sound (by decide) h109Pairs h109WOk h109PoolsOk h109AutosOk h109Bucket4Ok h109Check5
-def h109Block6_0 : List NodeSpec := indexTripleNodes [(1212,190,2), (3441013,2822,78), (4030837,45062,14), (8382,131622,10), (16574,1835558,90), (65726,955959,10), (86207,44087,10), (13887,940868102,10), (94399,1250871,10), (524478,1906201,10), (15935,66638897,46), (110783,16311577,10), (118975,1672503,10), (127167,168866023,54), (270527,7214311,10), (39999,8162518297,26), (286911,4260401,26), (42047,135376151863,26), (303295,4522727,54), (352447,3288600775,10), (50239,56962892057,10), (368831,90244711537,10), (385215,32583921,10), (54335,208348217655,10), (401599,277136071,10), (684095,38132949303,58), (5182,11403399,2), (1999679,11927687,2), (157759,262765625903,22), (4391743,27695,2), (66614,50364578,6), (56383,0x6c0c0ce184b7,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test6_0 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket5 6 h109Block6_0 = true := by decide +kernel
-def h109Block6_1 : List NodeSpec := indexTripleNodes [(1475391,11680715795,2), (58431,390960039109,6), (119552063,12324103,2), (243775,5671255843127,30), (4831295,96780999,2), (219199,627168862519,6), (22108223,7967763,2), (766015,25332726407479,50), (634943,67142182,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test6_1 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket5 6 h109Block6_1 = true := by decide +kernel
-def h109Nodes6 : List NodeSpec := h109Block6_0 ++ h109Block6_1
-lemma h109Check6 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket5 6 h109Nodes6 = true := by
-  unfold h109Nodes6 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨h109Test6_0,h109Test6_1⟩
-def h109Bucket6 : BT (List (List Nat)) := buildBucketsBT h109W h109Nodes6
-set_option maxRecDepth 200000 in
-lemma h109Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h109G 6 xs.toFinset) h109Bucket6 := buildBucketsBT_sound (by decide) h109Pairs h109WOk h109PoolsOk h109AutosOk h109Bucket5Ok h109Check6
-def h109Block7_0 : List NodeSpec := indexTripleNodes [(190,8423974,10), (574,52347576631,22), (1086,3035498365487,22), (260159,2166682136887,94), (577599,59863769399,22), (65598,122953441591,30), (12863,62012301623,30)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test7_0 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket6 7 h109Block7_0 = true := by decide +kernel
-def h109Nodes7 : List NodeSpec := h109Block7_0
-lemma h109Check7 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket6 7 h109Nodes7 = true := h109Test7_0
-def h109Bucket7 : BT (List (List Nat)) := buildBucketsBT h109W h109Nodes7
-set_option maxRecDepth 200000 in
-lemma h109Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h109G 7 xs.toFinset) h109Bucket7 := buildBucketsBT_sound (by decide) h109Pairs h109WOk h109PoolsOk h109AutosOk h109Bucket6Ok h109Check7
-def h109Block8_0 : List NodeSpec := [([0,1,2,3,4],[0,1,8,73],[0,1,2,3])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h109Test8_0 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket7 8 h109Block8_0 = true := by decide +kernel
-def h109Nodes8 : List NodeSpec := h109Block8_0
-lemma h109Check8 : checkNodesBT h109W h109G h109Mask h109Pools h109Autos h109Bucket7 8 h109Nodes8 = true := h109Test8_0
-def h109Bucket8 : BT (List (List Nat)) := buildBucketsBT h109W h109Nodes8
-set_option maxRecDepth 200000 in
-lemma h109Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h109G 8 xs.toFinset) h109Bucket8 := buildBucketsBT_sound (by decide) h109Pairs h109WOk h109PoolsOk h109AutosOk h109Bucket7Ok h109Check8
-set_option maxRecDepth 200000 in
-lemma h109Bound : Lower h109R h109G 9 := lower_of_forestBT (essPairs := [(VAR 0,12,13),(VAR 2,9,13),(VAR 3,5,13),(VAR 4,9,25),(VAR 5,1,33)]) (by decide +kernel) h109Bucket8Ok (by decide +kernel)
-def h116R : List Nat := varsOf 61
-def h116G : Nat := 0xfafafaf0faf0f0a0fafafaf0faf0f0a0
-lemma h116Bound : Lower h116R h116G 9 := carry_of (swaps := [(4,5),(2,3),(3,4),(0,1),(1,2),(2,3),(0,1)]) (roots2 := h109R) (T2 := h109G) (by decide +kernel) h109Bound
-def h117R : List Nat := varsOf 62
-def h117G : Nat := 0xfffffffcf0c0c000fffffffcf0c0c000
-lemma h117Bound : Lower h117R h117G 9 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h109R) (T2 := h109G) (by decide +kernel) h109Bound
-def h118R : List Nat := varsOf 62
-def h118G : Nat := 0xffccffc0ffc0fc00ffccffc0ffc0fc00
-lemma h118Bound : Lower h118R h118G 9 := carry_of (swaps := [(4,5),(2,3),(3,4),(0,1),(1,2)]) (roots2 := h109R) (T2 := h109G) (by decide +kernel) h109Bound
-def h119R : List Nat := varsOf 15
-def h119G : Nat := 0xe888e888e888e888e888e888e888e888
-lemma h119Bound : Lower h119R h119G 5 := carry_of (swaps := [(4,5),(3,4)]) (roots2 := h100R) (T2 := h100G) (by decide +kernel) h100Bound
-def h120R : List Nat := varsOf 26
-def h120G : Nat := 0xffcccc00ffcccc00ffcccc00ffcccc00
-lemma h120Bound : Lower h120R h120G 4 := carry_of (swaps := [(4,5),(1,2)]) (roots2 := h3R) (T2 := h3G) (by decide +kernel) h3Bound
-def h121R : List Nat := varsOf 30
-def h121G : Nat := 0xf0c0c000f0c0c000f0c0c000f0c0c000
-lemma h121Bound : Lower h121R h121G 5 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h111R) (T2 := h111G) (by decide +kernel) h111Bound
-def h122R : List Nat := varsOf 23
-def h122G : Nat := 0xfafae8e8fafae8e8fafae8e8fafae8e8
-lemma h122Bound : Lower h122R h122G 5 := carry_of (swaps := [(4,5),(2,3),(3,4),(1,2),(2,3),(0,1)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h123R : List Nat := varsOf 27
-def h123G : Nat := 0xffccee88ffccee88ffccee88ffccee88
-lemma h123Bound : Lower h123R h123G 5 := carry_of (swaps := [(4,5),(2,3),(3,4),(1,2)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h125R : List Nat := varsOf 29
-def h125G : Nat := 0xfaf0f0a0faf0f0a0faf0f0a0faf0f0a0
-lemma h125Bound : Lower h125R h125G 6 := carry_of (swaps := [(4,5),(2,3)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h126R : List Nat := varsOf 30
-def h126G : Nat := 0xffc0fc00ffc0fc00ffc0fc00ffc0fc00
-lemma h126Bound : Lower h126R h126G 6 := carry_of (swaps := [(4,5),(0,1)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h124R : List Nat := varsOf 31
-def h124G : Nat := 0xfac8e888fac8e888fac8e888fac8e888
-def h124Pos : List Nat := [13,14,3,3,22,14,7,13,14,11,13,22,19,25,7,11,19,22,25,28,28,28,25,3,22]
-def h124Neg : List Nat := [12,12,1,2,21,10,6,9,6,10,5,6,18,9,5,9,17,18,17,24,20,12,24,18,26]
-def h124Mask : Nat := fullMask 25
-def h124Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xc5f6cd,0x5e494),(0xcccccccccccccccccccccccccccccccc,0x183db7e,0x1821b68),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x13a4df3,0x304d53),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x7ca7a3,0x168a2a3),(0xffff0000ffff0000ffff0000ffff0000,0x17f3810,0x1df1010)]
-def h124Steps : List (Nat × Nat × Nat) := [(1,0,1),(1,0,4),(1,1,4),(0,2,3),(3,4,5),(3,1,6)]
-def h124W : BT Decor := buildWiresBT 4 h124Base h124Steps
-def h124AutoList : List (List (Nat × Nat)) := [[],[(2,3),(0,1)]]
-def h124Autos : BT (List (Nat × Nat)) := btOfList 1 h124AutoList
-lemma h124Pairs : goodPairs h124G h124Pos h124Neg := goodPairs_of (by decide +kernel)
-lemma h124BaseOk : ∀ x ∈ h124Base, faithful h124Pos h124Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h124WOk : btAll (fun x => faithful h124Pos h124Neg x ∧ x.1 < 2^128) h124W := buildWiresBT_faithful h124BaseOk
-lemma h124AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h124G = h124G) h124Autos := btAll_ofList (autos_of (by decide +kernel))
-def h124SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 4,5),some (subcubeFast 0 8,5),some (subcubeFast 1 0,5),some (subcubeFast 1 4,4),some (subcubeFast 2 0,5),some (subcubeFast 2 8,4),some (subcubeFast 16 0,5),some (subcubeFast 16 4,4),some (subcubeFast 16 8,4),some (0xaa55aa55aa55aa55aa55aa55aa55aa55,6),some (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3,6),some (0x66666666666666666666666666666666,5)]
-def h124Slices : BT (Option (Nat × Nat)) := btOfList 4 h124SliceList
-def h124Specs : List PoolSpec := [(2,[]),(4,[]),(10,[]),(0,[]),(9,[]),(1,[]),(6,[]),(11,[]),(3,[]),(0,[(1,0,4)]),(8,[]),(5,[]),(2,[(0,2,3)]),(9,[(0,2,3)]),(4,[(0,2,3)]),(10,[(0,2,3)]),(6,[(0,2,3)]),(7,[])]
-def h124Pools : BT (Option BoundPool) := buildPoolsBT 5 h124W h124R h124Slices h124Specs
-set_option maxRecDepth 200000 in
-lemma h124Slice11 : Slice h124R h124G (0x66666666666666666666666666666666) 5 := opposite_slice (oppositeRow 0 1 30) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h86Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice10 : Slice h124R h124G (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3) 6 := mapped_slice (identifyRow 1 2 29) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h125Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice9 : Slice h124R h124G (0xaa55aa55aa55aa55aa55aa55aa55aa55) 6 := mapped_slice (identifyRow 0 3 30) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h126Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice8 : Slice h124R h124G (subcubeFast 16 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h23Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice7 : Slice h124R h124G (subcubeFast 16 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h25Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice6 : Slice h124R h124G (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h119Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice5 : Slice h124R h124G (subcubeFast 2 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h51Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice4 : Slice h124R h124G (subcubeFast 2 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h111Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice3 : Slice h124R h124G (subcubeFast 1 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h120Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice2 : Slice h124R h124G (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h121Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice1 : Slice h124R h124G (subcubeFast 0 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h122Bound
-set_option maxRecDepth 200000 in
-lemma h124Slice0 : Slice h124R h124G (subcubeFast 0 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h123Bound
-lemma h124SlicesOk : btAll (sliceSpec h124R h124G) h124Slices := btAll_ofList (P := sliceSpec h124R h124G) (sliceSpecCons h124Slice0 (sliceSpecCons h124Slice1 (sliceSpecCons h124Slice2 (sliceSpecCons h124Slice3 (sliceSpecCons h124Slice4 (sliceSpecCons h124Slice5 (sliceSpecCons h124Slice6 (sliceSpecCons h124Slice7 (sliceSpecCons h124Slice8 (sliceSpecCons h124Slice9 (sliceSpecCons h124Slice10 (sliceSpecCons h124Slice11 sliceSpecNil))))))))))))
-set_option maxRecDepth 200000 in
-lemma h124PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h124R h124G c) h124Pools := buildPoolsBT_sound h124SlicesOk
-def h124Empty : BT (List (List Nat)) := BT.empty
-lemma h124EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h124G (5 - 1) xs.toFinset) h124Empty := trivial
-def h124Block5_0 : List NodeSpec := indexPairNodes [(1086,0), (414,6), (2110,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h124Test5_0 : checkNodesBT h124W h124G h124Mask h124Pools h124Autos h124Empty 5 h124Block5_0 = true := by decide +kernel
-def h124Nodes5 : List NodeSpec := h124Block5_0
-lemma h124Check5 : checkNodesBT h124W h124G h124Mask h124Pools h124Autos h124Empty 5 h124Nodes5 = true := h124Test5_0
-def h124Bucket5 : BT (List (List Nat)) := buildBucketsBT h124W h124Nodes5
-set_option maxRecDepth 200000 in
-lemma h124Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h124G 5 xs.toFinset) h124Bucket5 := buildBucketsBT_sound (by decide) h124Pairs h124WOk h124PoolsOk h124AutosOk h124EmptyOk h124Check5
-def h124Block6_0 : List NodeSpec := indexPairNodes [(126,510), (190,4086), (574,520958)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h124Test6_0 : checkNodesBT h124W h124G h124Mask h124Pools h124Autos h124Bucket5 6 h124Block6_0 = true := by decide +kernel
-def h124Nodes6 : List NodeSpec := h124Block6_0
-lemma h124Check6 : checkNodesBT h124W h124G h124Mask h124Pools h124Autos h124Bucket5 6 h124Nodes6 = true := h124Test6_0
-def h124Bucket6 : BT (List (List Nat)) := buildBucketsBT h124W h124Nodes6
-set_option maxRecDepth 200000 in
-lemma h124Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h124G 6 xs.toFinset) h124Bucket6 := buildBucketsBT_sound (by decide) h124Pairs h124WOk h124PoolsOk h124AutosOk h124Bucket5Ok h124Check6
-def h124Block7_0 : List NodeSpec := [([0,1,2,3,4],[0,1,2,3,4,5,6,8,10,11,17],[0,1])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h124Test7_0 : checkNodesBT h124W h124G h124Mask h124Pools h124Autos h124Bucket6 7 h124Block7_0 = true := by decide +kernel
-def h124Nodes7 : List NodeSpec := h124Block7_0
-lemma h124Check7 : checkNodesBT h124W h124G h124Mask h124Pools h124Autos h124Bucket6 7 h124Nodes7 = true := h124Test7_0
-def h124Bucket7 : BT (List (List Nat)) := buildBucketsBT h124W h124Nodes7
-set_option maxRecDepth 200000 in
-lemma h124Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h124G 7 xs.toFinset) h124Bucket7 := buildBucketsBT_sound (by decide) h124Pairs h124WOk h124PoolsOk h124AutosOk h124Bucket6Ok h124Check7
-set_option maxRecDepth 200000 in
-lemma h124Bound : Lower h124R h124G 8 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,9,13),(VAR 3,5,13),(VAR 4,6,22)]) (by decide +kernel) h124Bucket7Ok (by decide +kernel)
-def h127R : List Nat := varsOf 43
-def h127G : Nat := 0xee88ee8888888888ee88ee8888888888
-lemma h127Bound : Lower h127R h127G 5 := carry_of (swaps := [(2,3)]) (roots2 := h100R) (T2 := h100G) (by decide +kernel) h100Bound
-def h128R : List Nat := varsOf 45
-def h128G : Nat := 0xaaa0aaa0a000a000aaa0aaa0a000a000
-lemma h128Bound : Lower h128R h128G 5 := carry_of (swaps := [(4,5),(2,3),(0,1),(1,2),(0,1)]) (roots2 := h111R) (T2 := h111G) (by decide +kernel) h111Bound
-def h129R : List Nat := varsOf 46
-def h129G : Nat := 0xccc0ccc0c000c000ccc0ccc0c000c000
-lemma h129Bound : Lower h129R h129G 5 := carry_of (swaps := [(4,5),(2,3),(0,1),(1,2)]) (roots2 := h111R) (T2 := h111G) (by decide +kernel) h111Bound
-def h130R : List Nat := varsOf 39
-def h130G : Nat := 0xeeeeeeeee8e8e8e8eeeeeeeee8e8e8e8
-lemma h130Bound : Lower h130R h130G 5 := carry_of (swaps := [(2,3),(3,4),(4,5),(3,4),(1,2),(2,3),(0,1),(1,2)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h131R : List Nat := varsOf 43
-def h131G : Nat := 0xeeeeeeeeee88ee88eeeeeeeeee88ee88
-lemma h131Bound : Lower h131R h131G 5 := carry_of (swaps := [(2,3),(3,4),(4,5),(3,4),(0,1),(1,2),(2,3),(0,1),(1,2)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h132R : List Nat := varsOf 46
-def h132G : Nat := 0xfffcfffcfcccfcccfffcfffcfcccfccc
-lemma h132Bound : Lower h132R h132G 5 := carry_of (swaps := [(0,1)]) (roots2 := h39R) (T2 := h39G) (by decide +kernel) h39Bound
-def h134R : List Nat := varsOf 45
-def h134G : Nat := 0xfaf0faf0f0a0f0a0faf0faf0f0a0f0a0
-lemma h134Bound : Lower h134R h134G 6 := carry_of (swaps := [(2,3)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h135R : List Nat := varsOf 46
-def h135G : Nat := 0xfffcfffcc000c000fffcfffcc000c000
-lemma h135Bound : Lower h135R h135G 6 := carry_of (swaps := [(3,4),(4,5),(3,4),(0,1)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h136R : List Nat := varsOf 46
-def h136G : Nat := 0xffc0ffc0fc00fc00ffc0ffc0fc00fc00
-lemma h136Bound : Lower h136R h136G 6 := carry_of (swaps := [(0,1)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h133R : List Nat := varsOf 47
-def h133G : Nat := 0xeee8eee8e888e888eee8eee8e888e888
-def h133Pos : List Nat := [13,14,3,3,14,13,14,13,38,35,37,35,37,41,41]
-def h133Neg : List Nat := [12,12,1,2,10,9,6,5,6,34,5,33,33,33,9]
-def h133Mask : Nat := fullMask 15
-def h133Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x7ead,0x7ca4),(0xcccccccccccccccccccccccccccccccc,2910,856),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,5619,1475),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x60f3,0x4033),(0xffffffff00000000ffffffff00000000,0x7f00,0x3a00)]
-def h133Steps : List (Nat × Nat × Nat) := []
-def h133W : BT Decor := buildWiresBT 3 h133Base h133Steps
-def h133AutoList : List (List (Nat × Nat)) := [[],[(3,5)],[(2,3)],[(2,5)],[(0,1)],[(3,5),(2,3)],[(3,5),(2,5)],[(3,5),(0,1)],[(2,3),(0,1)],[(2,5),(0,1)],[(3,5),(2,3),(0,1)],[(3,5),(2,5),(0,1)]]
-def h133Autos : BT (List (Nat × Nat)) := btOfList 4 h133AutoList
-lemma h133Pairs : goodPairs h133G h133Pos h133Neg := goodPairs_of (by decide +kernel)
-lemma h133BaseOk : ∀ x ∈ h133Base, faithful h133Pos h133Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h133WOk : btAll (fun x => faithful h133Pos h133Neg x ∧ x.1 < 2^128) h133W := buildWiresBT_faithful h133BaseOk
-lemma h133AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h133G = h133G) h133Autos := btAll_ofList (autos_of (by decide +kernel))
-def h133SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 1,5),some (subcubeFast 0 2,5),some (subcubeFast 0 4,5),some (subcubeFast 0 8,5),some (subcubeFast 1 0,5),some (subcubeFast 2 0,5),some (subcubeFast 4 0,5),some (subcubeFast 8 0,5),some (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5,6),some (0xaa55aa55aa55aa55aa55aa55aa55aa55,6),some (0xaaaaaaaa55555555aaaaaaaa55555555,6),some (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3,6),some (0xcc33cc33cc33cc33cc33cc33cc33cc33,6),some (0xcccccccc33333333cccccccc33333333,6)]
-def h133Slices : BT (Option (Nat × Nat)) := btOfList 4 h133SliceList
-def h133Specs : List PoolSpec := [(4,[]),(0,[]),(8,[]),(9,[]),(10,[]),(5,[]),(1,[]),(11,[]),(12,[]),(13,[]),(6,[]),(2,[]),(7,[]),(3,[])]
-def h133Pools : BT (Option BoundPool) := buildPoolsBT 4 h133W h133R h133Slices h133Specs
-set_option maxRecDepth 200000 in
-lemma h133Slice13 : Slice h133R h133G (0xcccccccc33333333cccccccc33333333) 6 := mapped_slice (identifyRow 1 5 45) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h112Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice12 : Slice h133R h133G (0xcc33cc33cc33cc33cc33cc33cc33cc33) 6 := mapped_slice (identifyRow 1 3 45) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h18Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice11 : Slice h133R h133G (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3) 6 := mapped_slice (identifyRow 1 2 45) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h134Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice10 : Slice h133R h133G (0xaaaaaaaa55555555aaaaaaaa55555555) 6 := mapped_slice (identifyRow 0 5 46) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h135Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice9 : Slice h133R h133G (0xaa55aa55aa55aa55aa55aa55aa55aa55) 6 := mapped_slice (identifyRow 0 3 46) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h136Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice8 : Slice h133R h133G (0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5) 6 := mapped_slice (identifyRow 0 2 46) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h22Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice7 : Slice h133R h133G (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h100Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice6 : Slice h133R h133G (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h127Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice5 : Slice h133R h133G (subcubeFast 2 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h128Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice4 : Slice h133R h133G (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h129Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice3 : Slice h133R h133G (subcubeFast 0 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h130Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice2 : Slice h133R h133G (subcubeFast 0 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h131Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice1 : Slice h133R h133G (subcubeFast 0 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h39Bound
-set_option maxRecDepth 200000 in
-lemma h133Slice0 : Slice h133R h133G (subcubeFast 0 1) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h132Bound
-lemma h133SlicesOk : btAll (sliceSpec h133R h133G) h133Slices := btAll_ofList (P := sliceSpec h133R h133G) (sliceSpecCons h133Slice0 (sliceSpecCons h133Slice1 (sliceSpecCons h133Slice2 (sliceSpecCons h133Slice3 (sliceSpecCons h133Slice4 (sliceSpecCons h133Slice5 (sliceSpecCons h133Slice6 (sliceSpecCons h133Slice7 (sliceSpecCons h133Slice8 (sliceSpecCons h133Slice9 (sliceSpecCons h133Slice10 (sliceSpecCons h133Slice11 (sliceSpecCons h133Slice12 (sliceSpecCons h133Slice13 sliceSpecNil))))))))))))))
-lemma h133PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h133R h133G c) h133Pools := buildPoolsBT_sound h133SlicesOk
-def h133Empty : BT (List (List Nat)) := BT.empty
-lemma h133EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h133G (7 - 1) xs.toFinset) h133Empty := trivial
-def h133Block7_0 : List NodeSpec := indexPairNodes [(62,32766)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h133Test7_0 : checkNodesBT h133W h133G h133Mask h133Pools h133Autos h133Empty 7 h133Block7_0 = true := by decide +kernel
-def h133Nodes7 : List NodeSpec := h133Block7_0
-lemma h133Check7 : checkNodesBT h133W h133G h133Mask h133Pools h133Autos h133Empty 7 h133Nodes7 = true := h133Test7_0
-def h133Bucket7 : BT (List (List Nat)) := buildBucketsBT h133W h133Nodes7
-lemma h133Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h133G 7 xs.toFinset) h133Bucket7 := buildBucketsBT_sound (by decide) h133Pairs h133WOk h133PoolsOk h133AutosOk h133EmptyOk h133Check7
-lemma h133Bound : Lower h133R h133G 8 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,9,13),(VAR 3,5,13),(VAR 5,5,37)]) (by decide +kernel) h133Bucket7Ok (by decide +kernel)
-def h137R : List Nat := varsOf 51
-def h137G : Nat := 0xeeee888888888888eeee888888888888
-lemma h137Bound : Lower h137R h137G 5 := carry_of (swaps := [(2,3),(3,4)]) (roots2 := h100R) (T2 := h100G) (by decide +kernel) h100Bound
-def h138R : List Nat := varsOf 54
-def h138G : Nat := 0xccccc0c0c0c00000ccccc0c0c0c00000
-lemma h138Bound : Lower h138R h138G 5 := carry_of (swaps := [(4,5),(2,3),(3,4),(0,1),(1,2)]) (roots2 := h111R) (T2 := h111G) (by decide +kernel) h111Bound
-def h139R : List Nat := varsOf 23
-def h139G : Nat := 0xeeeee8e8eeeee8e8eeeee8e8eeeee8e8
-lemma h139Bound : Lower h139R h139G 5 := carry_of (swaps := [(4,5),(2,3),(3,4),(1,2),(2,3),(0,1),(1,2)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h140R : List Nat := varsOf 51
-def h140G : Nat := 0xeeeeeeeecccc8888eeeeeeeecccc8888
-lemma h140Bound : Lower h140R h140G 5 := carry_of (swaps := [(2,3),(3,4)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h142R : List Nat := varsOf 53
-def h142G : Nat := 0xaaaaa0a0fafaaaaaaaaaa0a0fafaaaaa
-lemma h142Bound : Lower h142R h142G 6 := carry_of (swaps := [(4,5),(1,2),(2,3),(0,1)]) (roots2 := h35R) (T2 := h35G) (by decide +kernel) h35Bound
-def h143R : List Nat := varsOf 53
-def h143G : Nat := 0xfafaf0f0f0f0a0a0fafaf0f0f0f0a0a0
-lemma h143Bound : Lower h143R h143G 6 := carry_of (swaps := [(2,3),(3,4)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h144R : List Nat := varsOf 54
-def h144G : Nat := 0xfffffcfcc0c00000fffffcfcc0c00000
-lemma h144Bound : Lower h144R h144G 6 := carry_of (swaps := [(3,4),(4,5),(0,1)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h141R : List Nat := varsOf 55
-def h141G : Nat := 0xeeeee8e8c8c88888eeeee8e8c8c88888
-def h141Pos : List Nat := [22,37,3,3,22,37,22,19,49,38,37,35,49]
-def h141Neg : List Nat := [20,36,1,2,18,33,6,18,33,6,5,33,17]
-def h141Mask : Nat := fullMask 13
-def h141Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,7598,7460),(0xcccccccccccccccccccccccccccccccc,2781,728),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,1651,1603),(0xffff0000ffff0000ffff0000ffff0000,4561,4241),(0xffffffff00000000ffffffff00000000,7970,2338)]
-def h141Steps : List (Nat × Nat × Nat) := []
-def h141W : BT Decor := buildWiresBT 3 h141Base h141Steps
-def h141AutoList : List (List (Nat × Nat)) := [[],[(2,4)]]
-def h141Autos : BT (List (Nat × Nat)) := btOfList 1 h141AutoList
-lemma h141Pairs : goodPairs h141G h141Pos h141Neg := goodPairs_of (by decide +kernel)
-lemma h141BaseOk : ∀ x ∈ h141Base, faithful h141Pos h141Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h141WOk : btAll (fun x => faithful h141Pos h141Neg x ∧ x.1 < 2^128) h141W := buildWiresBT_faithful h141BaseOk
-lemma h141AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h141G = h141G) h141Autos := btAll_ofList (autos_of (by decide +kernel))
-def h141SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 2,5),some (subcubeFast 0 4,5),some (subcubeFast 0 16,5),some (subcubeFast 0 32,5),some (subcubeFast 1 0,5),some (subcubeFast 1 2,4),some (subcubeFast 4 0,5),some (subcubeFast 16 0,5),some (0xaaaaaaaa55555555aaaaaaaa55555555,6),some (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3,6),some (0xcccc3333cccc3333cccc3333cccc3333,6),some (0x33333333cccccccc33333333cccccccc,6)]
-def h141Slices : BT (Option (Nat × Nat)) := btOfList 4 h141SliceList
-def h141Specs : List PoolSpec := [(4,[]),(0,[]),(5,[]),(1,[]),(6,[]),(2,[]),(7,[]),(3,[]),(8,[]),(9,[]),(10,[]),(11,[])]
-def h141Pools : BT (Option BoundPool) := buildPoolsBT 4 h141W h141R h141Slices h141Specs
-set_option maxRecDepth 200000 in
-lemma h141Slice11 : Slice h141R h141G (0x33333333cccccccc33333333cccccccc) 6 := opposite_slice (oppositeRow 1 5 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h142Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice10 : Slice h141R h141G (0xcccc3333cccc3333cccc3333cccc3333) 6 := mapped_slice (identifyRow 1 4 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h96Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice9 : Slice h141R h141G (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3) 6 := mapped_slice (identifyRow 1 2 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h143Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice8 : Slice h141R h141G (0xaaaaaaaa55555555aaaaaaaa55555555) 6 := mapped_slice (identifyRow 0 5 54) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h144Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice7 : Slice h141R h141G (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h100Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice6 : Slice h141R h141G (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h137Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice5 : Slice h141R h141G (subcubeFast 1 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h54Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice4 : Slice h141R h141G (subcubeFast 1 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h138Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice3 : Slice h141R h141G (subcubeFast 0 32) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h139Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice2 : Slice h141R h141G (subcubeFast 0 16) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h14Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice1 : Slice h141R h141G (subcubeFast 0 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h140Bound
-set_option maxRecDepth 200000 in
-lemma h141Slice0 : Slice h141R h141G (subcubeFast 0 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h55Bound
-lemma h141SlicesOk : btAll (sliceSpec h141R h141G) h141Slices := btAll_ofList (P := sliceSpec h141R h141G) (sliceSpecCons h141Slice0 (sliceSpecCons h141Slice1 (sliceSpecCons h141Slice2 (sliceSpecCons h141Slice3 (sliceSpecCons h141Slice4 (sliceSpecCons h141Slice5 (sliceSpecCons h141Slice6 (sliceSpecCons h141Slice7 (sliceSpecCons h141Slice8 (sliceSpecCons h141Slice9 (sliceSpecCons h141Slice10 (sliceSpecCons h141Slice11 sliceSpecNil))))))))))))
-lemma h141PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h141R h141G c) h141Pools := buildPoolsBT_sound h141SlicesOk
-def h141Empty : BT (List (List Nat)) := BT.empty
-lemma h141EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h141G (7 - 1) xs.toFinset) h141Empty := trivial
-def h141Block7_0 : List NodeSpec := indexPairNodes [(62,8190)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h141Test7_0 : checkNodesBT h141W h141G h141Mask h141Pools h141Autos h141Empty 7 h141Block7_0 = true := by decide +kernel
-def h141Nodes7 : List NodeSpec := h141Block7_0
-lemma h141Check7 : checkNodesBT h141W h141G h141Mask h141Pools h141Autos h141Empty 7 h141Nodes7 = true := h141Test7_0
-def h141Bucket7 : BT (List (List Nat)) := buildBucketsBT h141W h141Nodes7
-lemma h141Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h141G 7 xs.toFinset) h141Bucket7 := buildBucketsBT_sound (by decide) h141Pairs h141WOk h141PoolsOk h141AutosOk h141EmptyOk h141Check7
-lemma h141Bound : Lower h141R h141G 8 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,18,22),(VAR 4,6,22),(VAR 5,5,37)]) (by decide +kernel) h141Bucket7Ok (by decide +kernel)
-def h145R : List Nat := varsOf 57
-def h145G : Nat := 0xaaaaaa00aa000000aaaaaa00aa000000
-lemma h145Bound : Lower h145R h145G 5 := carry_of (swaps := [(4,5),(2,3),(3,4),(0,1),(1,2),(2,3),(0,1)]) (roots2 := h111R) (T2 := h111G) (by decide +kernel) h111Bound
-def h146R : List Nat := varsOf 27
-def h146G : Nat := 0xeeeeee88eeeeee88eeeeee88eeeeee88
-lemma h146Bound : Lower h146R h146G 5 := carry_of (swaps := [(4,5),(2,3),(3,4),(0,1),(1,2),(2,3),(0,1),(1,2)]) (roots2 := h17R) (T2 := h17G) (by decide +kernel) h17Bound
-def h147R : List Nat := varsOf 51
-def h147G : Nat := 0xeeeeeeeeaaaa8888eeeeeeeeaaaa8888
-lemma h147Bound : Lower h147R h147G 5 := carry_of (swaps := [(2,3),(3,4),(0,1)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h148R : List Nat := varsOf 58
-def h148G : Nat := 0xffffffccffccccccffffffccffcccccc
-lemma h148Bound : Lower h148R h148G 5 := carry_of (swaps := [(3,4),(2,3),(0,1)]) (roots2 := h39R) (T2 := h39G) (by decide +kernel) h39Bound
-def h149R : List Nat := varsOf 59
-def h149G : Nat := 0xeeeeee88aa888888eeeeee88aa888888
-lemma h149Bound : Lower h149R h149G 8 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h141R) (T2 := h141G) (by decide +kernel) h141Bound
-def h150R : List Nat := varsOf 29
-def h150G : Nat := 0xfaaaaaa0faaaaaa0faaaaaa0faaaaaa0
-lemma h150Bound : Lower h150R h150G 6 := carry_of (swaps := [(4,5),(2,3),(0,1),(1,2),(0,1)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h152R : List Nat := varsOf 60
-def h152G : Nat := 0xf0ff00f0f0000000f0ff00f0f0000000
-lemma h152Bound : Lower h152R h152G 6 := carry_of (swaps := [(2,3)]) (roots2 := h74R) (T2 := h74G) (by decide +kernel) h74Bound
-def h153R : List Nat := varsOf 57
-def h153G : Nat := 0xffaaaa00ff000000ffaaaa00ff000000
-lemma h153Bound : Lower h153R h153G 5 := carry_of (swaps := [(1,2),(2,3),(3,4),(0,1),(1,2),(2,3)]) (roots2 := h100R) (T2 := h100G) (by decide +kernel) h100Bound
-def h154R : List Nat := varsOf 57
-def h154G : Nat := 0xffaaaa00ff00aa00ffaaaa00ff00aa00
-lemma h154Bound : Lower h154R h154G 5 := carry_of (swaps := [(2,3),(3,4),(1,2),(2,3)]) (roots2 := h24R) (T2 := h24G) (by decide +kernel) h24Bound
-def h151R : List Nat := varsOf 61
-def h151G : Nat := 0xfaaaaaa0fa00a000faaaaaa0fa00a000
-def h151Pos : List Nat := [25,28,41,28,49,13,28,41,25,37,13,25,49,41,60,37,49,41,60,13,13,25,13,29,37,37,25,28,60,41,49,53,28,53,45,13,28,37,28,41,13,41,57,49,13,37,28,28,28,53,37,49]
-def h151Neg : List Nat := [24,24,44,20,48,5,12,40,9,5,12,17,33,9,52,33,17,33,56,1,9,21,21,21,52,36,1,52,44,1,1,21,44,52,44,8,21,44,16,56,4,32,56,21,44,4,8,0,4,33,1,52]
-def h151Mask : Nat := fullMask 52
-def h151Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xe3faee7fbbfb5,0x60810e4fbbb20),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x7f17f9bdcc66a,0x939379be0466c),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x1d7dd3cfe6def,0x54ad101425c7),(0xffff0000ffff0000ffff0000ffff0000,0xbcc53dca5595b,0x80cd289e5481b),(0xffffffff00000000ffffffff00000000,0xe2ea6f307f294,0xa16a71b06d094)]
-def h151Steps : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(3,0,1),(0,0,2),(1,0,2),(2,0,2),(3,0,2),(0,0,4),(2,0,4),(3,0,4),(0,1,2),(1,1,2),(2,1,2),(3,1,2),(2,0,19),(0,2,3),(1,2,3),(2,2,3),(0,2,4),(1,2,4),(2,2,4),(3,2,4),(2,2,5),(3,3,4),(1,3,5),(0,0,30),(2,0,30),(0,2,30),(0,4,30),(2,4,33),(2,19,30),(2,30,33),(1,3,19),(2,3,19),(2,3,5),(1,5,19),(0,0,41),(0,2,41),(0,1,3),(1,1,3),(2,1,3),(0,1,4),(3,1,4),(0,0,22),(3,1,22),(3,5,22),(1,1,23),(3,3,52),(1,5,23),(2,0,24),(1,1,24),(1,5,24),(0,0,57),(2,0,27),(1,1,27),(0,0,60),(1,5,27),(1,1,29),(1,5,29),(1,1,33),(0,2,6),(1,1,66),(0,4,66),(2,4,66),(3,2,6),(0,3,6),(3,3,6),(0,4,6),(2,6,24),(2,6,27),(1,1,70),(1,1,73),(1,7,19),(2,4,8),(1,8,24),(1,8,27),(0,2,45),(1,3,82),(1,9,13),(1,13,82),(3,2,45),(3,9,45),(1,13,45),(3,13,45),(1,4,82),(2,4,82),(0,4,45),(0,1,10),(0,4,10),(3,11,45),(2,4,12),(0,0,38),(0,2,38),(3,3,77),(0,0,85),(0,2,85),(2,0,53),(3,14,17),(3,1,103),(1,14,19),(1,14,45),(3,14,45),(1,3,104),(1,14,82),(2,4,16),(3,16,45),(3,23,45),(2,3,18),(1,19,23),(1,19,46),(1,24,44),(3,24,45),(1,27,44),(3,27,45),(1,3,92),(1,24,46),(1,27,46),(2,0,48),(1,3,48),(0,0,124)]
-def h151W : BT Decor := buildWiresBT 7 h151Base h151Steps
-def h151AutoList : List (List (Nat × Nat)) := [[],[(2,4)]]
-def h151Autos : BT (List (Nat × Nat)) := btOfList 1 h151AutoList
-lemma h151Pairs : goodPairs h151G h151Pos h151Neg := goodPairs_of (by decide +kernel)
-lemma h151BaseOk : ∀ x ∈ h151Base, faithful h151Pos h151Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h151WOk : btAll (fun x => faithful h151Pos h151Neg x ∧ x.1 < 2^128) h151W := buildWiresBT_faithful h151BaseOk
-lemma h151AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h151G = h151G) h151Autos := btAll_ofList (autos_of (by decide +kernel))
-def h151SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 1,5),some (subcubeFast 0 4,4),some (subcubeFast 0 8,5),some (subcubeFast 0 16,4),some (subcubeFast 0 32,6),some (subcubeFast 4 0,5),some (subcubeFast 4 1,4),some (subcubeFast 16 0,5),some (subcubeFast 16 1,4),some (subcubeFast 32 0,5),some (subcubeFast 32 8,4),some (0xaaaaaaaa55555555aaaaaaaa55555555,6),some (0xf00ff00ff00ff00ff00ff00ff00ff00f,5),some (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f,5),some (0xff0000ffff0000ffff0000ffff0000ff,5),some (0x55aa55aa55aa55aa55aa55aa55aa55aa,6)]
-def h151Slices : BT (Option (Nat × Nat)) := btOfList 4 h151SliceList
-def h151Specs : List PoolSpec := poolSteps h151Steps [(0,[]),(5,[]),(6,[]),(4,[0]),(1,[]),(2,[]),(0,[25]),(7,[0]),(13,[]),(9,[14]),(8,[]),(3,[]),(7,[]),(14,[]),(9,[]),(4,[]),(12,[]),(4,[0,23]),(4,[0,25]),(0,[35]),(4,[0,35]),(4,[1]),(5,[61]),(5,[66]),(11,[]),(4,[1,61]),(4,[1,65]),(5,[65]),(4,[1,66]),(4,[1,67]),(5,[67]),(5,[68]),(4,[2]),(7,[2]),(15,[]),(5,[27]),(4,[3]),(2,[8]),(10,[]),(15,[8]),(9,[4]),(4,[4]),(5,[8]),(7,[8]),(2,[9]),(5,[9]),(7,[9]),(4,[54]),(5,[4]),(4,[5]),(4,[5,88]),(4,[6]),(4,[50]),(9,[7]),(4,[7]),(2,[91]),(4,[14]),(7,[8,0]),(0,[40]),(4,[40]),(5,[8,26]),(4,[12]),(4,[11]),(9,[11]),(4,[16]),(4,[18,47]),(4,[18]),(2,[105]),(5,[37]),(4,[13]),(4,[13,108]),(5,[15]),(0,[41]),(4,[14,33]),(4,[39]),(4,[39,40]),(5,[26]),(4,[41]),(4,[118]),(5,[118]),(4,[119]),(2,[50]),(4,[51]),(2,[51]),(4,[55])]
-def h151Pools : BT (Option BoundPool) := buildPoolsBT 7 h151W h151R h151Slices h151Specs
-set_option maxRecDepth 200000 in
-lemma h151Slice15 : Slice h151R h151G (0x55aa55aa55aa55aa55aa55aa55aa55aa) 6 := opposite_slice (oppositeRow 0 3 60) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h152Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice14 : Slice h151R h151G (0xff0000ffff0000ffff0000ffff0000ff) 5 := mapped_slice (identifyRow 3 4 53) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h103Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice13 : Slice h151R h151G (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f) 5 := mapped_slice (identifyRow 2 4 57) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h153Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice12 : Slice h151R h151G (0xf00ff00ff00ff00ff00ff00ff00ff00f) 5 := mapped_slice (identifyRow 2 3 57) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h154Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice11 : Slice h151R h151G (0xaaaaaaaa55555555aaaaaaaa55555555) 6 := mapped_slice (identifyRow 0 5 60) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h114Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice10 : Slice h151R h151G (subcubeFast 32 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h51Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice9 : Slice h151R h151G (subcubeFast 32 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h111Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice8 : Slice h151R h151G (subcubeFast 16 1) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h3Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice7 : Slice h151R h151G (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h128Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice6 : Slice h151R h151G (subcubeFast 4 1) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h37Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice5 : Slice h151R h151G (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h145Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice4 : Slice h151R h151G (subcubeFast 0 32) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h150Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice3 : Slice h151R h151G (subcubeFast 0 16) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h46Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice2 : Slice h151R h151G (subcubeFast 0 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h60Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice1 : Slice h151R h151G (subcubeFast 0 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h78Bound
-set_option maxRecDepth 200000 in
-lemma h151Slice0 : Slice h151R h151G (subcubeFast 0 1) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h89Bound
-lemma h151SlicesOk : btAll (sliceSpec h151R h151G) h151Slices := btAll_ofList (P := sliceSpec h151R h151G) (sliceSpecCons h151Slice0 (sliceSpecCons h151Slice1 (sliceSpecCons h151Slice2 (sliceSpecCons h151Slice3 (sliceSpecCons h151Slice4 (sliceSpecCons h151Slice5 (sliceSpecCons h151Slice6 (sliceSpecCons h151Slice7 (sliceSpecCons h151Slice8 (sliceSpecCons h151Slice9 (sliceSpecCons h151Slice10 (sliceSpecCons h151Slice11 (sliceSpecCons h151Slice12 (sliceSpecCons h151Slice13 (sliceSpecCons h151Slice14 (sliceSpecCons h151Slice15 sliceSpecNil))))))))))))))))
-set_option maxRecDepth 200000 in
-lemma h151PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h151R h151G c) h151Pools := buildPoolsBT_sound h151SlicesOk
-def h151Empty : BT (List (List Nat)) := BT.empty
-lemma h151EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h151G (4 - 1) xs.toFinset) h151Empty := trivial
-def h151Block4_0 : List NodeSpec := indexPairNodes [(30293011,0), (126762003,0), (128012363,0), (366863,0), (1166035493,0), (78121525,0), (26297629,7489), (6241453341,7489), (337951,1057), (92801559,0), (24773775,0), (436255,0), (4932640843,0), (4932657227,0), (1116783849491,0), (489785733139,0), (390157323,0), (310505525,0), (487080101,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test4_0 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Empty 4 h151Block4_0 = true := by decide +kernel
-def h151Nodes4 : List NodeSpec := h151Block4_0
-lemma h151Check4 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Empty 4 h151Nodes4 = true := h151Test4_0
-def h151Bucket4 : BT (List (List Nat)) := buildBucketsBT h151W h151Nodes4
-set_option maxRecDepth 200000 in
-lemma h151Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h151G 4 xs.toFinset) h151Bucket4 := buildBucketsBT_sound (by decide) h151Pairs h151WOk h151PoolsOk h151AutosOk h151EmptyOk h151Check4
-def h151Block5_0 : List NodeSpec := indexPairNodes [(6060107,908), (3030123,768), (11811947,0), (729333,64), (745707,401), (194623,4), (778475,401), (206911,4), (3426351,0), (34621487,0), (219199,0), (909547,0), (948271,4), (14186543,0), (239679,0), (958699,401), (247871,4), (960559,528644), (3975215,516), (2402351,0), (60479,15493), (178276439,107553), (199247919,39961), (203442223,0), (577599,995), (165705815,0), (186677295,0), (190871599,0), (585791,995), (2871383,53345), (3919959,0), (12714603,497)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test5_0 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket4 5 h151Block5_0 = true := by decide +kernel
-def h151Block5_1 : List NodeSpec := indexTripleNodes [(626751,1057,2), (634943,1057,2), (136324405,11239565,2), (11929375,6209,2), (2950773,2120,2), (38536791,7523,2), (684095,0,2), (10880799,6849,2), (37490263,0,2), (749631,1009,2), (222464555,213825,2), (3343647,0,2), (3081503,10115,2), (4852277,1945762990157,6), (973736501,965643,2), (34896874027,241905,2), (36439327,418211,2), (39585055,369123,2), (40109343,995,2), (45352223,0,2), (9702517,3469,2), (700479,1633,2), (10356511,0,2), (46925599,8001,2), (222400043,42689,2), (3213087,0,2), (2950943,0,2), (47974175,0,2), (47449887,6081,2), (35915551,1057,2), (48498463,0,2), (49022751,7745,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test5_1 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket4 5 h151Block5_1 = true := by decide +kernel
-def h151Block5_2 : List NodeSpec := indexPairNodes [(822495307,68), (755910731,4), (2231447659,4), (51913835,0), (643135,1009), (38282347,17025), (806975,4), (3292267,260), (755136587,68), (202390635,4), (766015,4), (220237899,32), (207679563,4), (4664221771,3310229), (2517246027,35390053), (2785681483,516), (3188334667,19585), (52498539,32), (921663,0), (938047,0), (245385303,1057), (929855,0), (232814679,1057), (946239,497), (35715103,497), (39909407,1057), (195056671,0), (962623,0), (60903531,0), (970815,0), (616585303,4100), (608200791,4)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test5_2 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket4 5 h151Block5_2 = true := by decide +kernel
-def h151Block5_3 : List NodeSpec := indexPairNodes [(995391,4), (223295,5521), (235583,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test5_3 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket4 5 h151Block5_3 = true := by decide +kernel
-def h151Nodes5 : List NodeSpec := h151Block5_0 ++ h151Block5_1 ++ h151Block5_2 ++ h151Block5_3
-lemma h151Check5 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket4 5 h151Nodes5 = true := by
-  unfold h151Nodes5 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨h151Test5_0,h151Test5_1⟩,h151Test5_2⟩,h151Test5_3⟩
-def h151Bucket5 : BT (List (List Nat)) := buildBucketsBT h151W h151Nodes5
-set_option maxRecDepth 200000 in
-lemma h151Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h151G 5 xs.toFinset) h151Bucket5 := buildBucketsBT_sound (by decide) h151Pairs h151WOk h151PoolsOk h151AutosOk h151Bucket4Ok h151Check5
-def h151Block6_0 : List NodeSpec := indexPairNodes [(59627,1390), (71807,12358), (75903,30724), (79999,3461), (92287,98372), (50239,520206), (100479,45060), (108591,529036), (54335,646126), (299055,509205), (303295,5000311), (352447,5000243), (512087,75630634), (256063,75757614), (1089623,12717203), (1105967,93193235), (1122351,13244947), (288799,4332816418), (205675,6423727), (127423,108), (270783,161836), (287167,32808), (336319,98412), (369087,32812), (58431,1695500717), (1081663,313031), (1278271,5000243), (161855,64711), (313375,1679331527), (17436,2107687179), (17438,16831889675), (33822,67440361739)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test6_0 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket5 6 h151Block6_0 = true := by decide +kernel
-def h151Block6_1 : List NodeSpec := indexTripleNodes [(344895,2820752327,2), (4784959,620915887,2), (260159,8630382,2), (1466475,21236775,2), (1220715,2154,2), (374815,6846716107,2), (36894,12069159179,2), (4523839,14444,2), (593983,96908463,2), (24604,1043792139,2), (383007,67115303179,2), (214303,465089082251,2), (8520991,2167647781131,6), (33817887,216503851275,2), (17040959,373382703,2), (602175,554088771690,2), (5407,27032437003,2), (59167,2088438539,2), (182047,1417349899,2), (4130591,122664567051,6), (15475819,1491614037,2), (365119,45236893765,6), (496191,15307664261,2), (15935,1359393967,2), (651327,249934,6), (440351,47816182037,2), (157759,262102496431,6), (202815,94497399,6), (1777711,7214293,2), (888895,49343087,2), (1794095,30678229,2), (33855,644287476911,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test6_1 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket5 6 h151Block6_1 = true := by decide +kernel
-def h151Block6_2 : List NodeSpec := indexTripleNodes [(32319,58203255,2), (13909099,390170965,6), (14433387,507611477,2), (302655,60293,2), (141375,964930167,6), (5119551,139364,2), (5381695,143460,2), (133183,77721107,2), (1712203,9404941397,2), (21505087,40964,6), (18365503,98372,2), (905279,106574,2), (56383,730203519919,6), (7625791,79517750063,2), (22553663,98400,2), (19414079,110692,2), (643135,77724279,2), (314611775,1459696869,2), (348166207,12388,2), (398497855,1458673,2), (23602239,45060,2), (20462655,98372,2), (774207,249934,2), (170047,3573986479,2), (954431,46202464879,2), (979007,897711256751,2), (987199,182567676535,6), (211007,8115909122679,2), (215103,932062648951,2), (227391,272718455,2), (231487,1166105207,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test6_2 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket5 6 h151Block6_2 = true := by decide +kernel
-def h151Nodes6 : List NodeSpec := h151Block6_0 ++ h151Block6_1 ++ h151Block6_2
-lemma h151Check6 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket5 6 h151Nodes6 = true := by
-  unfold h151Nodes6 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨h151Test6_0,h151Test6_1⟩,h151Test6_2⟩
-def h151Bucket6 : BT (List (List Nat)) := buildBucketsBT h151W h151Nodes6
-set_option maxRecDepth 200000 in
-lemma h151Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h151G 6 xs.toFinset) h151Bucket6 := buildBucketsBT_sound (by decide) h151Pairs h151WOk h151PoolsOk h151AutosOk h151Bucket5Ok h151Check6
-def h151Block7_0 : List NodeSpec := indexTripleNodes [(126,108638,2), (190,37857390,2), (318,5419715759,2), (574,26869386279,2), (1086,121391883887,6), (2110,54773753455,6), (4158,1856558671471,6), (8254,0x8408a0c5266f,2), (5407,197280011,6), (9791,15582176879,6), (5919,67594,6), (65598,7791126127,2), (12863,26322447983,2), (13887,50497412271,6), (14911,33838640751,2), (15935,2543178701999,6), (165951,249605743,2), (170047,1493527727,6), (174143,524376687,2), (178239,1947774575,2), (182335,3895549103,6), (42047,3895548967,6), (48191,33660998,6)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test7_0 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket6 7 h151Block7_0 = true := by decide +kernel
-def h151Nodes7 : List NodeSpec := h151Block7_0
-lemma h151Check7 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket6 7 h151Nodes7 = true := h151Test7_0
-def h151Bucket7 : BT (List (List Nat)) := buildBucketsBT h151W h151Nodes7
-set_option maxRecDepth 200000 in
-lemma h151Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h151G 7 xs.toFinset) h151Bucket7 := buildBucketsBT_sound (by decide) h151Pairs h151WOk h151PoolsOk h151AutosOk h151Bucket6Ok h151Check7
-def h151Block8_0 : List NodeSpec := [([0,1,2,3,4],[15],[0,1])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h151Test8_0 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket7 8 h151Block8_0 = true := by decide +kernel
-def h151Nodes8 : List NodeSpec := h151Block8_0
-lemma h151Check8 : checkNodesBT h151W h151G h151Mask h151Pools h151Autos h151Bucket7 8 h151Nodes8 = true := h151Test8_0
-def h151Bucket8 : BT (List (List Nat)) := buildBucketsBT h151W h151Nodes8
-set_option maxRecDepth 200000 in
-lemma h151Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h151G 8 xs.toFinset) h151Bucket8 := buildBucketsBT_sound (by decide) h151Pairs h151WOk h151PoolsOk h151AutosOk h151Bucket7Ok h151Check8
-set_option maxRecDepth 200000 in
-lemma h151Bound : Lower h151R h151G 9 := lower_of_forestBT (essPairs := [(VAR 0,12,13),(VAR 2,9,13),(VAR 3,5,13),(VAR 4,9,25),(VAR 5,5,37)]) (by decide +kernel) h151Bucket8Ok (by decide +kernel)
-def h155R : List Nat := varsOf 30
-def h155G : Nat := 0xfcccccc0fcccccc0fcccccc0fcccccc0
-lemma h155Bound : Lower h155R h155G 6 := carry_of (swaps := [(4,5),(2,3),(0,1),(1,2)]) (roots2 := h18R) (T2 := h18G) (by decide +kernel) h18Bound
-def h156R : List Nat := varsOf 46
-def h156G : Nat := 0xfcccfcccf0c0f0c0fcccfcccf0c0f0c0
-lemma h156Bound : Lower h156R h156G 4 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h46R) (T2 := h46G) (by decide +kernel) h46Bound
-def h157R : List Nat := varsOf 58
-def h157G : Nat := 0xffccccccffcccc00ffccccccffcccc00
-lemma h157Bound : Lower h157R h157G 5 := carry_of (swaps := [(2,3),(3,4),(4,5),(0,1),(1,2),(2,3),(0,1)]) (roots2 := h14R) (T2 := h14G) (by decide +kernel) h14Bound
-def h158R : List Nat := varsOf 62
-def h158G : Nat := 0xfcccccc0f0c0c000fcccccc0f0c0c000
-lemma h158Bound : Lower h158R h158G 9 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h151R) (T2 := h151G) (by decide +kernel) h151Bound
-def h160R : List Nat := varsOf 30
-def h160G : Nat := 0xfcccfffcfcccfffcfcccfffcfcccfffc
-lemma h160Bound : Lower h160R h160G 5 := carry_of (swaps := [(0,1)]) (roots2 := h45R) (T2 := h45G) (by decide +kernel) h45Bound
-def h161R : List Nat := varsOf 30
-def h161G : Nat := 0xfcffccfcfcffccfcfcffccfcfcffccfc
-lemma h161Bound : Lower h161R h161G 5 := carry_of (swaps := [(3,4),(0,1)]) (roots2 := h45R) (T2 := h45G) (by decide +kernel) h45Bound
-def h162R : List Nat := varsOf 30
-def h162G : Nat := 0xffcfcfccffcfcfccffcfcfccffcfcfcc
-lemma h162Bound : Lower h162R h162G 5 := carry_of (swaps := [(3,4),(2,3),(0,1)]) (roots2 := h45R) (T2 := h45G) (by decide +kernel) h45Bound
-def h163R : List Nat := varsOf 27
-def h163G : Nat := 0xffeeee88ffeeee88ffeeee88ffeeee88
-lemma h163Bound : Lower h163R h163G 7 := carry_of (swaps := [(3,4),(4,5),(1,2)]) (roots2 := h49R) (T2 := h49G) (by decide +kernel) h49Bound
-def h159R : List Nat := varsOf 31
-def h159G : Nat := 0xfeeeeee8feeeeee8feeeeee8feeeeee8
-def h159Pos : List Nat := [5,6,3,3,6,5,9,17,28,28,13,10,18,9,18,28,21,9,3,17,10,14,5,14,22,5,7,18,6,11,11,17]
-def h159Neg : List Nat := [4,4,1,2,2,1,1,1,12,20,12,2,2,8,20,24,20,12,4,20,8,2,12,12,20,0,4,16,12,2,1,16]
-def h159Mask : Nat := fullMask 32
-def h159Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xe64f24ed,0x400000e4),(0xcccccccccccccccccccccccccccccccc,0x7db4581e,0x20201818),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x17e18733,0x15cf4703),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x60b2af40,0x10d2a500),(0xffff0000ffff0000ffff0000ffff0000,0x8909d380,0x8909c200)]
-def h159Steps : List (Nat × Nat × Nat) := [(0,0,1),(1,0,1),(2,0,1),(1,0,2),(1,1,2),(1,3,4),(1,3,8),(3,3,11),(3,4,11),(1,6,9),(3,6,9),(1,4,12),(3,4,12),(0,8,9),(0,2,3),(1,2,3),(2,2,3),(0,2,6),(3,2,6),(3,1,2),(1,1,3),(1,4,20),(2,6,20),(0,8,25),(1,6,28),(3,3,25),(3,1,8),(1,3,31),(1,3,22),(2,3,22),(1,3,23),(3,1,11),(1,12,30),(1,1,12),(3,0,2),(1,0,19),(3,1,40),(1,19,23),(2,6,19),(3,0,14),(2,14,22),(1,1,44),(1,4,21),(1,4,5),(3,5,37),(1,0,15),(3,4,35),(2,8,24),(3,0,26)]
-def h159W : BT Decor := buildWiresBT 6 h159Base h159Steps
-def h159AutoList : List (List (Nat × Nat)) := [[],[(3,4)],[(2,3)],[(2,4)],[(0,1)],[(3,4),(2,3)],[(3,4),(2,4)],[(3,4),(0,1)],[(2,3),(0,1)],[(2,4),(0,1)],[(3,4),(2,3),(0,1)],[(3,4),(2,4),(0,1)]]
-def h159Autos : BT (List (Nat × Nat)) := btOfList 4 h159AutoList
-lemma h159Pairs : goodPairs h159G h159Pos h159Neg := goodPairs_of (by decide +kernel)
-lemma h159BaseOk : ∀ x ∈ h159Base, faithful h159Pos h159Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-set_option maxRecDepth 200000 in
-lemma h159WOk : btAll (fun x => faithful h159Pos h159Neg x ∧ x.1 < 2^128) h159W := buildWiresBT_faithful h159BaseOk
-lemma h159AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h159G = h159G) h159Autos := btAll_ofList (autos_of (by decide +kernel))
-def h159SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 1 0,6),some (subcubeFast 2 0,6),some (subcubeFast 4 0,5),some (subcubeFast 8 0,5),some (subcubeFast 12 0,4),some (subcubeFast 16 0,5),some (subcubeFast 20 0,4),some (subcubeFast 24 0,4),some (0xf00ff00ff00ff00ff00ff00ff00ff00f,7),some (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f,7),some (0xff0000ffff0000ffff0000ffff0000ff,7),some (0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a,5),some (0x55aa55aa55aa55aa55aa55aa55aa55aa,5),some (0x5555aaaa5555aaaa5555aaaa5555aaaa,5),some (0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c,5),some (0x33cc33cc33cc33cc33cc33cc33cc33cc,5),some (0x3333cccc3333cccc3333cccc3333cccc,5)]
-def h159Slices : BT (Option (Nat × Nat)) := btOfList 5 h159SliceList
-def h159Specs : List PoolSpec := poolSteps h159Steps [(0,[]),(1,[]),(1,[3]),(2,[]),(0,[4]),(8,[1,3]),(9,[1,3]),(0,[14]),(8,[1,35]),(8,[1]),(3,[]),(5,[15]),(8,[]),(5,[]),(13,[]),(0,[15]),(9,[15]),(4,[]),(11,[]),(8,[1,22]),(9,[1]),(0,[17]),(8,[1,17]),(9,[1,17,28]),(9,[1,17]),(0,[17,29]),(9,[16]),(9,[]),(1,[10]),(0,[18]),(1,[18]),(8,[1,18]),(9,[1,18]),(10,[]),(10,[1]),(14,[]),(0,[19]),(8,[3]),(6,[]),(9,[3]),(8,[20]),(15,[]),(0,[26]),(8,[3,26]),(9,[3,26]),(16,[]),(10,[3,15]),(8,[21]),(8,[3,5]),(9,[3,5]),(10,[3]),(8,[5]),(9,[5]),(7,[]),(0,[6]),(12,[]),(8,[3,7]),(1,[34]),(8,[34]),(9,[34]),(10,[34]),(1,[14]),(8,[35,36]),(8,[35]),(9,[14,35]),(10,[14,35]),(9,[14]),(10,[14]),(1,[15]),(10,[15])]
-def h159Pools : BT (Option BoundPool) := buildPoolsBT 7 h159W h159R h159Slices h159Specs
-set_option maxRecDepth 200000 in
-lemma h159Slice16 : Slice h159R h159G (0x3333cccc3333cccc3333cccc3333cccc) 5 := opposite_slice (oppositeRow 1 4 29) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h45Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice15 : Slice h159R h159G (0x33cc33cc33cc33cc33cc33cc33cc33cc) 5 := opposite_slice (oppositeRow 1 3 29) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h59Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice14 : Slice h159R h159G (0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c) 5 := opposite_slice (oppositeRow 1 2 29) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h75Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice13 : Slice h159R h159G (0x5555aaaa5555aaaa5555aaaa5555aaaa) 5 := opposite_slice (oppositeRow 0 4 30) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h160Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice12 : Slice h159R h159G (0x55aa55aa55aa55aa55aa55aa55aa55aa) 5 := opposite_slice (oppositeRow 0 3 30) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h161Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice11 : Slice h159R h159G (0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a) 5 := opposite_slice (oppositeRow 0 2 30) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h162Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice10 : Slice h159R h159G (0xff0000ffff0000ffff0000ffff0000ff) 7 := mapped_slice (identifyRow 3 4 23) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h106Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice9 : Slice h159R h159G (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f) 7 := mapped_slice (identifyRow 2 4 27) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h163Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice8 : Slice h159R h159G (0xf00ff00ff00ff00ff00ff00ff00ff00f) 7 := mapped_slice (identifyRow 2 3 27) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h163Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice7 : Slice h159R h159G (subcubeFast 24 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h23Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice6 : Slice h159R h159G (subcubeFast 20 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h25Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice5 : Slice h159R h159G (subcubeFast 16 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h30Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice4 : Slice h159R h159G (subcubeFast 12 0) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h101Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice3 : Slice h159R h159G (subcubeFast 8 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h139Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice2 : Slice h159R h159G (subcubeFast 4 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h146Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice1 : Slice h159R h159G (subcubeFast 2 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h150Bound
-set_option maxRecDepth 200000 in
-lemma h159Slice0 : Slice h159R h159G (subcubeFast 1 0) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h155Bound
-lemma h159SlicesOk : btAll (sliceSpec h159R h159G) h159Slices := btAll_ofList (P := sliceSpec h159R h159G) (sliceSpecCons h159Slice0 (sliceSpecCons h159Slice1 (sliceSpecCons h159Slice2 (sliceSpecCons h159Slice3 (sliceSpecCons h159Slice4 (sliceSpecCons h159Slice5 (sliceSpecCons h159Slice6 (sliceSpecCons h159Slice7 (sliceSpecCons h159Slice8 (sliceSpecCons h159Slice9 (sliceSpecCons h159Slice10 (sliceSpecCons h159Slice11 (sliceSpecCons h159Slice12 (sliceSpecCons h159Slice13 (sliceSpecCons h159Slice14 (sliceSpecCons h159Slice15 (sliceSpecCons h159Slice16 sliceSpecNil)))))))))))))))))
-set_option maxRecDepth 200000 in
-lemma h159PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h159R h159G c) h159Pools := buildPoolsBT_sound h159SlicesOk
-def h159Empty : BT (List (List Nat)) := BT.empty
-lemma h159EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h159G (3 - 1) xs.toFinset) h159Empty := trivial
-def h159Block3_0 : List NodeSpec := nodesWithIdentity [([4,6,20,28],[]),([4,6,18,37],[]),([2,6,37,48],[]),([2,4,6,49],[])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h159Test3_0 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Empty 3 h159Block3_0 = true := by decide +kernel
-def h159Nodes3 : List NodeSpec := h159Block3_0
-lemma h159Check3 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Empty 3 h159Nodes3 = true := h159Test3_0
-def h159Bucket3 : BT (List (List Nat)) := buildBucketsBT h159W h159Nodes3
-set_option maxRecDepth 200000 in
-lemma h159Bucket3Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h159G 3 xs.toFinset) h159Bucket3 := buildBucketsBT_sound (by decide) h159Pairs h159WOk h159PoolsOk h159AutosOk h159EmptyOk h159Check3
-def h159Block4_0 : List NodeSpec := indexPairNodes [(5296,4), (9392,0), (69206688,0), (368829,6), (19419437,0), (1121847,0), (315479,0), (4981815,913), (5114423,47281), (340055,0), (17567255,63665), (516525,0), (99359,0), (4457527,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h159Test4_0 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket3 4 h159Block4_0 = true := by decide +kernel
-def h159Nodes4 : List NodeSpec := h159Block4_0
-lemma h159Check4 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket3 4 h159Nodes4 = true := h159Test4_0
-def h159Bucket4 : BT (List (List Nat)) := buildBucketsBT h159W h159Nodes4
-set_option maxRecDepth 200000 in
-lemma h159Bucket4Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h159G 4 xs.toFinset) h159Bucket4 := buildBucketsBT_sound (by decide) h159Pairs h159WOk h159PoolsOk h159AutosOk h159Bucket3Ok h159Check4
-def h159Block5_0 : List NodeSpec := indexTripleNodes [(1712,62,294), (1720,22,2), (2294973,0,42), (3081405,6,2), (2097844,0,34), (8389300,194,2), (4068005,2,2), (4284,4,10), (8380,4,2), (2261365,516,2), (605271,0,2), (52287,1969,2), (161855,0,2), (857175,9393,2), (48191,1313,2), (8421430,10721,6), (934191,1697,2), (39999,0,2), (165951,0,2), (988247,59569,2), (274479,0,2), (137279,0,2), (2523509,803,2), (1032495,0,2), (2916725,803,2), (2235479,0,2), (64575,254177,2), (37233829,16,2), (5174,4,2), (9270,0,2), (11666007,0,2), (69206566,0,2)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h159Test5_0 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket4 5 h159Block5_0 = true := by decide +kernel
-def h159Block5_1 : List NodeSpec := indexPairNodes [(50239,6), (12060759,369), (58431,0), (2105894,433), (2425431,4096067), (10286,54049), (13887,0), (133183,0), (9791,0), (8508,0), (9700399,1249), (141375,1249), (12863,1825), (153663,8129), (202815,0)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h159Test5_1 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket4 5 h159Block5_1 = true := by decide +kernel
-def h159Nodes5 : List NodeSpec := h159Block5_0 ++ h159Block5_1
-lemma h159Check5 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket4 5 h159Nodes5 = true := by
-  unfold h159Nodes5 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨h159Test5_0,h159Test5_1⟩
-def h159Bucket5 : BT (List (List Nat)) := buildBucketsBT h159W h159Nodes5
-set_option maxRecDepth 200000 in
-lemma h159Bucket5Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h159G 5 xs.toFinset) h159Bucket5 := buildBucketsBT_sound (by decide) h159Pairs h159WOk h159PoolsOk h159AutosOk h159Bucket4Ok h159Check5
-def h159Block6_0 : List NodeSpec := indexTripleNodes [(700,222,6), (110783,3350,42), (118975,855062,554), (270527,902423,38), (32830,1250481,38), (32958,2622512,38), (65726,1383945,34), (39999,512512455,6), (286911,1515031,34), (1590,62,294), (1598,4594239,2), (2163287,31919391,2), (1147199,15843553,42), (56383,135841029023,6), (1540415,7967,34), (819799,10219545371,34), (2622,4257333473,6), (4158,1845895429,10), (8254,524061028807,2), (8766,5236336931,2), (174143,1376938583,2), (149567,521918394647,2), (46143,36327248826311,1594)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h159Test6_0 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket5 6 h159Block6_0 = true := by decide +kernel
-def h159Nodes6 : List NodeSpec := h159Block6_0
-lemma h159Check6 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket5 6 h159Nodes6 = true := h159Test6_0
-def h159Bucket6 : BT (List (List Nat)) := buildBucketsBT h159W h159Nodes6
-set_option maxRecDepth 200000 in
-lemma h159Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h159G 6 xs.toFinset) h159Bucket6 := buildBucketsBT_sound (by decide) h159Pairs h159WOk h159PoolsOk h159AutosOk h159Bucket5Ok h159Check6
-def h159Block7_0 : List NodeSpec := indexTripleNodes [(190,244215063,1598), (574,3175329481503,6), (145471,0x79c1c2825717,34), (15935,0xd8f071a2b117,34), (33855,0xfa0e1479717,1594)]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h159Test7_0 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket6 7 h159Block7_0 = true := by decide +kernel
-def h159Nodes7 : List NodeSpec := h159Block7_0
-lemma h159Check7 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket6 7 h159Nodes7 = true := h159Test7_0
-def h159Bucket7 : BT (List (List Nat)) := buildBucketsBT h159W h159Nodes7
-set_option maxRecDepth 200000 in
-lemma h159Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h159G 7 xs.toFinset) h159Bucket7 := buildBucketsBT_sound (by decide) h159Pairs h159WOk h159PoolsOk h159AutosOk h159Bucket6Ok h159Check7
-def h159Block8_0 : List NodeSpec := [([0,1,2,3,4],[0,1,12,27,33],[0,1,2,3,4,8,9])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h159Test8_0 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket7 8 h159Block8_0 = true := by decide +kernel
-def h159Nodes8 : List NodeSpec := h159Block8_0
-lemma h159Check8 : checkNodesBT h159W h159G h159Mask h159Pools h159Autos h159Bucket7 8 h159Nodes8 = true := h159Test8_0
-def h159Bucket8 : BT (List (List Nat)) := buildBucketsBT h159W h159Nodes8
-set_option maxRecDepth 200000 in
-lemma h159Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h159G 8 xs.toFinset) h159Bucket8 := buildBucketsBT_sound (by decide) h159Pairs h159WOk h159PoolsOk h159AutosOk h159Bucket7Ok h159Check8
-set_option maxRecDepth 200000 in
-lemma h159Bound : Lower h159R h159G 9 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,1,5),(VAR 3,1,9),(VAR 4,1,17)]) (by decide +kernel) h159Bucket8Ok (by decide +kernel)
-def h164R : List Nat := varsOf 47
-def h164G : Nat := 0xfeeefeeefac8fac8feeefeeefac8fac8
-lemma h164Bound : Lower h164R h164G 6 := lift_of (z := 12) (o := 0) (essPairs := [(VAR 2,2,6),(VAR 3,1,9)]) (by decide +kernel) h15Bound
-def h166R : List Nat := varsOf 39
-def h166G : Nat := 0xfefefefee8e8e8e8fefefefee8e8e8e8
-lemma h166Bound : Lower h166R h166G 7 := carry_of (swaps := [(3,4),(1,2),(2,3)]) (roots2 := h49R) (T2 := h49G) (by decide +kernel) h49Bound
-def h165R : List Nat := varsOf 55
-def h165G : Nat := 0xfefeeeeefafae8e8fefeeeeefafae8e8
-def h165Pos : List Nat := [5,6,3,3,6,5,20,17,17,34,33,33,50,20,52,50,52]
-def h165Neg : List Nat := [4,4,1,2,2,1,4,1,16,2,1,32,48,16,48,18,36]
-def h165Mask : Nat := fullMask 17
-def h165Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,3501,1188),(0xcccccccccccccccccccccccccccccccc,0x921e,0x8218),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x16073,0x10043),(0xffff0000ffff0000ffff0000ffff0000,0x1f1c0,0xf100),(0xffffffff00000000ffffffff00000000,0x1de00,0x15800)]
-def h165Steps : List (Nat × Nat × Nat) := []
-def h165W : BT Decor := buildWiresBT 3 h165Base h165Steps
-def h165AutoList : List (List (Nat × Nat)) := [[],[(4,5),(1,2)]]
-def h165Autos : BT (List (Nat × Nat)) := btOfList 1 h165AutoList
-lemma h165Pairs : goodPairs h165G h165Pos h165Neg := goodPairs_of (by decide +kernel)
-lemma h165BaseOk : ∀ x ∈ h165Base, faithful h165Pos h165Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
-lemma h165WOk : btAll (fun x => faithful h165Pos h165Neg x ∧ x.1 < 2^128) h165W := buildWiresBT_faithful h165BaseOk
-lemma h165AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h165G = h165G) h165Autos := btAll_ofList (autos_of (by decide +kernel))
-def h165SliceList : List (Option (Nat × Nat)) := [some (0xffff00000000ffffffff00000000ffff,7)]
-def h165Slices : BT (Option (Nat × Nat)) := btOfList 1 h165SliceList
-def h165Specs : List PoolSpec := [(0,[])]
-def h165Pools : BT (Option BoundPool) := buildPoolsBT 1 h165W h165R h165Slices h165Specs
-set_option maxRecDepth 200000 in
-lemma h165Slice0 : Slice h165R h165G (0xffff00000000ffffffff00000000ffff) 7 := mapped_slice (identifyRow 4 5 39) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h166Bound
-lemma h165SlicesOk : btAll (sliceSpec h165R h165G) h165Slices := btAll_ofList (P := sliceSpec h165R h165G) (sliceSpecCons h165Slice0 sliceSpecNil)
-lemma h165PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h165R h165G c) h165Pools := buildPoolsBT_sound h165SlicesOk
-def h165Empty : BT (List (List Nat)) := BT.empty
-lemma h165EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h165G (6 - 1) xs.toFinset) h165Empty := trivial
-def h165Block6_0 : List NodeSpec := nodesWithIdentity [([0,1,2,3,4],[0])]
-set_option maxRecDepth 200000 in
-set_option maxHeartbeats 0 in
-lemma h165Test6_0 : checkNodesBT h165W h165G h165Mask h165Pools h165Autos h165Empty 6 h165Block6_0 = true := by decide +kernel
-def h165Nodes6 : List NodeSpec := h165Block6_0
-lemma h165Check6 : checkNodesBT h165W h165G h165Mask h165Pools h165Autos h165Empty 6 h165Nodes6 = true := h165Test6_0
-def h165Bucket6 : BT (List (List Nat)) := buildBucketsBT h165W h165Nodes6
-lemma h165Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h165G 6 xs.toFinset) h165Bucket6 := buildBucketsBT_sound (by decide) h165Pairs h165WOk h165PoolsOk h165AutosOk h165EmptyOk h165Check6
-lemma h165Bound : Lower h165R h165G 7 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,1,5),(VAR 4,1,17),(VAR 5,1,33)]) (by decide +kernel) h165Bucket6Ok (by decide +kernel)
-def h167R : List Nat := varsOf 59
-def h167G : Nat := 0xffeeeeeeffccee88ffeeeeeeffccee88
-lemma h167Bound : Lower h167R h167G 7 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h165R) (T2 := h165G) (by decide +kernel) h165Bound
-def h168R : List Nat := varsOf 61
-def h168G : Nat := 0xfffffffafafafaaafffffffafafafaaa
-lemma h168Bound : Lower h168R h168G 6 := lift_of (z := 9) (o := 0) (essPairs := [(VAR 0,0,1),(VAR 3,4,12)]) (by decide +kernel) h54Bound
-def h169R : List Nat := varsOf 62
-def h169G : Nat := 0xfffffffcffccfcccfffffffcffccfccc
-lemma h169Bound : Lower h169R h169G 6 := carry_of (swaps := [(2,3),(0,1)]) (roots2 := h168R) (T2 := h168G) (by decide +kernel) h168Bound
 def h0R : List Nat := varsOf 63
 def h0G : Nat := 0xfeeeeee8fac8e888feeeeee8fac8e888
-def h0Pos : List Nat := [13,14,3,3,22,14,7,13,14,11,13,22,19,25,38,35,37,7,11,19,35,22,25,37,42,41,41,28,49,49,28,45,22,28,60,53,28,60,49,50,49,60,37,28,30,29,27,23,50,38,13,37,25,14,49,53,37,28,41,42,22,13,28,58,41,41,22,28,25,60,13,38,46,54,14,28,37,25,42,50,49,42,57,25,13,3,58,11,3,19,35,50,42,14,3,11,38,3,25,22,29,11,30,35,53,57,53,3,54]
-def h0Neg : List Nat := [12,12,1,2,21,10,6,9,6,10,5,6,18,9,6,34,5,5,9,17,33,18,17,33,34,9,44,21,17,33,12,44,26,24,56,21,44,52,48,48,1,44,21,20,26,21,26,21,34,36,1,36,26,26,52,52,52,52,1,40,20,21,4,26,33,40,2,8,1,40,44,34,44,52,44,56,1,24,26,26,21,44,56,56,8,9,56,1,17,1,1,18,10,8,10,2,52,18,8,4,9,26,6,2,33,33,5,0,34]
-def h0Mask : Nat := fullMask 109
-def h0Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0xfb6c7bd305325dce548b6dfb6cd,0x71007a110112404a5083adf2494),(0xcccccccccccccccccccccccccccccccc,0x18ebffe2c7849823d081013edb7e,0x10e2d800c084803150010120db68),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0x155920101fec73aebe3fc8a34df3,0x4490003074073caae38cc034d53),(0xff00ff00ff00ff00ff00ff00ff00ff00,0x274b0de6d7bee347a36cf4427a3,0x34707eed6a88305217c60422a3),(0xffff0000ffff0000ffff0000ffff0000,0x175c0a4daa3cd2d1fbff78683810,0x23094dea00b3f0fcef18681010),(0xffffffff00000000ffffffff00000000,0x17811c47d3a38dcb07ecb791c000,0x1301004e0fe30bcb02f4a5908000)]
-def h0Steps : List (Nat × Nat × Nat) := [(1,0,1),(2,0,1),(3,0,1),(1,0,2),(3,0,2),(1,0,3),(3,0,3),(1,0,4),(3,0,4),(3,0,5),(1,1,2),(3,1,2),(1,1,3),(3,1,3),(1,1,4),(3,1,4),(3,1,5),(0,2,3),(1,0,23),(3,1,24),(1,2,3),(2,2,3),(3,2,3),(0,2,4),(1,2,4),(2,2,4),(3,2,4),(0,2,5),(3,2,5),(0,2,6),(3,2,6),(0,3,4),(1,3,4),(2,3,4),(3,3,4),(0,3,5),(2,3,5),(3,3,5),(0,3,6),(3,3,6),(0,4,5),(1,4,5),(3,4,5),(0,4,6),(3,4,6),(0,5,6),(3,5,6),(3,3,36),(1,4,23),(1,4,36),(3,4,36),(2,5,23),(1,0,46),(1,2,46),(0,5,59),(2,6,23),(1,3,46),(3,46,61),(2,6,46),(1,23,46),(1,0,48),(1,1,48),(1,2,48),(1,3,48),(2,6,48),(1,23,48),(0,3,54),(1,2,51),(1,3,51),(1,4,51),(1,51,54),(1,23,51),(3,4,76),(2,6,57),(3,0,26),(1,2,49),(0,4,26),(1,4,26),(3,4,26),(1,2,84),(1,3,84),(0,6,84),(2,6,84),(0,5,26),(0,6,26),(1,3,90),(1,4,90),(1,49,90),(2,26,49),(1,26,52),(2,26,52),(1,4,53),(1,50,53),(1,0,82),(1,2,82),(1,3,82),(3,3,83),(0,52,93),(3,52,83),(1,0,27),(1,1,27),(1,4,27),(2,6,27),(1,0,29),(3,1,109),(1,1,41),(1,2,41),(1,4,41),(2,6,41),(1,1,43),(1,2,43),(1,4,43),(1,1,29),(2,6,29),(3,41,119),(1,29,41),(1,29,43),(3,0,30),(3,1,30),(3,1,38),(0,6,30),(1,1,39),(1,2,102),(2,6,102),(1,4,44),(2,30,44),(1,4,126),(1,30,52),(2,30,52),(1,45,56),(1,0,72),(1,1,72),(1,0,31),(1,1,31),(2,6,31),(1,31,41),(1,31,43),(0,6,68),(1,0,32),(1,1,32),(1,3,32),(2,6,32),(1,0,33),(3,1,148),(1,1,33),(3,0,150),(1,3,33),(3,4,152),(1,4,33),(2,6,33),(1,0,34),(1,1,34),(1,3,34),(3,4,158),(0,6,158),(1,4,34),(2,6,34),(1,34,44),(0,6,161),(2,6,161),(1,34,49),(1,4,162),(3,4,91),(1,35,48),(1,51,132),(0,6,47),(3,4,73),(3,35,74),(3,1,58),(3,1,9),(3,3,9),(3,4,9),(3,4,16),(1,4,17),(2,9,17),(0,9,38),(2,9,43),(2,9,48),(3,4,18),(0,9,184),(0,9,18),(1,4,186),(0,5,186),(2,5,186),(2,9,31),(2,9,19),(3,2,20),(0,9,20),(1,4,176),(1,2,21),(2,9,21),(1,2,22),(1,3,22),(1,0,124),(3,0,139),(1,0,37),(2,9,37),(0,9,127),(2,9,39),(2,9,40),(2,9,41),(2,9,46),(1,1,10),(1,3,10),(1,4,10),(3,10,16),(3,10,38),(1,10,19),(3,10,20),(1,10,21),(3,10,30),(1,10,37),(1,10,39),(3,4,218),(1,10,40),(1,10,41),(1,10,43),(1,10,46),(1,10,48),(3,1,11),(3,2,11),(3,4,11),(0,11,16),(2,11,17),(0,11,20),(2,11,21),(2,11,29),(0,11,30),(2,11,31),(1,4,234),(2,11,32),(2,11,33),(2,11,34),(2,11,46),(2,11,48),(1,1,12),(1,2,12),(1,4,12),(1,12,17),(3,12,20),(1,12,21),(1,12,29),(3,12,30),(1,12,31),(3,4,249),(1,12,32),(1,12,33),(1,12,34),(1,12,46),(1,12,48),(3,1,13),(3,2,13),(3,3,13),(2,13,34),(2,13,21),(0,13,26),(2,13,43),(2,13,23),(2,13,27),(1,1,28),(2,13,28),(3,0,145),(2,13,32),(2,13,33),(2,13,41),(1,1,14),(1,2,14),(1,3,14),(1,14,23),(3,14,26),(1,14,27),(1,14,28),(3,14,30),(1,14,33),(1,14,34),(1,14,41),(1,14,43),(1,1,15),(1,2,15),(1,3,15),(1,4,15),(3,4,284),(3,4,285),(1,1,80),(2,26,46),(2,26,48),(3,1,105),(0,5,105),(3,0,106),(1,27,46),(1,27,48),(3,0,118),(1,1,123),(2,30,41),(2,30,43),(1,1,60),(3,1,138),(3,1,144),(1,32,41),(1,32,43),(3,1,156),(3,0,157),(3,1,66)]
+def h0Pos : List Nat := [3,3,3,3,3,3,3,7,7,7,11,11,11,11,11,13,13,13,13,13,13,13,14,14,14,14,14,14,14,19,19,19,22,22,22,22,22,22,23,25,25,25,25,25,25,25,25,27,28,28,28,28,28,28,28,29,29,30,30,35,35,35,35,37,37,37,37,37,38,38,38,38,41,41,41,41,41,42,42,42,42,42,45,46,49,49,49,49,49,49,50,50,50,50,53,53,54,57,57,58,58,60,60,60]
+def h0Neg : List Nat := [0,1,2,9,10,17,18,1,5,6,1,2,9,10,26,1,5,8,9,12,21,44,2,6,8,10,12,26,44,1,17,18,2,4,6,18,20,21,21,1,8,9,17,21,24,26,56,26,4,12,20,21,24,26,52,9,21,6,26,1,2,33,34,1,5,33,36,52,6,34,36,52,1,9,33,40,44,10,26,34,40,44,44,44,1,17,21,33,48,52,18,26,34,48,21,52,52,33,56,26,56,44,52,56]
+def h0Mask : Nat := fullMask 104
+def h0Base : List Decor := [(0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,0x6c3f41f0ff980ffc0e03fffff,0x240f00703a9880ee0601595aa),(0xcccccccccccccccccccccccccccccccc,0x193c0be0f07e00807fffc07fff,0x81c00e0305620a00d8ac06a54),(0xf0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0,0xe1c00c00ff87ff007f1fff8380,0x61c24e10dd034f087614b90300),(0xff00ff00ff00ff00ff00ff00ff00ff00,0xfe000fff0007ffff801ffffc00,0xbc080f7a0004b2f3001f2e7018),(0xffff0000ffff0000ffff0000ffff0000,0xfffff0000007ffffffe0000000,0xddef604088057cfc78c8104060),(0xffffffff00000000ffffffff00000000,0xfffffffffff800000000000000,0xf7b38f9cee6040400010200000)]
+def h0Steps : List (Nat × Nat × Nat) := [(1,0,1),(0,6,2),(1,7,3),(2,8,4),(1,7,4),(0,6,5),(1,11,2),(1,11,4),(1,11,10),(3,11,10),(1,3,4),(0,6,16),(1,6,2),(3,7,18),(0,18,3),(0,18,4),(1,11,3),(1,7,11),(3,7,22),(3,7,16),(2,6,5),(3,2,16),(3,3,5),(1,28,7),(1,28,2),(3,4,5),(1,31,7),(1,31,2),(3,0,18),(3,1,18),(3,11,18),(2,18,3),(2,18,4),(3,26,18),(0,18,5),(2,6,2),(2,41,3),(1,42,4),(2,6,4),(2,41,4),(2,6,3),(3,6,2),(2,46,4),(1,47,0),(1,47,1),(3,47,5),(1,41,4),(0,2,3),(0,2,4),(0,6,3),(1,6,3),(3,6,3),(0,6,4),(1,58,2),(1,58,3),(1,6,4),(3,58,61),(0,2,61),(0,3,61),(1,2,3),(3,58,65),(0,6,65),(1,67,4),(2,65,4),(3,2,5),(1,70,58),(1,70,4),(3,0,61),(3,1,61),(3,11,61),(3,2,61),(3,3,61),(0,61,5),(3,6,4),(2,12,4),(0,44,65),(3,70,6),(1,79,0),(1,79,1),(3,79,5),(2,61,5),(2,2,4),(0,3,4),(2,3,4),(3,6,5),(0,80,6),(1,2,4),(0,6,92),(1,65,4),(3,26,94),(0,6,94),(3,69,6),(3,3,92),(3,98,6),(1,11,53),(1,100,4),(2,100,4),(1,53,4),(2,2,3),(3,2,3),(1,0,54),(3,2,4),(3,3,4),(1,0,53),(1,1,53),(1,6,53),(2,111,4),(2,6,53),(0,4,5),(2,113,114),(1,26,53),(3,53,5),(3,117,6),(2,6,114),(1,53,114),(1,2,114),(1,3,114),(1,31,53),(3,6,65),(0,65,4),(2,6,125),(2,96,5),(1,104,6),(3,104,6),(1,104,4),(0,3,5),(2,6,131),(1,2,131),(1,131,4),(1,6,54),(2,6,54),(2,136,131),(1,54,3),(1,54,131),(1,28,54),(3,6,92),(0,3,92),(2,6,142),(1,87,6),(3,87,6),(1,87,3),(1,89,2),(1,87,131),(1,87,28),(1,107,6),(3,107,6),(1,107,3),(0,2,5),(1,0,153),(1,1,153),(1,6,153),(2,6,153),(1,153,3),(2,158,4),(1,153,4),(1,82,4),(1,70,6),(1,70,3),(0,6,163),(2,163,4),(0,6,72),(1,0,114),(1,1,114),(1,6,114),(3,31,6),(1,31,6),(0,6,33),(1,31,3),(1,0,2),(1,1,2),(2,175,4),(3,1,2),(3,177,174),(1,177,4),(2,174,3),(0,174,5),(2,35,3),(3,182,174),(1,181,3),(1,35,4),(2,35,4),(3,1,5),(1,1,3),(2,183,4),(2,188,4),(0,188,5),(3,174,188),(1,183,4),(0,183,5),(3,183,5),(1,174,4),(0,188,196),(2,174,4),(3,181,188),(1,188,4),(3,1,3),(3,201,174),(1,1,4),(0,174,203),(3,1,4),(3,205,174),(1,187,3),(3,1,92),(1,87,1),(3,87,174),(0,174,3),(1,1,211),(1,174,3),(3,1,213),(2,213,4),(1,180,1),(1,180,4),(0,174,4),(3,1,196),(1,198,1),(1,1,181),(1,0,88),(2,174,88),(0,174,16),(1,89,1),(0,225,174),(3,89,174),(3,108,174),(1,1,131),(2,174,131),(1,28,1),(3,28,174),(2,174,114),(3,0,2),(1,50,4),(2,50,4),(1,234,3),(3,1,237),(2,237,4),(1,234,4),(3,1,240),(3,234,175),(1,175,4),(3,234,243),(1,201,234),(3,234,203),(3,234,5),(1,205,234),(1,205,2),(1,187,234),(3,234,92),(1,234,88),(1,2,88),(3,234,16),(3,1,16),(1,89,234),(1,108,234),(1,108,2),(1,234,131),(1,28,234),(1,234,114),(1,31,234),(1,0,3),(0,175,263),(3,177,263),(3,1,263),(1,266,4),(2,266,4),(1,263,4),(0,263,203),(3,205,263),(3,205,269),(1,187,2),(0,2,263),(3,2,263),(1,275,1),(1,275,4),(3,54,263),(0,263,92),(3,87,263),(3,107,263),(3,153,263),(3,70,263),(0,263,4),(3,284,263),(3,1,269),(1,285,1),(0,263,5),(1,2,288),(2,263,114),(3,0,3),(1,291,1),(1,292,4),(2,292,4),(1,291,2),(3,1,295),(2,295,4),(1,291,4),(3,1,298),(1,177,291),(3,291,203),(3,291,5),(1,205,291),(1,291,54),(3,291,92),(1,87,291),(1,107,291),(1,291,153),(1,70,291),(1,291,114),(1,31,291),(1,0,4),(3,2,203),(3,3,312),(3,205,312),(1,53,312),(3,53,312),(0,312,5),(1,53,318),(0,65,312),(2,65,312),(1,104,312),(3,104,312),(1,105,312),(3,105,312),(3,0,92),(1,87,0),(3,2,312),(0,2,312),(1,107,1),(3,107,312),(2,2,312),(1,332,318),(1,328,1),(1,153,312),(3,153,312),(3,70,312),(3,0,16),(1,89,0),(0,3,312),(2,3,312),(1,314,1),(1,131,312),(3,131,312),(3,28,312),(1,31,0),(1,2,318),(1,3,318),(3,312,5),(3,0,4),(1,350,2),(3,1,351),(1,350,3),(3,1,353),(1,350,53),(3,350,65),(1,104,350),(1,105,350),(3,350,92),(1,350,153),(1,70,350),(1,350,131),(1,28,350),(3,0,5),(1,364,1),(2,365,4),(1,364,2),(3,1,367),(2,367,4),(1,364,3),(3,1,370),(2,370,4),(1,364,4),(3,1,373),(1,105,1),(3,1,109),(2,109,4),(3,0,103),(1,1,103),(3,1,103),(3,0,65),(1,381,1),(1,381,4),(3,1,65),(1,1,65),(1,0,125),(1,1,125),(3,0,94),(3,1,94),(1,69,0),(1,69,1),(2,69,1),(0,65,5),(2,65,114),(1,104,0),(2,395,1),(2,395,4),(0,395,5),(1,104,1),(3,0,399),(1,399,4),(2,399,4),(3,0,130),(3,1,130),(1,104,114),(3,1,106),(1,1,54),(3,0,407),(3,0,138),(3,1,138),(1,326,1),(1,208,0),(1,0,142),(1,1,142),(1,98,0),(1,98,1),(3,131,92),(3,28,92),(0,92,5),(1,1,419),(2,327,1),(3,0,209),(3,0,146),(3,1,146),(1,107,0),(2,425,1),(3,0,330),(3,0,152),(3,1,152),(1,107,131),(1,28,107),(3,1,154),(2,154,4),(3,0,155),(1,155,4),(2,155,4),(3,0,158),(3,1,158),(3,0,160),(3,1,160),(1,70,0),(2,441,1),(2,441,4),(1,70,1),(3,0,444),(2,444,4),(3,0,163),(3,1,163),(3,0,72),(3,1,72),(3,1,167),(3,0,121),(3,1,121),(2,346,1),(1,31,1),(3,0,33),(3,1,33)]
 def h0W : BT Decor := buildWiresBT 9 h0Base h0Steps
-def h0AutoList : List (List (Nat × Nat)) := [[],[(2,3),(0,1)]]
+def h0AutoList : List (List (Nat × Nat)) := [[],[(0,1),(2,3)]]
 def h0Autos : BT (List (Nat × Nat)) := btOfList 1 h0AutoList
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
 lemma h0Pairs : goodPairs h0G h0Pos h0Neg := goodPairs_of (by decide +kernel)
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
 lemma h0BaseOk : ∀ x ∈ h0Base, faithful h0Pos h0Neg x ∧ x.1 < 2^128 := base_of (by decide +kernel)
 set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
 lemma h0WOk : btAll (fun x => faithful h0Pos h0Neg x ∧ x.1 < 2^128) h0W := buildWiresBT_faithful h0BaseOk
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
 lemma h0AutosOk : btAll (fun sw => swapsValid sw = true ∧ permWord sw h0G = h0G) h0Autos := btAll_ofList (autos_of (by decide +kernel))
-def h0SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 0 1,6),some (subcubeFast 0 2,6),some (subcubeFast 0 4,7),some (subcubeFast 0 8,7),some (subcubeFast 0 16,6),some (subcubeFast 0 32,9),some (subcubeFast 1 0,9),some (subcubeFast 1 2,5),some (subcubeFast 1 4,5),some (subcubeFast 1 16,4),some (subcubeFast 1 32,6),some (subcubeFast 2 0,9),some (subcubeFast 2 1,5),some (subcubeFast 2 8,5),some (subcubeFast 2 16,4),some (subcubeFast 2 32,6),some (subcubeFast 4 0,8),some (subcubeFast 4 1,5),some (subcubeFast 4 8,5),some (subcubeFast 4 16,5),some (subcubeFast 4 32,5),some (subcubeFast 6 0,5),some (subcubeFast 6 1,4),some (subcubeFast 8 0,8),some (subcubeFast 8 2,5),some (subcubeFast 8 4,5),some (subcubeFast 8 16,5),some (subcubeFast 8 32,5),some (subcubeFast 9 0,5),some (subcubeFast 9 2,4),some (subcubeFast 12 0,5),some (subcubeFast 12 16,4),some (subcubeFast 12 32,4),some (subcubeFast 16 0,8),some (subcubeFast 16 1,5),some (subcubeFast 16 2,5),some (subcubeFast 16 4,5),some (subcubeFast 16 8,5),some (subcubeFast 16 32,5),some (subcubeFast 17 0,5),some (subcubeFast 17 2,4),some (subcubeFast 18 0,5),some (subcubeFast 18 1,4),some (subcubeFast 20 0,5),some (subcubeFast 20 8,4),some (subcubeFast 20 32,4),some (subcubeFast 24 0,5),some (subcubeFast 24 4,4),some (subcubeFast 24 32,4),some (subcubeFast 32 0,8),some (subcubeFast 32 4,5),some (subcubeFast 32 8,5),some (subcubeFast 33 0,5),some (subcubeFast 33 4,4),some (subcubeFast 34 0,5),some (subcubeFast 34 8,4),some (subcubeFast 48 0,5),some (subcubeFast 48 4,4),some (subcubeFast 48 8,4),some (0xaa55aa55aa55aa55aa55aa55aa55aa55,9),some (0xaaaaaaaa55555555aaaaaaaa55555555,9),some (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3,9),some (0xcccccccc33333333cccccccc33333333,9),some (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f,9),some (0xff0000ffff0000ffff0000ffff0000ff,9),some (0xffff00000000ffffffff00000000ffff,8),some (0x66666666666666666666666666666666,8),some (0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a,9),some (0x55aa55aa55aa55aa55aa55aa55aa55aa,9),some (0x5555aaaa5555aaaa5555aaaa5555aaaa,9),some (0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c,9),some (0x33cc33cc33cc33cc33cc33cc33cc33cc,9),some (0x3333cccc3333cccc3333cccc3333cccc,9),some (0xffffffff00000000ffffffff0000,9)]
-def h0Slices : BT (Option (Nat × Nat)) := btOfList 7 h0SliceList
-def h0Specs : List PoolSpec := poolSteps h0Steps [(6,[]),(11,[]),(6,[17]),(11,[17]),(11,[17,18]),(0,[]),(16,[0]),(5,[0,17,18]),(16,[]),(61,[17,18]),(23,[0]),(59,[]),(59,[0]),(34,[]),(1,[]),(61,[0]),(5,[0,17]),(2,[]),(61,[17]),(6,[17,30]),(59,[0,30]),(11,[17,30]),(61,[0,30]),(23,[0,30]),(5,[17,0,30]),(3,[]),(36,[]),(50,[]),(33,[0,30]),(17,[]),(23,[]),(59,[17]),(6,[40]),(35,[]),(11,[40]),(24,[]),(16,[40]),(23,[40,53]),(37,[]),(49,[17]),(5,[17,53]),(49,[0]),(59,[40,53]),(43,[]),(23,[40]),(5,[17]),(5,[0]),(6,[17,55]),(11,[17,55]),(49,[]),(5,[]),(33,[]),(59,[40]),(33,[17]),(6,[40,58]),(11,[40,58]),(5,[0,58]),(60,[17]),(5,[17,59]),(33,[0]),(6,[42]),(11,[42]),(16,[42]),(23,[42]),(51,[]),(38,[]),(59,[42]),(45,[]),(63,[0]),(5,[17,65]),(19,[]),(6,[17,48]),(11,[17,48]),(2,[48]),(61,[17,48]),(64,[0]),(3,[48]),(59,[17,48]),(4,[]),(6,[45,17,48]),(6,[45]),(11,[45,17,48]),(11,[45]),(63,[0,45]),(64,[0,45]),(49,[17,48]),(57,[]),(5,[17,48]),(60,[17,48]),(6,[17,45]),(59,[0,45]),(11,[17,45]),(61,[0,45]),(16,[0,45]),(23,[0,45]),(33,[0,45]),(6,[17,45,71]),(11,[17,45,71]),(6,[17,51]),(11,[17,51]),(2,[51]),(61,[17,51]),(3,[51]),(59,[17,51]),(33,[17,51]),(6,[17,51,73]),(11,[17,51,73]),(16,[0,73]),(5,[0,17,73]),(23,[0,73]),(20,[]),(60,[17,51]),(66,[]),(5,[0,17,55]),(6,[20]),(11,[20]),(2,[0]),(5,[0,20]),(61,[20]),(3,[0]),(59,[20]),(53,[]),(33,[20]),(61,[0,43]),(59,[0,43]),(8,[]),(63,[]),(32,[]),(31,[]),(2,[0,45]),(2,[0,46]),(33,[0,46]),(63,[0,44]),(39,[]),(5,[20,76]),(30,[]),(6,[20,78]),(6,[20,77]),(11,[20,77]),(16,[77]),(61,[20,77]),(23,[77]),(59,[20,77]),(49,[20,77]),(5,[20,77]),(60,[20,77]),(52,[]),(13,[]),(61,[]),(11,[20,78]),(16,[78]),(61,[20,78]),(23,[78]),(59,[20,78]),(49,[20,78]),(5,[20,78]),(60,[20,78]),(6,[20,45]),(11,[20,45]),(49,[20]),(3,[0,45]),(6,[45,20,84]),(11,[45,20,84]),(16,[0,45,84]),(23,[0,45,84]),(5,[20]),(5,[20,0]),(60,[20]),(6,[20,46]),(11,[20,46]),(6,[46]),(11,[46]),(16,[0,46]),(23,[0,46]),(3,[0,46]),(63,[0,46]),(16,[0,46,47]),(23,[0,46,30]),(6,[20,84]),(11,[20,84]),(16,[0,84]),(23,[0,84]),(5,[0,20,84]),(6,[30,47]),(11,[30,47]),(16,[0,47]),(5,[0,30,47]),(6,[21]),(11,[21]),(5,[0,21]),(61,[21]),(59,[21]),(55,[]),(33,[21]),(6,[21,101]),(11,[21,101]),(2,[101]),(61,[21,101]),(23,[101]),(59,[21,101]),(5,[0,21,101]),(58,[]),(49,[21,101]),(5,[21,101]),(60,[21,101]),(6,[21,45]),(11,[21,45]),(49,[21]),(5,[21]),(60,[21]),(6,[21,102]),(11,[21,102]),(23,[0,102]),(5,[0,21,102]),(6,[23]),(11,[23]),(11,[23,103]),(63,[0,103]),(5,[0,23,103]),(61,[23,103]),(49,[23,103]),(11,[35]),(60,[23,103]),(11,[37]),(18,[]),(11,[45,23,103]),(6,[45,23]),(63,[0,45,103]),(5,[0,23]),(61,[23]),(6,[23,30]),(11,[23,30]),(25,[]),(5,[23,0,30]),(63,[0,30]),(6,[35]),(16,[35]),(33,[35,106]),(26,[]),(49,[23]),(5,[23,106]),(61,[35,106]),(33,[35]),(16,[35,107]),(5,[23,107]),(61,[35,107]),(46,[]),(5,[23]),(6,[23,113]),(11,[23,113]),(61,[35]),(23,[23]),(6,[35,108]),(59,[23]),(5,[23,115]),(6,[37]),(16,[37]),(33,[37]),(27,[]),(61,[37]),(60,[23]),(5,[23,116]),(6,[20,76,95]),(11,[20,76,95]),(2,[95]),(23,[76]),(5,[20,76,95]),(6,[23,44]),(16,[0,44]),(11,[23,44]),(61,[0,44]),(5,[23,0,44]),(23,[0,44]),(6,[23,45]),(11,[23,45]),(56,[]),(63,[0,113]),(5,[0,23,113]),(6,[24]),(11,[24]),(5,[0,24]),(61,[24]),(5,[24,32]),(2,[32]),(3,[24]),(33,[20,96]),(64,[20,96]),(5,[24,33]),(2,[33]),(64,[24]),(59,[24]),(23,[24]),(63,[0,120]),(33,[0,120]),(64,[]),(44,[]),(64,[0,39]),(28,[]),(6,[20,77,96]),(11,[20,77,96]),(16,[77,96]),(5,[20,77,96]),(6,[24,45]),(11,[24,45]),(49,[24]),(6,[45,24,120]),(11,[45,24,120]),(16,[0,45,120]),(33,[0,45,120]),(63,[0,45,120]),(5,[24]),(5,[24,0]),(60,[24]),(6,[24,46]),(11,[24,46]),(64,[0,46]),(6,[46,30,50]),(16,[0,46,50]),(33,[0,46,30]),(63,[0,46,30]),(6,[24,120]),(11,[24,120]),(16,[0,120]),(5,[0,24,120]),(6,[30,50]),(11,[30,50]),(16,[0,50]),(5,[0,30,50]),(6,[25]),(11,[25]),(5,[0,25]),(61,[25]),(63,[20,78]),(5,[25,33]),(63,[33]),(61,[33]),(64,[25]),(59,[25]),(49,[25]),(5,[25,107]),(5,[25]),(63,[35]),(47,[]),(23,[25]),(5,[25,135]),(33,[37,110]),(26,[110]),(5,[25,110]),(63,[37,110]),(63,[37]),(60,[25]),(33,[37,136]),(5,[25,136]),(6,[20,78,80]),(11,[20,78,80]),(2,[80]),(5,[20,78,80]),(5,[25,62]),(63,[42,62]),(63,[42]),(61,[42]),(6,[25,44]),(11,[25,44]),(5,[25,0,44]),(6,[25,45]),(11,[25,45]),(6,[25,134]),(11,[25,134]),(5,[0,25,134]),(33,[0,134]),(6,[26]),(11,[26]),(5,[0,26]),(61,[26]),(23,[26]),(59,[26]),(6,[26,140]),(11,[26,140]),(16,[140]),(61,[26,140]),(5,[0,26,140]),(59,[26,140]),(49,[26,140]),(5,[26,140]),(60,[26,140]),(6,[26,45]),(11,[26,45]),(49,[26]),(5,[26]),(60,[26]),(6,[26,141]),(11,[26,141]),(16,[0,141]),(5,[0,26,141]),(6,[27]),(11,[27]),(11,[27,142]),(5,[0,142]),(61,[27,142]),(60,[]),(60,[0]),(6,[27,144]),(5,[0,144]),(62,[]),(62,[0]),(60,[27,144]),(61,[27]),(23,[27]),(59,[27]),(6,[27,146]),(11,[27,146]),(5,[0,146]),(2,[146]),(61,[27,146]),(59,[27,146]),(33,[27,146]),(49,[147]),(5,[146,147]),(5,[146]),(60,[27,146]),(33,[27]),(6,[27,148]),(11,[27,148]),(2,[148]),(61,[27,148]),(23,[27,148]),(59,[27,148]),(5,[0,148]),(5,[148]),(60,[27,148]),(60,[27]),(6,[27,149]),(11,[27,149]),(5,[0,149]),(6,[28]),(11,[28]),(61,[28]),(23,[28]),(59,[28]),(49,[0,38]),(5,[0,38,152]),(5,[0,38]),(60,[0,38]),(3,[28]),(5,[0,38,157]),(6,[28,152]),(11,[28,152]),(16,[152]),(61,[28,152]),(5,[0,152]),(59,[28,152]),(33,[28,152]),(49,[153]),(5,[152,153]),(5,[152]),(60,[28,152]),(49,[0,154]),(5,[0,152,154]),(33,[28]),(49,[0,43]),(5,[0,43,155]),(5,[0,43]),(60,[0,43]),(5,[0,43,160]),(69,[28]),(6,[28,44]),(6,[44]),(60,[0,44]),(11,[28,44]),(11,[44]),(62,[0,44]),(5,[0,44]),(63,[28]),(49,[0,44]),(64,[28]),(5,[0,44,155]),(49,[0,159]),(5,[0,155,159]),(6,[28,155]),(11,[28,155]),(16,[155]),(61,[28,155]),(23,[28,155]),(59,[28,155]),(5,[0,155]),(5,[155]),(60,[28,155]),(49,[0,158]),(5,[0,155,158]),(60,[28]),(6,[28,156]),(11,[28,156]),(16,[0,156]),(5,[0,156]),(49,[0,161]),(5,[0,156,161]),(6,[29]),(11,[29]),(5,[0,29]),(6,[20,84,85]),(11,[20,84,85]),(49,[0,29]),(5,[0,29,62]),(2,[42]),(60,[0,29]),(5,[0,29,163]),(6,[24,120,126]),(11,[24,120,126]),(0,[24]),(12,[24]),(73,[0,45]),(6,[29,45]),(11,[29,45]),(6,[29,45,67]),(3,[0,45,67]),(23,[0,29,45]),(63,[0,45,67]),(33,[0,29,45]),(63,[0,29,45]),(5,[0,29,67]),(5,[0,68]),(23,[0,29]),(63,[0,29]),(33,[0,29]),(10,[]),(6,[29,46]),(11,[29,46]),(61,[0,46]),(67,[]),(6,[30]),(11,[30]),(5,[0,30]),(6,[30,49]),(11,[30,49]),(16,[0,49]),(5,[0,30,49]),(6,[30,39]),(6,[39]),(11,[39]),(11,[30,39]),(16,[0,39]),(63,[0,39]),(33,[0,39]),(64,[0,30]),(49,[0,39]),(5,[0,39]),(49,[0,30]),(6,[30,44]),(11,[30,44]),(6,[30,45]),(11,[30,45]),(6,[30,46]),(11,[30,46]),(68,[]),(11,[40,52]),(5,[0,52]),(61,[40]),(6,[40,53]),(11,[40,53]),(5,[0,53]),(61,[40,53]),(5,[53]),(60,[40,53]),(60,[40]),(6,[42,62]),(11,[42,62]),(5,[0,62]),(61,[42,62]),(23,[42,62]),(59,[42,62]),(33,[62]),(5,[62]),(60,[42,62]),(49,[0,137]),(5,[0,62,137]),(60,[42]),(6,[42,64]),(11,[42,64]),(33,[0,64]),(5,[0,64]),(48,[]),(6,[43]),(11,[43]),(6,[43,75]),(11,[43,75]),(5,[0,43,75]),(16,[0,43]),(6,[43,45]),(11,[43,45]),(6,[43,46]),(11,[43,46]),(69,[]),(6,[44,45]),(11,[44,45]),(16,[0,44,45]),(63,[0,44,45]),(23,[0,44,45]),(64,[0,44,45]),(6,[45,69]),(6,[44,46]),(11,[44,46]),(6,[45,67]),(11,[45,67]),(5,[0,67]),(5,[0,67,166]),(11,[45,69]),(5,[0,69]),(6,[45,67,166]),(6,[45,46]),(11,[45,46]),(65,[]),(11,[3]),(6,[10]),(61,[3]),(5,[3,10]),(6,[10,172]),(16,[172]),(11,[3,172]),(33,[3,10]),(4,[3]),(5,[3,10,172]),(35,[3]),(6,[11]),(29,[]),(6,[11,32]),(16,[32]),(6,[32]),(0,[11]),(11,[3,32]),(11,[32]),(61,[3,32]),(1,[3]),(23,[3,11]),(33,[3,11]),(64,[3,11]),(40,[]),(49,[3,11]),(5,[3,11]),(42,[]),(6,[11,37]),(60,[3,11]),(11,[3,37]),(61,[3,37]),(62,[3,11]),(67,[11]),(6,[11,42]),(11,[3,42]),(61,[3,42]),(6,[11,173]),(11,[3,173]),(26,[3]),(5,[3,11,173]),(2,[173]),(63,[3]),(6,[11,174]),(11,[3,174]),(34,[11]),(5,[3,11,174]),(6,[12]),(16,[12]),(23,[3]),(2,[12]),(6,[12,24]),(11,[3,24]),(23,[3,24]),(63,[12]),(33,[3]),(64,[3,24]),(6,[24,12,178]),(16,[12,178]),(6,[12,178]),(2,[12,178]),(63,[12,178]),(61,[3,24]),(63,[3,12]),(49,[3,24]),(5,[3,24]),(62,[3,24]),(6,[24,12,180]),(6,[12,180]),(11,[24,3,180]),(63,[3,12,180]),(6,[12,25]),(0,[25]),(11,[3,25]),(23,[3,25]),(61,[3,12]),(64,[3,25]),(49,[3,25]),(5,[3,25]),(62,[3,25]),(6,[25,12,180]),(11,[25,3,180]),(61,[3,12,180]),(22,[]),(61,[3,25]),(5,[3,12]),(3,[3]),(59,[12]),(33,[12]),(3,[42]),(49,[12]),(60,[12]),(49,[3]),(62,[3]),(67,[12]),(6,[12,171]),(6,[171]),(11,[3,171]),(23,[3,171]),(16,[171]),(61,[3,171]),(3,[3,171]),(4,[12]),(64,[12]),(64,[3,171]),(49,[3,171]),(5,[3,171]),(62,[3,171]),(5,[12]),(71,[3]),(64,[3]),(5,[3]),(11,[3,180]),(16,[12,180]),(23,[3,180]),(5,[3,12,180]),(59,[3]),(6,[13]),(16,[13]),(2,[13]),(5,[3,13]),(59,[13]),(33,[13]),(63,[13]),(49,[13]),(5,[13]),(60,[13]),(6,[13,185]),(11,[3,185]),(16,[13,185]),(5,[3,13,185]),(6,[14]),(16,[14]),(2,[14]),(5,[3,14]),(7,[]),(6,[14,32]),(16,[14,32]),(0,[14]),(1,[32]),(23,[14]),(3,[14]),(59,[14,32]),(64,[3,14]),(49,[14,32]),(5,[14,32]),(60,[14,32]),(6,[32,14,187]),(11,[32,3,187]),(11,[3,187]),(64,[3,14,187]),(41,[]),(59,[14]),(6,[14,170]),(6,[170]),(11,[3,170]),(33,[3,170]),(16,[170]),(61,[3,170]),(19,[170]),(64,[3,170]),(64,[14]),(49,[3,170]),(5,[3,170]),(62,[3,170]),(49,[14]),(5,[14]),(63,[14]),(60,[14]),(6,[14,187]),(16,[14,187]),(33,[3,187]),(5,[3,14,187]),(72,[]),(6,[15]),(16,[15]),(2,[15]),(5,[3,15]),(23,[15]),(59,[15]),(63,[15]),(49,[15]),(5,[15]),(60,[15]),(6,[15,190]),(11,[3,190]),(16,[15,190]),(5,[3,15,190]),(6,[16]),(16,[16]),(60,[3]),(6,[16,169]),(60,[3,169]),(16,[16,169]),(2,[16]),(5,[3,169]),(62,[3,169]),(23,[16]),(59,[16]),(6,[16,192]),(16,[16,192]),(11,[3,192]),(11,[192]),(5,[3,192]),(59,[16,192]),(33,[16,192]),(63,[16,192]),(5,[192]),(60,[16,192]),(33,[16]),(63,[16]),(60,[16]),(15,[]),(6,[169]),(16,[169]),(6,[32,169]),(61,[32]),(11,[32,3]),(63,[3,169]),(23,[3,169]),(33,[3,169]),(64,[3,169]),(49,[3,169]),(62,[32]),(5,[32]),(12,[]),(6,[37,169]),(2,[37]),(11,[37,3]),(62,[37]),(6,[42,169]),(11,[42,3]),(62,[42]),(6,[24,118]),(16,[118]),(33,[3,118]),(24,[3]),(5,[3,24,118]),(63,[3,118]),(6,[25,133]),(33,[3,133]),(5,[3,25,133]),(2,[133]),(6,[25,184]),(11,[3,25,184]),(33,[3,184]),(5,[3,25,184]),(6,[31]),(16,[31]),(11,[3,31,195]),(2,[31,195]),(16,[31,195]),(5,[3,31,195]),(64,[3,195]),(63,[31,195]),(11,[3,31]),(2,[31]),(5,[3,31]),(11,[31]),(59,[31]),(63,[31]),(49,[31]),(5,[31]),(60,[31]),(6,[31,196]),(11,[3,31,196]),(16,[31,196]),(5,[3,31,196]),(64,[3,196]),(5,[3,32]),(59,[32]),(63,[32]),(6,[32,171]),(11,[32,3,171]),(16,[32,171]),(5,[32,3,171]),(49,[32]),(60,[32]),(6,[32,175]),(11,[3,32,175]),(16,[32,175]),(23,[3,175]),(33,[3,175]),(5,[3,32,175]),(64,[3,175]),(6,[33]),(16,[33]),(11,[3,33]),(5,[3,33]),(11,[33]),(6,[33,121]),(16,[33,121]),(3,[121]),(59,[33,121]),(33,[121]),(63,[33,121]),(49,[33,121]),(5,[33,121]),(60,[33,121]),(11,[3,33,197]),(64,[3,197]),(59,[33]),(6,[33,170]),(59,[3,170]),(11,[33,3,170]),(16,[33,170]),(5,[33,3,170]),(49,[33]),(5,[33]),(60,[33]),(6,[33,198]),(11,[3,33,198]),(16,[33,198]),(33,[3,198]),(5,[3,33,198]),(6,[34]),(16,[34]),(11,[3,34]),(2,[34]),(5,[3,34]),(11,[34]),(59,[34]),(63,[34]),(6,[34,171]),(11,[34,3,171]),(16,[34,171]),(5,[34,3,171]),(63,[3,171]),(49,[34]),(5,[34]),(60,[34]),(6,[34,199]),(11,[3,34,199]),(16,[34,199]),(23,[3,199]),(5,[3,34,199]),(11,[3,35]),(2,[35]),(6,[35,105]),(16,[35,105]),(5,[3,105]),(3,[105]),(59,[35,105]),(33,[35,105]),(63,[35,105]),(5,[105]),(60,[35,105]),(54,[]),(59,[35]),(6,[35,170]),(11,[35,3,170]),(16,[35,170]),(60,[35]),(6,[35,200]),(11,[3,35,200]),(16,[35,200]),(5,[3,200]),(6,[37,109]),(16,[37,109]),(5,[3,109]),(23,[109]),(59,[37,109]),(33,[37,109]),(63,[37,109]),(5,[109]),(60,[37,109]),(59,[37]),(60,[37]),(6,[37,176]),(11,[3,37,176]),(16,[37,176]),(23,[3,176]),(5,[3,176]),(71,[]),(6,[170,188]),(11,[3,170,188]),(2,[188]),(16,[170,188]),(23,[3,188]),(5,[3,170,188]),(11,[3,40]),(2,[40]),(63,[40]),(6,[40,171]),(60,[3,171]),(11,[40,3,171]),(16,[40,171]),(6,[40,201]),(11,[3,40,201]),(16,[40,201]),(5,[3,201]),(6,[42,61]),(16,[42,61]),(5,[3,61]),(23,[42,61]),(59,[42,61]),(33,[61]),(63,[42,61]),(5,[61]),(60,[42,61]),(6,[42,63]),(16,[42,63]),(11,[42,63]),(2,[42,63]),(5,[3,63]),(59,[42,63]),(33,[63]),(63,[42,63]),(5,[63]),(60,[42,63]),(6,[42,171]),(11,[42,3,171]),(16,[42,171]),(6,[42,177]),(11,[3,42,177]),(16,[42,177]),(33,[3,177]),(5,[3,177]),(11,[4]),(61,[4]),(6,[10,32]),(0,[10]),(11,[4,32]),(61,[4,32]),(1,[4]),(23,[4,10]),(33,[4,10]),(64,[4,10]),(4,[4]),(49,[4,10]),(5,[4,10]),(63,[4,10]),(21,[]),(70,[4]),(11,[4,172]),(26,[4]),(5,[4,10,172]),(6,[10,205]),(11,[4,205]),(61,[4,205]),(24,[4]),(35,[4]),(5,[10,4,205]),(59,[4]),(23,[4]),(61,[13]),(5,[4,13]),(33,[4]),(64,[4]),(62,[4]),(5,[4]),(49,[4]),(6,[13,207]),(11,[4,207]),(5,[4,13,207]),(61,[14]),(5,[4,14]),(6,[14,208]),(11,[4,208]),(5,[4,14,208]),(33,[4,208]),(61,[15]),(5,[4,15]),(6,[15,189]),(11,[4,189]),(61,[15,189]),(5,[4,15,189]),(59,[15,189]),(23,[15,189]),(63,[4]),(6,[15,209]),(11,[4,209]),(5,[4,15,209]),(60,[4]),(61,[16]),(15,[32]),(3,[16]),(3,[4]),(15,[4]),(6,[202]),(5,[4,202]),(6,[32,202]),(11,[32,4]),(2,[202]),(63,[4,202]),(23,[4,202]),(33,[4,202]),(64,[4,202]),(49,[4,202]),(11,[4,24]),(5,[4,24]),(33,[4,118]),(5,[4,24,118]),(63,[4,118]),(6,[24,210]),(11,[24,4,210]),(33,[4,210]),(5,[24,4,210]),(11,[4,24,210]),(63,[4,210]),(11,[4,31]),(5,[4,31]),(61,[31]),(6,[20,76,94]),(16,[76]),(64,[4,94]),(6,[31,211]),(11,[4,31,211]),(5,[4,31,211]),(64,[4,211]),(5,[4,32]),(6,[32,119]),(16,[32,119]),(61,[32,119]),(59,[32,119]),(23,[119]),(33,[119]),(63,[32,119]),(60,[32,119]),(5,[32,119]),(49,[32,119]),(6,[32,206]),(11,[4,32,206]),(23,[4,206]),(33,[4,206]),(5,[4,32,206]),(64,[4,206]),(11,[4,33]),(5,[4,33]),(6,[33,212]),(11,[4,33,212]),(33,[4,212]),(5,[4,33,212]),(11,[4,34]),(5,[4,34]),(61,[34]),(23,[4,77]),(6,[34,214]),(11,[4,34,214]),(23,[4,214]),(5,[4,34,214]),(11,[4,35]),(5,[4,105]),(61,[35,105]),(6,[35,106]),(11,[4,35,106]),(5,[4,106]),(59,[35,106]),(60,[35,106]),(6,[35,215]),(11,[4,35,215]),(5,[4,215]),(11,[4,37]),(6,[37,216]),(11,[4,37,216]),(23,[4,216]),(5,[4,216]),(6,[203]),(11,[4,203]),(5,[4,203]),(6,[33,212,213]),(23,[4,213]),(64,[4,213]),(11,[4,40]),(11,[4,40,53]),(5,[4,53]),(6,[40,217]),(11,[4,40,217]),(5,[4,217]),(11,[4,42]),(6,[42,218]),(11,[4,42,218]),(33,[4,218]),(5,[4,218]),(6,[204]),(11,[4,204]),(5,[4,204]),(11,[5]),(59,[10]),(61,[5]),(16,[5]),(2,[5]),(23,[10]),(5,[5,10]),(3,[10]),(33,[10]),(64,[10]),(33,[5]),(63,[5]),(49,[10]),(5,[10]),(60,[10]),(49,[5]),(5,[5]),(62,[5]),(6,[10,222]),(11,[5,222]),(16,[5,222]),(23,[10,222]),(5,[5,10,222]),(59,[11]),(5,[5,11]),(23,[11]),(3,[11]),(33,[11]),(64,[11]),(49,[11]),(5,[11]),(60,[11]),(6,[11,223]),(11,[5,223]),(5,[5,11,223]),(23,[11,223]),(5,[5,14]),(64,[5]),(68,[14]),(6,[14,224]),(11,[5,224]),(23,[14,224]),(33,[5,224]),(5,[5,14,224]),(3,[15]),(5,[5,15]),(68,[15]),(64,[15]),(6,[15,225]),(11,[5,225]),(23,[15,225]),(5,[5,15,225]),(60,[5]),(6,[16,191]),(59,[16,191]),(11,[5,191]),(11,[191]),(5,[5,191]),(33,[16,191]),(64,[16,191]),(5,[191]),(60,[16,191]),(64,[16]),(6,[219]),(23,[219]),(6,[24,219]),(11,[24,5]),(16,[5,219]),(33,[5,219]),(63,[5,219]),(64,[5,219]),(49,[5,219]),(5,[5,219]),(62,[24]),(11,[5,23,103]),(3,[23,103]),(23,[23,103]),(5,[5,23,103]),(63,[5,103]),(59,[23,103]),(64,[23,103]),(11,[5,23]),(3,[23]),(5,[5,23]),(64,[23]),(6,[23,226]),(11,[5,23,226]),(23,[23,226]),(5,[5,23,226]),(63,[5,226]),(11,[5,24]),(5,[5,24]),(6,[24,227]),(11,[5,24,227]),(16,[5,227]),(23,[24,227]),(33,[5,227]),(5,[5,24,227]),(63,[5,227]),(11,[5,25]),(3,[25]),(5,[5,25]),(6,[25,228]),(11,[5,25,228]),(23,[25,228]),(33,[5,228]),(5,[5,25,228]),(11,[5,26]),(3,[26]),(5,[5,26]),(64,[26]),(6,[26,230]),(11,[5,26,230]),(16,[5,230]),(23,[26,230]),(5,[5,26,230]),(11,[5,27]),(3,[27]),(64,[27]),(6,[27,231]),(11,[5,27,231]),(23,[27,231]),(5,[5,231]),(11,[5,28]),(6,[28,232]),(11,[5,28,232]),(16,[5,232]),(23,[28,232]),(5,[5,232]),(6,[220]),(11,[5,220]),(23,[220]),(5,[5,220]),(70,[]),(6,[25,228,229]),(16,[5,229]),(14,[]),(63,[5,229]),(11,[5,40]),(3,[40]),(64,[40]),(6,[40,233]),(11,[5,40,233]),(23,[40,233]),(5,[5,233]),(11,[5,42]),(3,[42,62]),(5,[5,62]),(64,[42,62]),(64,[42]),(6,[42,234]),(11,[5,42,234]),(23,[42,234]),(33,[5,234]),(5,[5,234]),(6,[221]),(11,[5,221]),(23,[221]),(5,[5,221]),(11,[6]),(61,[6]),(16,[6]),(5,[6,11]),(33,[6]),(5,[6]),(49,[6]),(6,[11,238]),(11,[6,238]),(5,[6,11,238]),(5,[6,14]),(64,[6]),(6,[14,237]),(11,[6,237]),(5,[14,6,237]),(16,[6,237]),(61,[6,237]),(62,[6]),(6,[14,239]),(11,[6,239]),(33,[6,239]),(5,[6,14,239]),(5,[6,15]),(63,[6]),(6,[15,237]),(5,[15,6,237]),(6,[15,240]),(11,[6,240]),(5,[6,15,240]),(60,[6]),(6,[16,237]),(6,[237]),(60,[6,237]),(5,[6,237]),(62,[6,237]),(3,[237]),(6,[235]),(6,[24,235]),(11,[24,6]),(16,[6,235]),(33,[6,235]),(63,[6,235]),(3,[235]),(64,[6,235]),(49,[6,235]),(5,[6,235]),(6,[28,235]),(60,[6,235]),(11,[28,6]),(62,[6,235]),(62,[28]),(6,[42,235]),(11,[42,6]),(11,[6,23]),(5,[6,23]),(6,[23,237]),(11,[23,6,237]),(5,[23,6,237]),(63,[6,237]),(6,[23,241]),(11,[6,23,241]),(5,[6,23,241]),(63,[6,241]),(11,[6,24]),(2,[6]),(5,[6,24]),(6,[24,242]),(11,[6,24,242]),(16,[6,242]),(33,[6,242]),(5,[6,24,242]),(63,[6,242]),(11,[6,25]),(5,[6,25]),(6,[25,237]),(11,[25,6,237]),(5,[25,6,237]),(6,[25,243]),(11,[6,25,243]),(33,[6,243]),(5,[6,25,243]),(11,[6,26]),(5,[6,26]),(6,[26,245]),(11,[6,26,245]),(16,[6,245]),(5,[6,26,245]),(11,[6,27]),(11,[6,27,146]),(5,[6,146]),(6,[27,246]),(11,[6,27,246]),(5,[6,246]),(11,[6,28]),(6,[28,247]),(11,[6,28,247]),(16,[6,247]),(5,[6,247]),(6,[236]),(11,[6,236]),(5,[6,236]),(6,[25,243,244]),(16,[6,244]),(63,[6,244]),(11,[6,40]),(6,[40,56]),(59,[40,56]),(11,[6,40,56]),(5,[6,56]),(16,[40,56]),(6,[40,248]),(11,[6,40,248]),(5,[6,248]),(11,[6,42]),(6,[42,249]),(11,[6,42,249]),(33,[6,249]),(5,[6,249]),(11,[7]),(69,[14]),(5,[7,14]),(6,[14,28]),(60,[7,14]),(11,[7,28]),(1,[7]),(62,[7,14]),(16,[7,14]),(2,[7]),(49,[7,14]),(51,[14]),(23,[7,14]),(70,[7]),(6,[14,186]),(33,[186]),(11,[7,186]),(63,[7]),(5,[7,14,186]),(25,[7]),(50,[7]),(16,[7]),(61,[7]),(23,[7]),(64,[7]),(49,[7]),(5,[7]),(62,[7]),(6,[15,20]),(0,[15]),(11,[7,20]),(16,[7,15]),(23,[7,15]),(63,[7,20]),(49,[7,15]),(5,[7,15]),(63,[7,15]),(6,[15,28]),(60,[7,15]),(62,[7,15]),(63,[7,28]),(51,[15]),(11,[7,189]),(5,[7,15,189]),(12,[189]),(6,[15,37]),(11,[7,37]),(63,[7,37]),(6,[15,252]),(11,[7,252]),(33,[252]),(23,[15,7]),(18,[15]),(5,[15,7,252]),(6,[15,254]),(11,[7,254]),(17,[15]),(5,[7,15,254]),(69,[15]),(60,[7]),(11,[7,191]),(5,[7,191]),(63,[16,191]),(23,[16,191]),(3,[7]),(11,[7,192]),(5,[7,192]),(6,[250]),(6,[20,250]),(11,[20,7]),(16,[7,250]),(23,[7,250]),(33,[250]),(63,[7,250]),(49,[7,250]),(5,[7,250]),(62,[20]),(6,[24,250]),(11,[24,7]),(64,[7,250]),(5,[24,7,250]),(6,[28,250]),(60,[7,250]),(11,[28,7]),(62,[7,250]),(6,[32,250]),(11,[32,7]),(5,[32,7,250]),(6,[37,250]),(11,[37,7]),(6,[42,250]),(11,[42,7]),(15,[7]),(11,[7,17,18]),(33,[17,18]),(5,[7,17,18]),(63,[17,18]),(59,[7]),(11,[7,17]),(5,[7,17]),(63,[17]),(11,[7,17,48]),(5,[7,17,48]),(11,[7,17,51]),(63,[17,51]),(6,[17,257]),(11,[7,17,257]),(33,[17,257]),(5,[7,17,257]),(5,[7,20]),(63,[20]),(6,[20,255]),(11,[7,20,255]),(16,[7,255]),(23,[7,255]),(33,[20,255]),(5,[7,20,255]),(11,[7,21]),(5,[7,21]),(63,[21]),(11,[7,21,101]),(23,[7,101]),(5,[7,21,101]),(6,[21,258]),(11,[7,21,258]),(23,[7,258]),(33,[21,258]),(5,[7,21,258]),(6,[22]),(33,[22]),(11,[7,22]),(5,[7,22]),(11,[22]),(63,[22]),(59,[22]),(49,[22]),(5,[22]),(60,[22]),(6,[22,260]),(11,[7,22,260]),(16,[7,260]),(33,[22,260]),(5,[7,22,260]),(69,[24]),(11,[7,24]),(5,[7,24]),(33,[118]),(16,[7,118]),(5,[7,24,118]),(63,[7,118]),(24,[7]),(63,[118]),(23,[7,24]),(62,[7,24]),(49,[7,24]),(61,[7,24]),(11,[7,25]),(5,[7,25]),(6,[25,251]),(63,[7,251]),(11,[25,7,251]),(33,[251]),(5,[25,7,251]),(11,[7,251]),(11,[7,26]),(5,[7,26]),(6,[26,139]),(16,[7,139]),(5,[7,26,139]),(12,[26]),(6,[26,262]),(11,[7,26,262]),(16,[7,262]),(5,[7,26,262]),(0,[26]),(11,[7,27]),(63,[27]),(11,[7,27,148]),(5,[7,148]),(6,[27,263]),(11,[7,27,263]),(33,[27,263]),(5,[7,263]),(63,[28,152]),(19,[152]),(5,[7,152]),(6,[28,253]),(11,[7,28,253]),(16,[7,253]),(33,[28,253]),(5,[7,253]),(6,[251]),(5,[7,251]),(11,[7,32]),(5,[7,32]),(11,[7,33]),(5,[7,33]),(6,[33,252]),(59,[7,252]),(11,[33,7,252]),(5,[33,7,252]),(64,[7,252]),(11,[7,35]),(6,[35,107]),(11,[7,35,107]),(5,[7,107]),(63,[35,107]),(59,[35,107]),(60,[35,107]),(6,[35,264]),(11,[7,35,264]),(33,[35,264]),(5,[7,264]),(69,[37]),(6,[37,110]),(11,[37,110]),(5,[7,110]),(23,[110]),(59,[37,110]),(5,[110]),(60,[37,110]),(6,[37,256]),(11,[7,37,256]),(23,[7,256]),(33,[37,256]),(5,[7,256]),(6,[252]),(5,[7,252]),(11,[7,42]),(11,[8]),(5,[8]),(60,[8]),(61,[8]),(62,[8]),(16,[8]),(23,[8]),(6,[265]),(6,[20,265]),(11,[20,8]),(16,[8,265]),(23,[8,265]),(63,[8,265]),(49,[8,265]),(5,[8,265]),(6,[28,265]),(60,[8,265]),(11,[28,8]),(62,[8,265]),(6,[37,265]),(11,[37,8]),(64,[8,265]),(59,[8]),(11,[8,17]),(5,[8,17]),(6,[17,267]),(59,[8,267]),(11,[17,8,267]),(16,[8,267]),(5,[17,8,267]),(61,[8,267]),(64,[17]),(11,[8,17,48]),(5,[8,17,48]),(63,[8]),(64,[8]),(11,[8,17,51]),(49,[8]),(64,[17,51]),(6,[17,268]),(11,[8,17,268]),(5,[8,17,268]),(11,[8,20]),(2,[8]),(3,[8]),(5,[8,20]),(64,[20]),(6,[20,269]),(11,[8,20,269]),(16,[8,269]),(23,[8,269]),(5,[8,20,269]),(11,[8,21]),(5,[8,21]),(64,[21]),(11,[8,21,101]),(23,[8,101]),(5,[8,21,101]),(64,[21,101]),(6,[21,270]),(11,[8,21,270]),(23,[8,270]),(5,[8,21,270]),(11,[8,22]),(5,[8,22]),(64,[22]),(6,[22,271]),(11,[8,22,271]),(16,[8,271]),(5,[8,22,271]),(11,[8,24]),(5,[8,24]),(70,[8]),(16,[8,118]),(5,[8,24,118]),(63,[8,118]),(24,[8]),(1,[8]),(6,[24,272]),(11,[24,8,272]),(16,[8,272]),(25,[8]),(5,[24,8,272]),(50,[8]),(11,[8,24,272]),(63,[8,272]),(11,[8,27]),(11,[8,27,148]),(5,[8,148]),(6,[27,273]),(11,[8,27,273]),(5,[8,273]),(11,[8,28]),(6,[28,274]),(11,[8,28,274]),(16,[8,274]),(5,[8,274]),(6,[266]),(11,[8,266]),(5,[8,266]),(11,[8,35]),(64,[35]),(11,[8,35,107]),(5,[8,107]),(6,[35,275]),(11,[8,35,275]),(5,[8,275]),(11,[8,37]),(64,[37]),(6,[37,276]),(11,[8,37,276]),(23,[8,276]),(5,[8,276]),(6,[267]),(11,[8,267]),(5,[8,267]),(11,[9]),(6,[277]),(5,[277]),(6,[24,277]),(11,[24,9]),(5,[24,277]),(16,[9,277]),(33,[9,277]),(63,[9,277]),(23,[9,277]),(64,[9,277]),(10,[24]),(59,[9]),(11,[9,17]),(16,[9]),(23,[9]),(61,[9]),(63,[9]),(64,[9]),(33,[9]),(11,[9,20]),(2,[9]),(3,[9]),(11,[9,21]),(11,[9,22]),(6,[22,259]),(5,[22,259]),(60,[22,259]),(16,[259]),(59,[22,259]),(3,[259]),(33,[22,259]),(62,[9]),(11,[9,23,103]),(5,[23,103]),(63,[9,103]),(11,[9,23]),(11,[9,24]),(5,[24,118]),(60,[24,118]),(59,[24,118]),(23,[24,118]),(11,[9,25]),(11,[9,26]),(6,[278]),(11,[9,278]),(5,[278]),(6,[278,281]),(11,[9,278,281]),(16,[9,281]),(33,[9,278]),(5,[278,281]),(60,[281]),(11,[9,31]),(11,[9,32]),(11,[9,33]),(11,[9,34]),(6,[279]),(11,[9,279]),(5,[279]),(6,[279,282]),(11,[9,279,282]),(23,[9,282]),(33,[9,279]),(5,[279,282]),(60,[282]),(6,[280]),(11,[9,280]),(5,[280]),(5,[17,18]),(6,[17,19]),(16,[19]),(5,[17,18,19]),(23,[19]),(6,[17,42]),(60,[17,18]),(62,[17,18]),(2,[18]),(49,[17,18]),(64,[17,18]),(3,[18]),(6,[17,40]),(11,[17,40]),(62,[17]),(6,[17,40,53]),(11,[17,40,53]),(6,[17,40,59]),(11,[17,40,59]),(11,[17,42]),(6,[17,42,65]),(11,[17,42,65]),(33,[17,65]),(11,[20,74]),(16,[74]),(23,[74]),(5,[20,74]),(6,[20,283]),(16,[74,283]),(23,[74,283]),(2,[283]),(5,[20,74,283]),(3,[283]),(6,[20,40]),(11,[20,40]),(6,[40,20,78]),(11,[40,20,78]),(16,[40,78]),(23,[40,78]),(64,[20,78]),(6,[20,40,284]),(11,[20,40,284]),(16,[40,284]),(23,[40,284]),(5,[20,284]),(6,[20,42]),(11,[20,42]),(6,[42,20,78]),(11,[42,20,78]),(16,[42,78]),(23,[42,78]),(6,[20,42,285]),(11,[20,42,285]),(16,[42,285]),(23,[42,285]),(33,[20,285]),(5,[20,285]),(6,[20,76]),(11,[20,76]),(2,[93]),(11,[20,76,93]),(16,[76,93]),(23,[76,93]),(63,[20,93]),(63,[93]),(5,[20,76,93]),(6,[20,83]),(11,[20,83]),(16,[83]),(23,[83]),(11,[21,99]),(23,[99]),(5,[21,99]),(6,[21,286]),(16,[286]),(5,[21,99,286]),(23,[99,286]),(3,[286]),(6,[42,21]),(60,[21,99]),(62,[21,99]),(63,[21,99]),(2,[99]),(49,[21,99]),(64,[21,99]),(33,[21,99]),(6,[21,287]),(16,[287]),(3,[287]),(11,[21,99,287]),(6,[21,100]),(23,[100]),(5,[21,100]),(11,[21,288]),(16,[288]),(5,[21,100,288]),(23,[100,288]),(3,[288]),(6,[21,40]),(11,[21,40]),(62,[21]),(6,[21,40,289]),(11,[21,40,289]),(23,[40,289]),(5,[21,289]),(6,[21,42]),(11,[21,42]),(6,[21,42,62]),(11,[21,42,62]),(33,[21,62]),(5,[21,62]),(6,[21,42,290]),(11,[21,42,290]),(23,[42,290]),(33,[21,290]),(5,[21,290]),(6,[23,104]),(16,[104]),(63,[103,104]),(5,[23,103,104]),(33,[104]),(63,[103]),(6,[35,23]),(62,[23,103]),(63,[35,103]),(6,[23,35,106]),(5,[23,103,106]),(2,[103]),(63,[35,106]),(63,[103,35,106]),(4,[103]),(6,[23,35,107]),(5,[23,103,107]),(63,[103,35,107]),(6,[37,23]),(63,[37,103]),(6,[23,112]),(5,[23,112]),(11,[23,291]),(16,[291]),(63,[112,291]),(5,[23,112,291]),(33,[291]),(63,[112]),(60,[23,112]),(11,[37,23]),(3,[23,112]),(62,[23,112]),(2,[112]),(49,[23,112]),(23,[23,112]),(64,[23,112]),(6,[23,35]),(11,[23,35]),(62,[23]),(11,[23,35,106]),(11,[23,35,107]),(6,[23,35,115]),(11,[23,35,115]),(63,[35,115]),(6,[23,37]),(11,[23,37]),(6,[23,37,116]),(11,[23,37,116]),(23,[23,116]),(63,[37,116]),(3,[1]),(16,[1]),(63,[1]),(64,[1]),(49,[1]),(5,[1]),(63,[95]),(11,[24,117]),(16,[117]),(33,[117]),(5,[24,117]),(6,[24,292]),(16,[117,292]),(2,[292]),(63,[117,292]),(5,[24,117,292]),(33,[117,292]),(63,[117]),(11,[24,193]),(16,[118,193]),(2,[193]),(63,[118,193]),(5,[24,118,193]),(33,[118,193]),(6,[24,32]),(11,[24,32]),(6,[24,33]),(11,[24,33]),(9,[]),(6,[24,35]),(11,[24,35]),(5,[24,105]),(64,[35,105]),(43,[35]),(49,[20,77,96]),(6,[24,35,293]),(11,[24,35,293]),(16,[35,293]),(33,[35,293]),(5,[24,293]),(63,[35,293]),(6,[24,37]),(11,[24,37]),(5,[24,109]),(64,[37,109]),(6,[24,37,111]),(11,[24,37,111]),(2,[37,111]),(16,[37,111]),(23,[24,111]),(5,[24,111]),(63,[37,111]),(6,[24,37,294]),(11,[24,37,294]),(16,[37,294]),(23,[24,294]),(33,[37,294]),(5,[24,294]),(63,[37,294]),(2,[2]),(64,[2]),(11,[17,48,66]),(3,[2]),(16,[66]),(2,[130]),(6,[17,48,66]),(16,[66,130]),(33,[17,130]),(63,[66,130]),(64,[130]),(2,[131]),(16,[66,131]),(33,[17,131]),(63,[66,131]),(4,[131]),(64,[24,131]),(64,[131]),(63,[66]),(2,[1]),(6,[24,42]),(11,[24,42]),(33,[54]),(2,[295]),(5,[24,295]),(11,[40,53,54]),(5,[53,295]),(16,[40,295]),(33,[54,295]),(63,[54,295]),(63,[54]),(11,[25,132]),(33,[132]),(5,[25,132]),(6,[25,296]),(16,[296]),(63,[296]),(5,[25,132,296]),(33,[132,296]),(33,[133]),(5,[25,133]),(11,[25,194]),(16,[194]),(63,[194]),(5,[25,133,194]),(33,[133,194]),(6,[25,33]),(11,[25,33]),(5,[20,78,79]),(6,[25,35]),(11,[25,35]),(5,[25,105]),(62,[25]),(6,[25,35,107]),(11,[25,35,107]),(6,[25,35,135]),(11,[25,35,135]),(33,[35,135]),(6,[25,37]),(11,[25,37]),(6,[25,37,110]),(11,[25,37,110]),(23,[25,110]),(6,[25,37,136]),(11,[25,37,136]),(23,[25,136]),(16,[36]),(33,[36,20]),(63,[36]),(6,[25,42]),(11,[25,42]),(6,[25,42,62]),(11,[25,42,62]),(11,[26,138]),(16,[138]),(5,[26,138]),(6,[26,297]),(16,[138,297]),(2,[297]),(63,[297]),(5,[26,138,297]),(33,[297]),(16,[139]),(5,[26,139]),(11,[26,261]),(16,[139,261]),(2,[261]),(63,[261]),(5,[26,139,261]),(33,[261]),(60,[26,139]),(11,[37,26]),(62,[26,139]),(49,[26,139]),(23,[26,139]),(64,[26,139]),(6,[26,35]),(11,[26,35]),(62,[26]),(6,[26,35,298]),(11,[26,35,298]),(16,[35,298]),(5,[26,298]),(6,[26,37]),(11,[26,37]),(6,[26,37,111]),(11,[26,37,111]),(23,[26,111]),(5,[26,111]),(6,[26,37,299]),(11,[26,37,299]),(16,[37,299]),(23,[26,299]),(5,[26,299]),(5,[142]),(6,[27,143]),(16,[143]),(5,[142,143]),(5,[144]),(11,[27,145]),(16,[145]),(5,[144,145]),(6,[27,146,147]),(11,[27,146,147]),(16,[147]),(23,[27,147]),(5,[150]),(11,[28,150]),(16,[150]),(6,[28,300]),(16,[150,300]),(2,[300]),(5,[150,300]),(6,[28,151]),(16,[151]),(5,[151]),(11,[28,301]),(16,[151,301]),(2,[301]),(5,[151,301]),(6,[28,152,153]),(11,[28,152,153]),(2,[153]),(16,[152,153]),(23,[28,153]),(5,[52]),(6,[40,168]),(33,[168]),(5,[52,168]),(5,[60]),(11,[42,60]),(33,[60]),(6,[42,302]),(33,[60,302]),(5,[60,302])]
-def h0Pools : BT (Option BoundPool) := buildPoolsBT 12 h0W h0R h0Slices h0Specs
+def h0SliceList : List (Option (Nat × Nat)) := [some (subcubeFast 1 0,9),some (subcubeFast 2 0,9),some (subcubeFast 0 32,9),some (0xaa55aa55aa55aa55aa55aa55aa55aa55,9),some (0xaaaaaaaa55555555aaaaaaaa55555555,9),some (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3,9),some (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f,9),some (subcubeFast 4 0,8),some (subcubeFast 8 0,8),some (subcubeFast 16 0,8),some (subcubeFast 32 0,8),some (subcubeFast 0 4,7),some (subcubeFast 0 8,7),some (0xf00ff00f00000000f00ff00f00000000,7),some (0xf0f00f0f00000000f0f00f0f00000000,7),some (0xff0000ff00000000ff0000ff00000000,7),some (0xf0f000000000f0f0f0f000000000f0f0,7),some (0xff0000000000ff00ff0000000000ff00,7),some (subcubeFast 0 16,6),some (subcubeFast 1 32,6),some (subcubeFast 2 32,6),some (0xa5a50000a5a50000a5a50000a5a5,6),some (0xaa550000aa550000aa550000aa55,6),some (0xaa55aa5500000000aa55aa55,6),some (0xc3c3c3c300000000c3c3c3c3,6),some (0xc0c0c0c030303030c0c0c0c03030303,6),some (subcubeFast 4 1,5),some (subcubeFast 8 4,5),some (subcubeFast 16 1,5),some (subcubeFast 4 16,5),some (subcubeFast 20 0,5),some (0xf0f000000f0f0000f0f000000f0f0000,5),some (0xff00000000ff0000ff00000000ff0000,5),some (subcubeFast 6 1,4),some (subcubeFast 9 2,4),some (subcubeFast 1 16,4),some (subcubeFast 2 16,4),some (subcubeFast 17 2,4),some (subcubeFast 18 1,4),some (subcubeFast 12 16,4),some (subcubeFast 20 8,4),some (subcubeFast 24 4,4),some (subcubeFast 33 4,4),some (subcubeFast 34 8,4),some (subcubeFast 12 32,4),some (subcubeFast 20 32,4),some (subcubeFast 48 4,4),some (subcubeFast 24 32,4),some (subcubeFast 48 8,4)]
+def h0Slices : BT (Option (Nat × Nat)) := btOfList 6 h0SliceList
 set_option maxRecDepth 200000 in
-lemma h0Slice73 : Slice h0R h0G (0xffffffff00000000ffffffff0000) 9 := opposite_slice (oppositeRow 4 5 47) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h1Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput0Map : Lower (varsOf 62) 0xfffcfcf0fcccccc0fffcfcf0fcccccc0 9 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (1, 2), (2, 3), (1, 2)]) (roots2 := cert28) (T2 := cert10) _ cert161
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice72 : Slice h0R h0G (0x3333cccc3333cccc3333cccc3333cccc) 9 := opposite_slice (oppositeRow 1 4 61) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h33Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput0Flip : Lower (varsOf 62) 0xfcccccc0f0c0c000fcccccc0f0c0c000 9 := dualLower (by decide +kernel) (by decide +kernel) sliceInput0Map
 set_option maxRecDepth 200000 in
-lemma h0Slice71 : Slice h0R h0G (0x33cc33cc33cc33cc33cc33cc33cc33cc) 9 := opposite_slice (oppositeRow 1 3 61) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h48Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice0 : Slice h0R h0G (subcubeFast 1 0) 9 := slice_fast_direct (zDead := 0) (qRoots := varsOf 62) (qGoal := 0xfcccccc0f0c0c000fcccccc0f0c0c000) (by decide +kernel) sliceInput0Flip
 set_option maxRecDepth 200000 in
-lemma h0Slice70 : Slice h0R h0G (0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c) 9 := opposite_slice (oppositeRow 1 2 61) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h61Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput1Map : Lower (varsOf 61) 0xfffaffa0faaaaaa0fffaffa0faaaaaa0 9 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (2, 3), (1, 2), (0, 1)]) (roots2 := cert28) (T2 := cert10) _ cert161
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice69 : Slice h0R h0G (0x5555aaaa5555aaaa5555aaaa5555aaaa) 9 := opposite_slice (oppositeRow 0 4 62) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h79Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput1Flip : Lower (varsOf 61) 0xfaaaaaa0fa00a000faaaaaa0fa00a000 9 := dualLower (by decide +kernel) (by decide +kernel) sliceInput1Map
 set_option maxRecDepth 200000 in
-lemma h0Slice68 : Slice h0R h0G (0x55aa55aa55aa55aa55aa55aa55aa55aa) 9 := opposite_slice (oppositeRow 0 3 62) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h80Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice1 : Slice h0R h0G (subcubeFast 2 0) 9 := slice_fast_direct (zDead := 0) (qRoots := varsOf 61) (qGoal := 0xfaaaaaa0fa00a000faaaaaa0fa00a000) (by decide +kernel) sliceInput1Flip
 set_option maxRecDepth 200000 in
-lemma h0Slice67 : Slice h0R h0G (0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a) 9 := opposite_slice (oppositeRow 0 2 62) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h81Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput2Map : Lower (varsOf 31) 0xe8888880e8888880e8888880e8888880 9 := by
+  apply carry_of (swaps := [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]) (roots2 := cert28) (T2 := cert297) _ cert398
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice66 : Slice h0R h0G (0x66666666666666666666666666666666) 8 := opposite_slice (oppositeRow 0 1 62) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h82Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput2Flip : Lower (varsOf 31) 0xfeeeeee8feeeeee8feeeeee8feeeeee8 9 := dualLower (by decide +kernel) (by decide +kernel) sliceInput2Map
 set_option maxRecDepth 200000 in
-lemma h0Slice65 : Slice h0R h0G (0xffff00000000ffffffff00000000ffff) 8 := mapped_slice (identifyRow 4 5 47) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h92Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice2 : Slice h0R h0G (subcubeFast 0 32) 9 := slice_fast_direct (zDead := 0) (qRoots := varsOf 31) (qGoal := 0xfeeeeee8feeeeee8feeeeee8feeeeee8) (by decide +kernel) sliceInput2Flip
 set_option maxRecDepth 200000 in
-lemma h0Slice64 : Slice h0R h0G (0xff0000ffff0000ffff0000ffff0000ff) 9 := mapped_slice (identifyRow 3 4 55) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h93Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput3Map : Lower (varsOf 55) 0xeeeeeaeaeaeaa8a8eeeeeaeaeaeaa8a8 9 := by
+  apply carry_of (swaps := [(4, 5), (3, 4)]) (roots2 := cert582) (T2 := cert569) _ cert549
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice63 : Slice h0R h0G (0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f) 9 := mapped_slice (identifyRow 2 4 59) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h108Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice3 : Slice h0R h0G 0xaa55aa55aa55aa55aa55aa55aa55aa55 9 := mappedSlice (f := identifyRow 0 0 0 3) (R := varsOf 55) (G := 0xeeeeeaeaeaeaa8a8eeeeeaeaeaeaa8a8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput3Map
 set_option maxRecDepth 200000 in
-lemma h0Slice62 : Slice h0R h0G (0xcccccccc33333333cccccccc33333333) 9 := mapped_slice (identifyRow 1 5 61) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h109Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput4Map : Lower (varsOf 31) 0xfaeaeaa8faeaeaa8faeaeaa8faeaeaa8 9 := by
+  apply carry_of (swaps := [(1, 2)]) (roots2 := cert582) (T2 := cert569) _ cert549
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice61 : Slice h0R h0G (0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3) 9 := mapped_slice (identifyRow 1 2 61) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h116Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice4 : Slice h0R h0G 0xaaaaaaaa55555555aaaaaaaa55555555 9 := mappedSlice (f := identifyRow 0 0 0 5) (R := varsOf 31) (G := 0xfaeaeaa8faeaeaa8faeaeaa8faeaeaa8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput4Map
 set_option maxRecDepth 200000 in
-lemma h0Slice60 : Slice h0R h0G (0xaaaaaaaa55555555aaaaaaaa55555555) 9 := mapped_slice (identifyRow 0 5 62) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h117Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput5Map : Lower (varsOf 59) 0xeeeeeecceecccc88eeeeeecceecccc88 9 := by
+  apply carry_of (swaps := [(4, 5), (3, 4), (2, 3), (0, 1)]) (roots2 := cert582) (T2 := cert569) _ cert549
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice59 : Slice h0R h0G (0xaa55aa55aa55aa55aa55aa55aa55aa55) 9 := mapped_slice (identifyRow 0 3 62) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) h118Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice5 : Slice h0R h0G 0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3 9 := mappedSlice (f := identifyRow 0 0 1 2) (R := varsOf 59) (G := 0xeeeeeecceecccc88eeeeeecceecccc88) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput5Map
 set_option maxRecDepth 200000 in
-lemma h0Slice58 : Slice h0R h0G (subcubeFast 48 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h23Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput6Map : Lower (varsOf 47) 0xfee8fee8f8c8f8c8fee8fee8f8c8f8c8 9 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (0, 1), (1, 2)]) (roots2 := cert761) (T2 := cert749) _ cert732
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice57 : Slice h0R h0G (subcubeFast 48 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h25Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice6 : Slice h0R h0G 0xf0f00f0ff0f00f0ff0f00f0ff0f00f0f 9 := mappedSlice (f := identifyRow 0 0 2 4) (R := varsOf 47) (G := 0xfee8fee8f8c8f8c8fee8fee8f8c8f8c8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput6Map
 set_option maxRecDepth 200000 in
-lemma h0Slice56 : Slice h0R h0G (subcubeFast 48 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h119Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput7Map : Lower (varsOf 59) 0xeeeeeeaaee888888eeeeeeaaee888888 8 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5), (3, 4), (2, 3)]) (roots2 := cert582) (T2 := cert915) _ cert907
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice55 : Slice h0R h0G (subcubeFast 34 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h51Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput7Flip : Lower (varsOf 59) 0xeeeeee88aa888888eeeeee88aa888888 8 := dualLower (by decide +kernel) (by decide +kernel) sliceInput7Map
 set_option maxRecDepth 200000 in
-lemma h0Slice54 : Slice h0R h0G (subcubeFast 34 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h111Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice7 : Slice h0R h0G (subcubeFast 4 0) 8 := slice_fast_direct (zDead := 0) (qRoots := varsOf 59) (qGoal := 0xeeeeee88aa888888eeeeee88aa888888) (by decide +kernel) sliceInput7Flip
 set_option maxRecDepth 200000 in
-lemma h0Slice53 : Slice h0R h0G (subcubeFast 33 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h120Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput8Map : Lower (varsOf 55) 0xeeeeecece8e88888eeeeecece8e88888 8 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5), (3, 4), (0, 1)]) (roots2 := cert582) (T2 := cert915) _ cert907
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice52 : Slice h0R h0G (subcubeFast 33 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h121Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput8Flip : Lower (varsOf 55) 0xeeeee8e8c8c88888eeeee8e8c8c88888 8 := dualLower (by decide +kernel) (by decide +kernel) sliceInput8Map
 set_option maxRecDepth 200000 in
-lemma h0Slice51 : Slice h0R h0G (subcubeFast 32 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h122Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice8 : Slice h0R h0G (subcubeFast 8 0) 8 := slice_fast_direct (zDead := 0) (qRoots := varsOf 55) (qGoal := 0xeeeee8e8c8c88888eeeee8e8c8c88888) (by decide +kernel) sliceInput8Flip
 set_option maxRecDepth 200000 in
-lemma h0Slice50 : Slice h0R h0G (subcubeFast 32 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h123Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput9Map : Lower (varsOf 47) 0xeee8eee8e888e888eee8eee8e888e888 8 := by
+  apply carry_of (swaps := [(4, 5), (0, 1), (1, 2)]) (roots2 := cert582) (T2 := cert952) _ cert947
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice49 : Slice h0R h0G (subcubeFast 32 0) 8 := slice_fast_direct (zDead := 0) (by decide +kernel) h124Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice9 : Slice h0R h0G (subcubeFast 16 0) 8 := slice_fast_direct (zDead := 0) (qRoots := varsOf 47) (qGoal := 0xeee8eee8e888e888eee8eee8e888e888) (by decide +kernel) sliceInput9Map
 set_option maxRecDepth 200000 in
-lemma h0Slice48 : Slice h0R h0G (subcubeFast 24 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h23Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput10Map : Lower (varsOf 31) 0xeee8eca0eee8eca0eee8eca0eee8eca0 8 := by
+  apply carry_of (swaps := [(0, 1), (1, 2), (2, 3), (3, 4), (1, 2), (2, 3), (0, 1), (1, 2), (0, 1)]) (roots2 := cert582) (T2 := cert1030) _ cert1083
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice47 : Slice h0R h0G (subcubeFast 24 4) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h15Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput10Flip : Lower (varsOf 31) 0xfac8e888fac8e888fac8e888fac8e888 8 := dualLower (by decide +kernel) (by decide +kernel) sliceInput10Map
 set_option maxRecDepth 200000 in
-lemma h0Slice46 : Slice h0R h0G (subcubeFast 24 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h100Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice10 : Slice h0R h0G (subcubeFast 32 0) 8 := slice_fast_direct (zDead := 0) (qRoots := varsOf 31) (qGoal := 0xfac8e888fac8e888fac8e888fac8e888) (by decide +kernel) sliceInput10Flip
 set_option maxRecDepth 200000 in
-lemma h0Slice45 : Slice h0R h0G (subcubeFast 20 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h25Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput11Map : Lower (varsOf 59) 0xffeeeeeeffccee88ffeeeeeeffccee88 7 := by
+  apply carry_of (swaps := [(4, 5), (3, 4), (2, 3), (0, 1)]) (roots2 := cert582) (T2 := cert1168) _ cert1163
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice44 : Slice h0R h0G (subcubeFast 20 8) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h15Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice11 : Slice h0R h0G (subcubeFast 0 4) 7 := slice_fast_direct (zDead := 0) (qRoots := varsOf 59) (qGoal := 0xffeeeeeeffccee88ffeeeeeeffccee88) (by decide +kernel) sliceInput11Map
 set_option maxRecDepth 200000 in
-lemma h0Slice43 : Slice h0R h0G (subcubeFast 20 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h127Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput12Map : Lower (varsOf 55) 0xfefeeeeefafae8e8fefeeeeefafae8e8 7 := by
+  apply carry_of (swaps := [(4, 5), (3, 4)]) (roots2 := cert582) (T2 := cert1168) _ cert1163
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice42 : Slice h0R h0G (subcubeFast 18 1) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h3Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice12 : Slice h0R h0G (subcubeFast 0 8) 7 := slice_fast_direct (zDead := 0) (qRoots := varsOf 55) (qGoal := 0xfefeeeeefafae8e8fefeeeeefafae8e8) (by decide +kernel) sliceInput12Map
 set_option maxRecDepth 200000 in
-lemma h0Slice41 : Slice h0R h0G (subcubeFast 18 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h128Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput13Map : Lower (varsOf 23) 0xfefee8e8fefee8e8fefee8e8fefee8e8 7 := by
+  apply carry_of (swaps := [(4, 5)]) (roots2 := cert1195) (T2 := cert1187) _ cert1249
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice40 : Slice h0R h0G (subcubeFast 17 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h3Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice13 : Slice h0R h0G 0xf00ff00f00000000f00ff00f00000000 7 := mappedSlice (f := identifyRow 0 32 2 3) (R := varsOf 23) (G := 0xfefee8e8fefee8e8fefee8e8fefee8e8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput13Map
 set_option maxRecDepth 200000 in
-lemma h0Slice39 : Slice h0R h0G (subcubeFast 17 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h129Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput14Map : Lower (varsOf 15) 0xfee8fee8fee8fee8fee8fee8fee8fee8 7 := by
+  apply carry_of (swaps := [(4, 5), (3, 4)]) (roots2 := cert1195) (T2 := cert1187) _ cert1249
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice38 : Slice h0R h0G (subcubeFast 16 32) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h30Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice14 : Slice h0R h0G 0xf0f00f0f00000000f0f00f0f00000000 7 := mappedSlice (f := identifyRow 0 32 2 4) (R := varsOf 15) (G := 0xfee8fee8fee8fee8fee8fee8fee8fee8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput14Map
 set_option maxRecDepth 200000 in
-lemma h0Slice37 : Slice h0R h0G (subcubeFast 16 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h130Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice15 : Slice h0R h0G 0xff0000ff00000000ff0000ff00000000 7 := mappedSlice (f := identifyRow 0 32 3 4) (R := varsOf 15) (G := 0xfee8fee8fee8fee8fee8fee8fee8fee8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput14Map
 set_option maxRecDepth 200000 in
-lemma h0Slice36 : Slice h0R h0G (subcubeFast 16 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h131Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput15Map : Lower (varsOf 27) 0xffeeee88ffeeee88ffeeee88ffeeee88 7 := by
+  apply carry_of (swaps := [(4, 5), (2, 3)]) (roots2 := cert1195) (T2 := cert1187) _ cert1249
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice35 : Slice h0R h0G (subcubeFast 16 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h39Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice16 : Slice h0R h0G 0xf0f000000000f0f0f0f000000000f0f0 7 := mappedSlice (f := identifyRow 0 4 4 5) (R := varsOf 27) (G := 0xffeeee88ffeeee88ffeeee88ffeeee88) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput15Map
 set_option maxRecDepth 200000 in
-lemma h0Slice34 : Slice h0R h0G (subcubeFast 16 1) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h132Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice17 : Slice h0R h0G 0xff0000000000ff00ff0000000000ff00 7 := mappedSlice (f := identifyRow 0 8 4 5) (R := varsOf 23) (G := 0xfefee8e8fefee8e8fefee8e8fefee8e8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput13Map
 set_option maxRecDepth 200000 in
-lemma h0Slice33 : Slice h0R h0G (subcubeFast 16 0) 8 := slice_fast_direct (zDead := 0) (by decide +kernel) h133Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput16Map : Lower (varsOf 47) 0xfeeefeeefac8fac8feeefeeefac8fac8 6 := by
+  apply carry_of (swaps := [(3, 4), (4, 5), (1, 2), (2, 3), (3, 4), (1, 2)]) (roots2 := cert1274) (T2 := cert1273) _ cert1272
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice32 : Slice h0R h0G (subcubeFast 12 32) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h101Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice18 : Slice h0R h0G (subcubeFast 0 16) 6 := slice_fast_direct (zDead := 0) (qRoots := varsOf 47) (qGoal := 0xfeeefeeefac8fac8feeefeeefac8fac8) (by decide +kernel) sliceInput16Map
 set_option maxRecDepth 200000 in
-lemma h0Slice31 : Slice h0R h0G (subcubeFast 12 16) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h15Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput17Map : Lower (varsOf 30) 0xfcccccc0fcccccc0fcccccc0fcccccc0 6 := by
+  apply carry_of (swaps := [(3, 4), (2, 3), (1, 2), (0, 1)]) (roots2 := cert478) (T2 := cert468) _ cert456
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice30 : Slice h0R h0G (subcubeFast 12 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h137Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice19 : Slice h0R h0G (subcubeFast 1 32) 6 := slice_fast_direct (zDead := 0) (qRoots := varsOf 30) (qGoal := 0xfcccccc0fcccccc0fcccccc0fcccccc0) (by decide +kernel) sliceInput17Map
 set_option maxRecDepth 200000 in
-lemma h0Slice29 : Slice h0R h0G (subcubeFast 9 2) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h54Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput18Map : Lower (varsOf 29) 0xfaaaaaa0faaaaaa0faaaaaa0faaaaaa0 6 := by
+  apply carry_of (swaps := [(3, 4), (2, 3), (1, 2)]) (roots2 := cert478) (T2 := cert468) _ cert456
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice28 : Slice h0R h0G (subcubeFast 9 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h138Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice20 : Slice h0R h0G (subcubeFast 2 32) 6 := slice_fast_direct (zDead := 0) (qRoots := varsOf 29) (qGoal := 0xfaaaaaa0faaaaaa0faaaaaa0faaaaaa0) (by decide +kernel) sliceInput18Map
 set_option maxRecDepth 200000 in
-lemma h0Slice27 : Slice h0R h0G (subcubeFast 8 32) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h139Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput19Map : Lower (varsOf 43) 0xeeaaeeaaaa88aa88eeaaeeaaaa88aa88 6 := by
+  apply carry_of (swaps := [(3, 4), (4, 5), (2, 3)]) (roots2 := cert478) (T2 := cert468) _ cert456
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice26 : Slice h0R h0G (subcubeFast 8 16) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h14Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice21 : Slice h0R h0G 0xa5a50000a5a50000a5a50000a5a5 6 := mappedSlice (f := identifyRow 16 0 0 2) (R := varsOf 43) (G := 0xeeaaeeaaaa88aa88eeaaeeaaaa88aa88) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput19Map
 set_option maxRecDepth 200000 in
-lemma h0Slice25 : Slice h0R h0G (subcubeFast 8 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h140Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput20Map : Lower (varsOf 39) 0xeaeaeaeaa8a8a8a8eaeaeaeaa8a8a8a8 6 := by
+  apply carry_of (swaps := [(3, 4), (4, 5)]) (roots2 := cert478) (T2 := cert468) _ cert456
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice24 : Slice h0R h0G (subcubeFast 8 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h55Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice22 : Slice h0R h0G 0xaa550000aa550000aa550000aa55 6 := mappedSlice (f := identifyRow 16 0 0 3) (R := varsOf 39) (G := 0xeaeaeaeaa8a8a8a8eaeaeaeaa8a8a8a8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput20Map
 set_option maxRecDepth 200000 in
-lemma h0Slice23 : Slice h0R h0G (subcubeFast 8 0) 8 := slice_fast_direct (zDead := 0) (by decide +kernel) h141Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput21Map : Lower (varsOf 23) 0xeaeaa8a8eaeaa8a8eaeaa8a8eaeaa8a8 6 := by
+  apply carry_of (swaps := [(3, 4)]) (roots2 := cert478) (T2 := cert468) _ cert456
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice22 : Slice h0R h0G (subcubeFast 6 1) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h37Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice23 : Slice h0R h0G 0xaa55aa5500000000aa55aa55 6 := mappedSlice (f := identifyRow 32 0 0 3) (R := varsOf 23) (G := 0xeaeaa8a8eaeaa8a8eaeaa8a8eaeaa8a8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput21Map
 set_option maxRecDepth 200000 in
-lemma h0Slice21 : Slice h0R h0G (subcubeFast 6 0) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h145Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput22Map : Lower (varsOf 27) 0xeecccc88eecccc88eecccc88eecccc88 6 := by
+  apply carry_of (swaps := [(3, 4), (2, 3), (0, 1)]) (roots2 := cert478) (T2 := cert468) _ cert456
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice20 : Slice h0R h0G (subcubeFast 4 32) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h146Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice24 : Slice h0R h0G 0xc3c3c3c300000000c3c3c3c3 6 := mappedSlice (f := identifyRow 32 0 1 2) (R := varsOf 27) (G := 0xeecccc88eecccc88eecccc88eecccc88) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput22Map
 set_option maxRecDepth 200000 in
-lemma h0Slice19 : Slice h0R h0G (subcubeFast 4 16) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h16Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice25 : Slice h0R h0G 0xc0c0c0c030303030c0c0c0c03030303 6 := mappedSlice (f := identifyRow 4 0 1 5) (R := varsOf 27) (G := 0xeecccc88eecccc88eecccc88eecccc88) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput22Map
 set_option maxRecDepth 200000 in
-lemma h0Slice18 : Slice h0R h0G (subcubeFast 4 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h147Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput23Map : Lower (varsOf 58) 0xffffffccffccccccffffffccffcccccc 5 := by
+  apply carry_of (swaps := [(4, 5), (3, 4), (2, 3), (1, 2)]) (roots2 := cert25) (T2 := cert1033) _ cert1093
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice17 : Slice h0R h0G (subcubeFast 4 1) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h148Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice26 : Slice h0R h0G (subcubeFast 4 1) 5 := slice_fast_direct (zDead := 0) (qRoots := varsOf 58) (qGoal := 0xffffffccffccccccffffffccffcccccc) (by decide +kernel) sliceInput23Map
 set_option maxRecDepth 200000 in
-lemma h0Slice16 : Slice h0R h0G (subcubeFast 4 0) 8 := slice_fast_direct (zDead := 0) (by decide +kernel) h149Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput24Map : Lower (varsOf 51) 0xeeeeeeeecccc8888eeeeeeeecccc8888 5 := by
+  apply carry_of (swaps := [(2, 3), (0, 1), (1, 2), (0, 1)]) (roots2 := cert27) (T2 := cert230) _ cert245
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice15 : Slice h0R h0G (subcubeFast 2 32) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h150Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice27 : Slice h0R h0G (subcubeFast 8 4) 5 := slice_fast_direct (zDead := 0) (qRoots := varsOf 51) (qGoal := 0xeeeeeeeecccc8888eeeeeeeecccc8888) (by decide +kernel) sliceInput24Map
 set_option maxRecDepth 200000 in
-lemma h0Slice14 : Slice h0R h0G (subcubeFast 2 16) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h46Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput25Map : Lower (varsOf 46) 0xfffcfffcfcccfcccfffcfffcfcccfccc 5 := by
+  apply carry_of (swaps := [(4, 5), (1, 2), (2, 3), (3, 4), (2, 3), (1, 2)]) (roots2 := cert25) (T2 := cert1033) _ cert1093
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice13 : Slice h0R h0G (subcubeFast 2 8) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h60Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice28 : Slice h0R h0G (subcubeFast 16 1) 5 := slice_fast_direct (zDead := 0) (qRoots := varsOf 46) (qGoal := 0xfffcfffcfcccfcccfffcfffcfcccfccc) (by decide +kernel) sliceInput25Map
 set_option maxRecDepth 200000 in
-lemma h0Slice12 : Slice h0R h0G (subcubeFast 2 1) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h89Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput26Map : Lower (varsOf 43) 0xeeeeeeeeaa88aa88eeeeeeeeaa88aa88 5 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (0, 1), (1, 2)]) (roots2 := cert27) (T2 := cert230) _ cert245
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice11 : Slice h0R h0G (subcubeFast 2 0) 9 := slice_fast_direct (zDead := 0) (by decide +kernel) h151Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice29 : Slice h0R h0G (subcubeFast 4 16) 5 := slice_fast_direct (zDead := 0) (qRoots := varsOf 43) (qGoal := 0xeeeeeeeeaa88aa88eeeeeeeeaa88aa88) (by decide +kernel) sliceInput26Map
 set_option maxRecDepth 200000 in
-lemma h0Slice10 : Slice h0R h0G (subcubeFast 1 32) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h155Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput27Map : Lower (varsOf 43) 0xee88ee8888888888ee88ee8888888888 5 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5), (1, 2), (2, 3), (1, 2)]) (roots2 := cert490) (T2 := cert251) _ cert250
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice9 : Slice h0R h0G (subcubeFast 1 16) 4 := slice_fast_direct (zDead := 0) (by decide +kernel) h156Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice30 : Slice h0R h0G (subcubeFast 20 0) 5 := slice_fast_direct (zDead := 0) (qRoots := varsOf 43) (qGoal := 0xee88ee8888888888ee88ee8888888888) (by decide +kernel) sliceInput27Map
 set_option maxRecDepth 200000 in
-lemma h0Slice8 : Slice h0R h0G (subcubeFast 1 4) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h157Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput28Map : Lower (varsOf 15) 0xfae8fae8fae8fae8fae8fae8fae8fae8 5 := by
+  apply carry_of (swaps := [(0, 1)]) (roots2 := cert478) (T2 := cert252) _ cert264
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice7 : Slice h0R h0G (subcubeFast 1 2) 5 := slice_fast_direct (zDead := 0) (by decide +kernel) h91Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice31 : Slice h0R h0G 0xf0f000000f0f0000f0f000000f0f0000 5 := mappedSlice (f := identifyRow 0 16 2 5) (R := varsOf 15) (G := 0xfae8fae8fae8fae8fae8fae8fae8fae8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput28Map
 set_option maxRecDepth 200000 in
-lemma h0Slice6 : Slice h0R h0G (subcubeFast 1 0) 9 := slice_fast_direct (zDead := 0) (by decide +kernel) h158Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput29Map : Lower (varsOf 15) 0xfec8fec8fec8fec8fec8fec8fec8fec8 5 := by
+  apply carry_of (swaps := [(2, 3)]) (roots2 := cert478) (T2 := cert252) _ cert264
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice5 : Slice h0R h0G (subcubeFast 0 32) 9 := slice_fast_direct (zDead := 0) (by decide +kernel) h159Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice32 : Slice h0R h0G 0xff00000000ff0000ff00000000ff0000 5 := mappedSlice (f := identifyRow 0 16 3 5) (R := varsOf 15) (G := 0xfec8fec8fec8fec8fec8fec8fec8fec8) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) sliceInput29Map
 set_option maxRecDepth 200000 in
-lemma h0Slice4 : Slice h0R h0G (subcubeFast 0 16) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h164Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput30Map : Lower (varsOf 56) 0xffffff00ff000000ffffff00ff000000 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5), (1, 2), (2, 3), (3, 4), (0, 1), (1, 2), (2, 3)]) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice3 : Slice h0R h0G (subcubeFast 0 8) 7 := slice_fast_direct (zDead := 0) (by decide +kernel) h165Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice33 : Slice h0R h0G (subcubeFast 6 1) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 56) (qGoal := 0xffffff00ff000000ffffff00ff000000) (by decide +kernel) sliceInput30Map
 set_option maxRecDepth 200000 in
-lemma h0Slice2 : Slice h0R h0G (subcubeFast 0 4) 7 := slice_fast_direct (zDead := 0) (by decide +kernel) h167Bound
+set_option maxHeartbeats 0 in
+lemma sliceInput31Map : Lower (varsOf 52) 0xfffff0f0f0f00000fffff0f0f0f00000 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5), (1, 2), (2, 3), (3, 4), (0, 1), (1, 2)]) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0Slice1 : Slice h0R h0G (subcubeFast 0 2) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h168Bound
+set_option maxHeartbeats 0 in
+lemma h0Slice34 : Slice h0R h0G (subcubeFast 9 2) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 52) (qGoal := 0xfffff0f0f0f00000fffff0f0f0f00000) (by decide +kernel) sliceInput31Map
 set_option maxRecDepth 200000 in
-lemma h0Slice0 : Slice h0R h0G (subcubeFast 0 1) 6 := slice_fast_direct (zDead := 0) (by decide +kernel) h169Bound
-lemma h0SlicesOk : btAll (sliceSpec h0R h0G) h0Slices := btAll_ofList (P := sliceSpec h0R h0G) (sliceSpecCons h0Slice0 (sliceSpecCons h0Slice1 (sliceSpecCons h0Slice2 (sliceSpecCons h0Slice3 (sliceSpecCons h0Slice4 (sliceSpecCons h0Slice5 (sliceSpecCons h0Slice6 (sliceSpecCons h0Slice7 (sliceSpecCons h0Slice8 (sliceSpecCons h0Slice9 (sliceSpecCons h0Slice10 (sliceSpecCons h0Slice11 (sliceSpecCons h0Slice12 (sliceSpecCons h0Slice13 (sliceSpecCons h0Slice14 (sliceSpecCons h0Slice15 (sliceSpecCons h0Slice16 (sliceSpecCons h0Slice17 (sliceSpecCons h0Slice18 (sliceSpecCons h0Slice19 (sliceSpecCons h0Slice20 (sliceSpecCons h0Slice21 (sliceSpecCons h0Slice22 (sliceSpecCons h0Slice23 (sliceSpecCons h0Slice24 (sliceSpecCons h0Slice25 (sliceSpecCons h0Slice26 (sliceSpecCons h0Slice27 (sliceSpecCons h0Slice28 (sliceSpecCons h0Slice29 (sliceSpecCons h0Slice30 (sliceSpecCons h0Slice31 (sliceSpecCons h0Slice32 (sliceSpecCons h0Slice33 (sliceSpecCons h0Slice34 (sliceSpecCons h0Slice35 (sliceSpecCons h0Slice36 (sliceSpecCons h0Slice37 (sliceSpecCons h0Slice38 (sliceSpecCons h0Slice39 (sliceSpecCons h0Slice40 (sliceSpecCons h0Slice41 (sliceSpecCons h0Slice42 (sliceSpecCons h0Slice43 (sliceSpecCons h0Slice44 (sliceSpecCons h0Slice45 (sliceSpecCons h0Slice46 (sliceSpecCons h0Slice47 (sliceSpecCons h0Slice48 (sliceSpecCons h0Slice49 (sliceSpecCons h0Slice50 (sliceSpecCons h0Slice51 (sliceSpecCons h0Slice52 (sliceSpecCons h0Slice53 (sliceSpecCons h0Slice54 (sliceSpecCons h0Slice55 (sliceSpecCons h0Slice56 (sliceSpecCons h0Slice57 (sliceSpecCons h0Slice58 (sliceSpecCons h0Slice59 (sliceSpecCons h0Slice60 (sliceSpecCons h0Slice61 (sliceSpecCons h0Slice62 (sliceSpecCons h0Slice63 (sliceSpecCons h0Slice64 (sliceSpecCons h0Slice65 (sliceSpecCons h0Slice66 (sliceSpecCons h0Slice67 (sliceSpecCons h0Slice68 (sliceSpecCons h0Slice69 (sliceSpecCons h0Slice70 (sliceSpecCons h0Slice71 (sliceSpecCons h0Slice72 (sliceSpecCons h0Slice73 sliceSpecNil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+set_option maxHeartbeats 0 in
+lemma sliceInput32Map : Lower (varsOf 46) 0xfcccfcccf0c0f0c0fcccfcccf0c0f0c0 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5), (1, 2), (2, 3), (1, 2), (0, 1)]) (roots2 := cert478) (T2 := cert283) _ cert278
+  decide +kernel
 set_option maxRecDepth 200000 in
-lemma h0PoolsOk : btAll (fun o => ∀ c, o = some c → ValidPool h0R h0G c) h0Pools := buildPoolsBT_sound h0SlicesOk
+set_option maxHeartbeats 0 in
+lemma h0Slice35 : Slice h0R h0G (subcubeFast 1 16) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 46) (qGoal := 0xfcccfcccf0c0f0c0fcccfcccf0c0f0c0) (by decide +kernel) sliceInput32Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma sliceInput33Map : Lower (varsOf 45) 0xfaaafaaafa00fa00faaafaaafa00fa00 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5), (2, 3), (1, 2)]) (roots2 := cert478) (T2 := cert283) _ cert278
+  decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice36 : Slice h0R h0G (subcubeFast 2 16) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 45) (qGoal := 0xfaaafaaafa00fa00faaafaaafa00fa00) (by decide +kernel) sliceInput33Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma sliceInput34Map : Lower (varsOf 44) 0xfff0fff0f000f000fff0fff0f000f000 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5), (1, 2), (2, 3), (0, 1), (1, 2)]) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice37 : Slice h0R h0G (subcubeFast 17 2) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 44) (qGoal := 0xfff0fff0f000f000fff0fff0f000f000) (by decide +kernel) sliceInput34Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice38 : Slice h0R h0G (subcubeFast 18 1) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 44) (qGoal := 0xfff0fff0f000f000fff0fff0f000f000) (by decide +kernel) sliceInput34Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma sliceInput35Map : Lower (varsOf 35) 0xeeeeeeee88888888eeeeeeee88888888 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (4, 5)]) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice39 : Slice h0R h0G (subcubeFast 12 16) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 35) (qGoal := 0xeeeeeeee88888888eeeeeeee88888888) (by decide +kernel) sliceInput35Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice40 : Slice h0R h0G (subcubeFast 20 8) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 35) (qGoal := 0xeeeeeeee88888888eeeeeeee88888888) (by decide +kernel) sliceInput35Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice41 : Slice h0R h0G (subcubeFast 24 4) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 35) (qGoal := 0xeeeeeeee88888888eeeeeeee88888888) (by decide +kernel) sliceInput35Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma sliceInput36Map : Lower (varsOf 26) 0xffcccc00ffcccc00ffcccc00ffcccc00 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (1, 2), (2, 3), (0, 1)]) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice42 : Slice h0R h0G (subcubeFast 33 4) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 26) (qGoal := 0xffcccc00ffcccc00ffcccc00ffcccc00) (by decide +kernel) sliceInput36Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma sliceInput37Map : Lower (varsOf 21) 0xfafaa0a0fafaa0a0fafaa0a0fafaa0a0 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4), (1, 2)]) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice43 : Slice h0R h0G (subcubeFast 34 8) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 21) (qGoal := 0xfafaa0a0fafaa0a0fafaa0a0fafaa0a0) (by decide +kernel) sliceInput37Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma sliceInput38Map : Lower (varsOf 19) 0xeeee8888eeee8888eeee8888eeee8888 4 := by
+  apply carry_of (swaps := [(2, 3), (3, 4)]) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice44 : Slice h0R h0G (subcubeFast 12 32) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 19) (qGoal := 0xeeee8888eeee8888eeee8888eeee8888) (by decide +kernel) sliceInput38Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma sliceInput39Map : Lower (varsOf 11) 0xee88ee88ee88ee88ee88ee88ee88ee88 4 := by
+  apply carry_of (swaps := [(2, 3)]) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice45 : Slice h0R h0G (subcubeFast 20 32) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 11) (qGoal := 0xee88ee88ee88ee88ee88ee88ee88ee88) (by decide +kernel) sliceInput39Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice46 : Slice h0R h0G (subcubeFast 48 4) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 11) (qGoal := 0xee88ee88ee88ee88ee88ee88ee88ee88) (by decide +kernel) sliceInput39Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma sliceInput40Map : Lower (varsOf 7) 0xe8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8 4 := by
+  apply carry_of (swaps := []) (roots2 := cert811) (T2 := cert805) _ cert268
+  decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice47 : Slice h0R h0G (subcubeFast 24 32) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 7) (qGoal := 0xe8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8) (by decide +kernel) sliceInput40Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Slice48 : Slice h0R h0G (subcubeFast 48 8) 4 := slice_fast_direct (zDead := 0) (qRoots := varsOf 7) (qGoal := 0xe8e8e8e8e8e8e8e8e8e8e8e8e8e8e8e8) (by decide +kernel) sliceInput40Map
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0SlicesOk : btAll (fun o => ∀ p, o = some p → Slice h0R h0G p.1 p.2) h0Slices := btAll_ofList (P := fun (o : Option (Nat × Nat)) => ∀ p, o = some p → Slice h0R h0G p.1 p.2) (forall_cons (fun _ h => by cases h; exact h0Slice0) (forall_cons (fun _ h => by cases h; exact h0Slice1) (forall_cons (fun _ h => by cases h; exact h0Slice2) (forall_cons (fun _ h => by cases h; exact h0Slice3) (forall_cons (fun _ h => by cases h; exact h0Slice4) (forall_cons (fun _ h => by cases h; exact h0Slice5) (forall_cons (fun _ h => by cases h; exact h0Slice6) (forall_cons (fun _ h => by cases h; exact h0Slice7) (forall_cons (fun _ h => by cases h; exact h0Slice8) (forall_cons (fun _ h => by cases h; exact h0Slice9) (forall_cons (fun _ h => by cases h; exact h0Slice10) (forall_cons (fun _ h => by cases h; exact h0Slice11) (forall_cons (fun _ h => by cases h; exact h0Slice12) (forall_cons (fun _ h => by cases h; exact h0Slice13) (forall_cons (fun _ h => by cases h; exact h0Slice14) (forall_cons (fun _ h => by cases h; exact h0Slice15) (forall_cons (fun _ h => by cases h; exact h0Slice16) (forall_cons (fun _ h => by cases h; exact h0Slice17) (forall_cons (fun _ h => by cases h; exact h0Slice18) (forall_cons (fun _ h => by cases h; exact h0Slice19) (forall_cons (fun _ h => by cases h; exact h0Slice20) (forall_cons (fun _ h => by cases h; exact h0Slice21) (forall_cons (fun _ h => by cases h; exact h0Slice22) (forall_cons (fun _ h => by cases h; exact h0Slice23) (forall_cons (fun _ h => by cases h; exact h0Slice24) (forall_cons (fun _ h => by cases h; exact h0Slice25) (forall_cons (fun _ h => by cases h; exact h0Slice26) (forall_cons (fun _ h => by cases h; exact h0Slice27) (forall_cons (fun _ h => by cases h; exact h0Slice28) (forall_cons (fun _ h => by cases h; exact h0Slice29) (forall_cons (fun _ h => by cases h; exact h0Slice30) (forall_cons (fun _ h => by cases h; exact h0Slice31) (forall_cons (fun _ h => by cases h; exact h0Slice32) (forall_cons (fun _ h => by cases h; exact h0Slice33) (forall_cons (fun _ h => by cases h; exact h0Slice34) (forall_cons (fun _ h => by cases h; exact h0Slice35) (forall_cons (fun _ h => by cases h; exact h0Slice36) (forall_cons (fun _ h => by cases h; exact h0Slice37) (forall_cons (fun _ h => by cases h; exact h0Slice38) (forall_cons (fun _ h => by cases h; exact h0Slice39) (forall_cons (fun _ h => by cases h; exact h0Slice40) (forall_cons (fun _ h => by cases h; exact h0Slice41) (forall_cons (fun _ h => by cases h; exact h0Slice42) (forall_cons (fun _ h => by cases h; exact h0Slice43) (forall_cons (fun _ h => by cases h; exact h0Slice44) (forall_cons (fun _ h => by cases h; exact h0Slice45) (forall_cons (fun _ h => by cases h; exact h0Slice46) (forall_cons (fun _ h => by cases h; exact h0Slice47) (forall_cons (fun _ h => by cases h; exact h0Slice48) (fun _ h => (List.not_mem_nil h).elim))))))))))))))))))))))))))))))))))))))))))))))))))
 def h0Empty : BT (List (List Nat)) := BT.empty
 lemma h0EmptyOk : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G (6 - 1) xs.toFinset) h0Empty := trivial
-def h0Block6_0 : List NodeSpec := indexPairNodes [(479359,6593), (1642559,4127556385), (1650751,0), (1459822687,64641), (281115679,66817), (1090681887,67329), (306247743,0), (348194879,14657), (6455487,51120449), (88289343,6465), (306251839,0), (348190783,11375020353), (381749311,0), (122618789,113409), (307167925,113409), (93602037,0), (1892479,0), (85365370399,54401), (77381727,300545), (1350629439,0), (1300301887,0), (21877777439,21633), (5303681119,0), (511155761239,9046337), (123498169375,21633), (2004940863,18387965313), (7986102487,40634689), (429979735,254542753), (2055272511,0), (2038529055,66817), (2021722175,0), (27615453335,0)]
+def pool0 : PoolSpec := (33,[])
+def pool1 : PoolSpec := (34,[])
+def pool2 : PoolSpec := (42,[])
+def pool3 : PoolSpec := (39,[])
+def pool4 : PoolSpec := (37,[])
+def pool5 : PoolSpec := (43,[])
+def pool6 : PoolSpec := (40,[])
+def pool7 : PoolSpec := (41,[])
+def pool8 : PoolSpec := (46,[])
+def pool9 : PoolSpec := (44,[])
+def pool10 : PoolSpec := (45,[])
+def pool11 : PoolSpec := (38,[])
+def pool12 : PoolSpec := (28,[])
+def pool13 : PoolSpec := (48,[])
+def pool14 : PoolSpec := (26,[])
+def pool15 : PoolSpec := (10,[(1,0,1)])
+def pool16 : PoolSpec := (10,[(1,0,4)])
+def pool17 : PoolSpec := (2,[(1,0,1)])
+def pool18 : PoolSpec := (0,[(1,2,4)])
+def pool19 : PoolSpec := (14,[(1,0,1)])
+def pool20 : PoolSpec := (2,[(1,0,4)])
+def pool21 : PoolSpec := (2,[(1,0,1),(2,6,4)])
+def pool22 : PoolSpec := (2,[(1,0,1),(1,6,4)])
+def pool23 : PoolSpec := (2,[(1,0,4),(3,1,312)])
+def pool24 : PoolSpec := (2,[(1,0,2),(1,1,3),(0,174,188)])
+def pool25 : PoolSpec := (10,[(1,0,4),(3,1,312)])
+def h0Block6_0Specs : List PoolSpec := [pool14,pool2,(13,[]),(10,[])]
+def h0Block6_0Pools : BT (Option BoundPool) := buildPoolsBT 2 h0W h0R h0Slices h0Block6_0Specs
+def h0Block6_0 : List NodeSpec := [([127,0,1,96,2,3,4],[3],[]),([26,44,69,0,1,2,3],[0],[]),([26,0,1,99,2,3,4],[],[]),([26,0,1,97,2,3,4],[],[]),([26,0,1,96,2,3,4],[1],[]),([26,0,1,2,3,4,43],[],[]),([115,0,1,2,3,4,5],[2],[]),([81,0,1,11,2,3,4],[],[]),([91,0,1,11,2,3,4],[],[]),([44,80,0,1,11,2,3],[0],[]),([44,69,0,1,11,2,3],[0],[]),([189,0,1,183,3,92,5],[],[])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test6_0 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Empty 6 h0Block6_0 = true := by decide +kernel
-def h0Nodes6 : List NodeSpec := h0Block6_0
-lemma h0Check6 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Empty 6 h0Nodes6 = true := h0Test6_0
+lemma h0Block6_0Ok : checkNodesBT h0W h0G h0Mask h0Block6_0Pools h0Autos h0Empty 6 h0Block6_0 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block6_0Mem : ∀ ns ∈ h0Block6_0, Impossible h0G 6 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0EmptyOk h0Block6_0Ok
+def h0Block6_1Specs : List PoolSpec := [pool1,pool5,pool14,(24,[]),pool10,(23,[])]
+def h0Block6_1Pools : BT (Option BoundPool) := buildPoolsBT 3 h0W h0R h0Slices h0Block6_1Specs
+def h0Block6_1 : List NodeSpec := [([102,0,1,2,100,3,4],[],[]),([137,0,1,2,3,4,5],[],[]),([132,1,2,106,3,4,5],[],[]),([15,0,1,11,2,3,4],[],[]),([24,0,1,11,2,3,4],[],[]),([25,0,1,11,2,3,4],[],[]),([0,1,7,12,3,22,4],[1,2],[]),([0,1,58,2,3,68,5],[2],[]),([0,1,17,2,3,10,5],[0],[]),([0,1,11,2,3,4,68],[3,4,5],[]),([0,1,11,2,3,4,14],[0,1],[]),([0,1,11,2,3,10,13],[3],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block6_1Ok : checkNodesBT h0W h0G h0Mask h0Block6_1Pools h0Autos h0Empty 6 h0Block6_1 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block6_1Mem : ∀ ns ∈ h0Block6_1, Impossible h0G 6 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0EmptyOk h0Block6_1Ok
+def h0Block6_2Specs : List PoolSpec := [pool1,pool14,(24,[]),pool2,pool8,(23,[])]
+def h0Block6_2Pools : BT (Option BoundPool) := buildPoolsBT 3 h0W h0R h0Slices h0Block6_2Specs
+def h0Block6_2 : List NodeSpec := [([0,1,11,2,3,10,16],[0,1],[]),([0,1,11,12,3,4,10],[2],[]),([0,1,23,2,3,22,4],[1],[]),([0,1,6,2,3,4,95],[3],[]),([0,1,2,212,184,4,5],[5],[]),([0,1,2,100,3,4,101],[1,4],[]),([0,1,2,3,4,95],[],[]),([1,6,2,106,3,134,5],[3],[]),([1,6,106,3,133,4,5],[3],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block6_2Ok : checkNodesBT h0W h0G h0Mask h0Block6_2Pools h0Autos h0Empty 6 h0Block6_2 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block6_2Mem : ∀ ns ∈ h0Block6_2, Impossible h0G 6 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0EmptyOk h0Block6_2Ok
+def h0Nodes6 : List NodeSpec := h0Block6_0 ++ h0Block6_1 ++ h0Block6_2
 def h0Bucket6 : BT (List (List Nat)) := buildBucketsBT h0W h0Nodes6
 set_option maxRecDepth 200000 in
-lemma h0Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 6 xs.toFinset) h0Bucket6 := buildBucketsBT_sound (by decide) h0Pairs h0WOk h0PoolsOk h0AutosOk h0EmptyOk h0Check6
-def h0Block7_0 : List NodeSpec := indexPairNodes [(612393431,17062560977), (65089663,132404129), (174073983,0x73041198208c31), (975103,862291761191), (56717439,260719521), (2146559,55458885022761), (1898559,2198219785769), (602175,28252033), (111212607,0x7f84498260629), (618559,1043073), (2382741855,2289166377), (696356991,14966786625), (2900223,730094276645417), (2315665759,27652137), (59257919,4631118033), (176698431,64569553), (3780735,500432732321), (2670847,13304545), (608196735,32244945), (2572543,251298589737), (1057439935,266631944233), (1450111,0x1b408b82e1c4045147), (2867455,0xb4085c06440a1), (2248589503,4664209449), (2181513407,253642270761), (2703615,2232193), (331413567,0x3d10543a10be19c53a1), (460863,0x7ea2042018541), (2919710911,48053367849), (2986819775,0x6880c2102e0629), (2834687,0xa7c17063220b729), (2998527,29545770025)]
+set_option maxHeartbeats 0 in
+lemma h0Bucket6Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 6 xs.toFinset) h0Bucket6 := buildBucketsBT_of_mem (forall_append (forall_append h0Block6_0Mem h0Block6_1Mem) h0Block6_2Mem)
+def h0Block7_0Specs : List PoolSpec := [pool9,pool1,pool5,pool14,pool12,pool3,(14,[]),pool0,pool2,pool10,pool15,(13,[]),(19,[])]
+def h0Block7_0Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block7_0Specs
+def h0Block7_0 : List NodeSpec := [([26,45,0,1,2,3,4],[2,7,8,10,11],[]),([26,44,0,1,2,3,65,4],[0,4,8],[0]),([26,38,0,1,2,3],[1,4,7],[]),([26,69,0,1,6,2,3,4],[0,3,8,9],[0]),([26,42,0,1,2,3,4],[6,7,8,10],[0]),([26,37,0,1,2,4],[1,4,7],[]),([26,98,0,1,6,2,3,4],[0,2,3],[0]),([26,41,0,1,2,3,4,16],[3,8],[]),([26,76,0,1,3,4],[1,4,7],[]),([26,0,1,6,2,3,4,94],[3,8,12],[0]),([26,0,1,2,3,4,94],[0,2,8],[0]),([86,76,0,1,3,4],[5,7],[])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test7_0 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket6 7 h0Block7_0 = true := by decide +kernel
-def h0Block7_1 : List NodeSpec := indexPairNodes [(9194029557,0x322700a8150b869), (8925659637,1751809), (981594229,8141917065257), (2801918423,0x3f340920140a1), (2835472735,0xf270d402e0241), (2634059903,1977628577), (717260927,0x58a602e010281831), (3784959,8542958469171), (2566967423,55969465249), (3817727,0x7630f10409603429), (4261462447,0xcf40460d1503c1), (3926081967,288074321896489), (3372360031,13291160961), (255087679,34910168028545), (2768302207,933490847658657), (4112639,5640164545065), (255611967,230871007809), (48304255,447582576801), (885037183,22028449), (3389472959,816196891689), (4047103,43909793), (1266743359,0x1f2300782a1462be186010d1), (4786239,0xf8d80d4408403123a1), (10939220159,48053367849), (11073437887,0x6880c2102e0629), (914514391,882625349345), (2768396639,0x1b9029e03220241), (700491903,0x35a02105c02062e1), (8880383,462585348500521), (2869060055,68212228833), (8945919,0x762481a23402c29), (629301719,221220438753)]
+lemma h0Block7_0Ok : checkNodesBT h0W h0G h0Mask h0Block7_0Pools h0Autos h0Bucket6 7 h0Block7_0 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test7_1 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket6 7 h0Block7_1 = true := by decide +kernel
-def h0Block7_2 : List NodeSpec := indexTripleNodes [(9666815,8239742883731497,2), (15368143279,0x681007a02429,2), (10322175,0xb1107c80ea02429,2), (10060031,0xeeb004401829,2), (10125567,494666401,2), (15099871583,239847157801,2), (10518783,0x939020c02902c29,2), (14965686623,24066048507945,2), (3774984319,0xad401f01c042941,2), (10453247,504627937,2), (10387711,7730106241,2), (10584319,0x371803e070105be0a29,2), (10649855,0x63068580c3c529,2), (562258391,30837902414377,2), (10715391,0x249a009402c81229,2), (11475927391,4362732929,2), (1367406655,0xeb9000e0446be0382229,6), (2734805119,0xc980d1b0dba0c31,2), (24160303191,0x3ea43e40321c8781c0629,2), (12617022527,0xb4400f05c2c8338241,2), (13153893439,0x26a02a09f0060d1,2), (323080407,0x1ade1e20061e1b0f090f0629,2), (9011455,1657274529,2), (188934207,0x68fb0014120b00c3a1,2), (102857759,0x3ebc601e021e1a162229,2), (197243007,0xc604f8052106416120a1,2), (12812479,0x29c08f806601c0b21,6), (16307896511,0x5e81ae01bc051781,2), (10911999,0xec8800d02902c29,2), (90245183,0x264060806a88108062e0629,2), (98633791,0x1211c0064074f0508062e0629,2), (331789109399,0xffc140922f81b700141,2)]
+lemma h0Block7_0Mem : ∀ ns ∈ h0Block7_0, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_0Ok
+def h0Block7_1Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool14,pool12,(30,[]),(31,[]),pool4,pool3,pool6,pool0,pool2,(11,[]),(10,[(1,0,1),(2,6,4)]),pool21,(14,[(1,0,1),(2,6,4)]),(2,[(1,0,1),(0,2,3),(2,6,114)])]
+def h0Block7_1Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block7_1Specs
+def h0Block7_1 : List NodeSpec := [([45,46,0,1,2,3,4,5],[2,10],[]),([81,0,1,6,2,3,4,5],[1,10],[0]),([44,69,0,1,6,2,3,5],[4,6],[0]),([44,42,0,1,2,3,4,5],[0,5],[]),([44,0,1,82,2,3,4,5],[0,5],[]),([44,0,1,11,2,12,3,4],[4,5,12,15],[0]),([44,0,1,11,2,3,65,4],[5,12],[0]),([44,0,1,11,2,3,13],[2,3,4,8,12],[]),([44,0,1,6,2,3,72,5],[4,6,14,16],[]),([44,0,1,63,3,5],[9,11],[]),([44,0,1,2,12,3,4,5],[5,7],[]),([119,0,1,53,2,3,4,5],[1,3,5,8,13,17],[0])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test7_2 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket6 7 h0Block7_2 = true := by decide +kernel
-def h0Block7_3 : List NodeSpec := indexTripleNodes [(5251346647,0x1e30a8123e00d600a13031,2), (5217800407,0x3a8450a8125e00dc04a02e031,2), (9294671999,454703425,2), (14336127,1197223643713,2), (14303359,1197223643713,6), (43696255,0x7b203ac01941,2), (60473471,5674899777,2), (20870881375,0x7cc028083802280382c3e1,2), (14294196351,27229436145,2), (6504575,0x19a2002500340c84e0d0e7,2), (934170593375,182737440001,2), (52882620543,27229436145,2), (37715959935,1718617841,2), (30687447,0x1fb9200a60733006f80d40241,2), (76824671,0x7e4d8072f00fec00e11400e0241,2)]
+lemma h0Block7_1Ok : checkNodesBT h0W h0G h0Mask h0Block7_1Pools h0Autos h0Bucket6 7 h0Block7_1 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test7_3 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket6 7 h0Block7_3 = true := by decide +kernel
-def h0Nodes7 : List NodeSpec := h0Block7_0 ++ h0Block7_1 ++ h0Block7_2 ++ h0Block7_3
-lemma h0Check7 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket6 7 h0Nodes7 = true := by
-  unfold h0Nodes7 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨h0Test7_0,h0Test7_1⟩,h0Test7_2⟩,h0Test7_3⟩
+lemma h0Block7_1Mem : ∀ ns ∈ h0Block7_1, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_1Ok
+def h0Block7_2Specs : List PoolSpec := [pool13,(18,[]),pool9,pool1,pool5,(24,[]),(31,[]),pool4,pool3,pool0,pool10,(47,[]),(27,[]),pool8,pool7,(2,[(1,0,1),(1,11,2),(2,12,4)])]
+def h0Block7_2Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block7_2Specs
+def h0Block7_2 : List NodeSpec := [([87,132,0,1,2,3,4,5],[1,10,14],[]),([87,0,1,6,2,3,134,5],[1,2,3,13],[]),([87,0,1,6,30,3,4,5],[6,10,13],[]),([87,0,1,183,3,4,5],[7,12],[]),([189,0,1,2,183,3,4,5],[1,7],[0,1]),([112,0,1,2,3,5],[8,9],[]),([80,0,1,11,6,2,3,4],[5,13,15],[0]),([80,0,1,6,2,3,4,5],[1,13,15],[]),([38,0,1,11,2,3],[9,13],[]),([89,98,0,1,6,2,4,5],[0,1,11],[]),([89,0,1,6,2,146,4,5],[0,2],[]),([165,0,1,6,2,3,4,5],[1,4,10],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_2Ok : checkNodesBT h0W h0G h0Mask h0Block7_2Pools h0Autos h0Bucket6 7 h0Block7_2 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_2Mem : ∀ ns ∈ h0Block7_2, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_2Ok
+def h0Block7_3Specs : List PoolSpec := [pool13,(18,[]),pool9,pool1,pool5,pool14,(29,[]),(30,[]),pool4,pool3,pool0,pool10,(11,[]),pool8,(10,[])]
+def h0Block7_3Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block7_3Specs
+def h0Block7_3 : List NodeSpec := [([190,0,1,174,3,92,5],[6,8],[]),([9,0,1,6,2,3,4,5],[0,1,2],[]),([159,0,1,6,2,3,4,5],[0,1,2,5],[]),([69,0,1,58,6,2,3,5],[1,5,11,13],[]),([69,0,1,11,6,2,3,4],[2,5,13],[0]),([69,0,1,6,2,3,4,5],[1,2,13],[]),([31,113,0,1,2,3,4,5],[11,14],[]),([126,0,1,2,3,65,4,5],[6,12],[]),([132,0,1,54,2,3,4,5],[1,3,11,12],[0]),([143,0,1,2,3,4,92,5],[7,12],[]),([37,0,1,11,2,4],[4,10],[]),([77,76,0,1,4,5],[9,10],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_3Ok : checkNodesBT h0W h0G h0Mask h0Block7_3Pools h0Autos h0Bucket6 7 h0Block7_3 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_3Mem : ∀ ns ∈ h0Block7_3, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_3Ok
+def h0Block7_4Specs : List PoolSpec := [pool9,pool1,pool14,pool4,pool3,(14,[]),pool0,pool2,(47,[]),(11,[]),pool8,(13,[]),(8,[]),(10,[]),(32,[]),pool24,(2,[(1,0,2),(1,1,3),(3,181,188)])]
+def h0Block7_4Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block7_4Specs
+def h0Block7_4 : List NodeSpec := [([77,0,1,63,4,5],[4,6],[]),([28,136,0,1,2,3,4,5],[0,13],[]),([28,0,315,1,2,3,312,5],[8],[]),([28,1,6,2,106,3,4,5],[10],[]),([149,0,1,6,2,3,4,5],[5,10,14],[]),([199,0,1,2,174,3,4,5],[9,16],[]),([195,0,1,2,183,3,4,5],[13,15],[]),([136,0,1,2,131,3,4,5],[3,6,12],[0]),([113,0,1,2,3,114,4,5],[1,6,11,13],[0]),([76,0,1,11,3,4],[6,10],[]),([27,0,1,7,6,3,4,5],[0,2,7],[]),([36,0,1,2,3,4],[0,6],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_4Ok : checkNodesBT h0W h0G h0Mask h0Block7_4Pools h0Autos h0Bucket6 7 h0Block7_4 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_4Mem : ∀ ns ∈ h0Block7_4, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_4Ok
+def h0Block7_5Specs : List PoolSpec := [pool9,pool1,pool14,pool12,(29,[]),(24,[]),pool0,pool10,(47,[]),(27,[]),(11,[]),pool8,pool7,(12,[])]
+def h0Block7_5Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block7_5Specs
+def h0Block7_5 : List NodeSpec := [([66,0,1,6,2,3,4,5],[0,11],[]),([75,0,1,11,2,3,4],[1,3,6],[]),([75,0,1,2,3,4],[6,7],[]),([62,0,1,2,3,5],[1,3,6],[]),([19,0,1,3,4,5],[1,2,3],[]),([25,0,1,6,2,3,4,5],[4,8],[0]),([35,0,1,2,3,184,4,5],[1,6,9,13],[]),([35,0,11,2,3,4],[6,11],[]),([74,0,1,2,30,3,4,5],[5,10],[]),([74,0,1,2,3,163,4,5],[9,13],[]),([250,0,1,2,3,4,16,5],[12,13],[]),([0,244,1,3,4,5],[1,4],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_5Ok : checkNodesBT h0W h0G h0Mask h0Block7_5Pools h0Autos h0Bucket6 7 h0Block7_5 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_5Mem : ∀ ns ∈ h0Block7_5, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_5Ok
+def h0Block7_6Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool14,pool12,(24,[]),(30,[]),pool3,pool6,pool0,pool2,(10,[]),(2,[]),(36,[])]
+def h0Block7_6Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block7_6Specs
+def h0Block7_6 : List NodeSpec := [([0,226,1,2,3,4,5],[2,12,13,14],[]),([0,1,272,2,3,5],[9,10],[]),([0,1,118,2,3,4],[1,10],[]),([0,1,7,17,2,3,4,5],[4,5,11],[0]),([0,1,7,11,2,3,22,4],[2,3,4,11],[0]),([0,1,7,11,2,3,4,13],[0,4,5,11],[0]),([0,1,7,11,2,3,4,16],[0,4,11],[0]),([0,1,7,11,12,3,4],[2,3,5,10,11],[0]),([0,1,7,6,33,3,4,5],[1,6,11],[]),([0,1,7,6,30,3,4,5],[1,6,11],[]),([0,1,7,20,4,5],[2,8],[]),([0,1,7,21,3,5],[2,7],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_6Ok : checkNodesBT h0W h0G h0Mask h0Block7_6Pools h0Autos h0Bucket6 7 h0Block7_6 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_6Mem : ∀ ns ∈ h0Block7_6, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_6Ok
+def h0Block7_7Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool14,pool12,pool19,(31,[]),pool6,pool0,pool2,(2,[(1,0,1),(0,6,2),(1,11,2)]),pool10,pool8,(13,[(1,0,1)])]
+def h0Block7_7Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block7_7Specs
+def h0Block7_7 : List NodeSpec := [([0,1,7,12,3,4,5],[2,3,5,7,9,10,11],[]),([0,1,172,6,2,3,4,5],[6,10],[]),([0,1,32,6,2,3,4,5],[1,10],[]),([0,1,29,6,2,3,4,5],[1,10],[]),([0,1,99,6,2,3,4,5],[3],[0]),([0,1,164,6,2,3,4,5],[3,14],[]),([0,1,67,58,2,3,4,5],[0,5,10],[0]),([0,1,67,11,2,3,4],[4,5,10],[0]),([0,1,58,6,2,3,72,5],[0,4,12,13],[]),([0,1,58,63,3,5],[8,9],[]),([0,1,97,6,2,3,4,5],[0,13],[0]),([0,1,166,6,2,3,4,5],[6,13],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_7Ok : checkNodesBT h0W h0G h0Mask h0Block7_7Pools h0Autos h0Bucket6 7 h0Block7_7 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_7Mem : ∀ ns ∈ h0Block7_7, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_7Ok
+def h0Block7_8Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool14,pool12,(29,[]),(24,[]),pool19,(30,[]),(31,[]),pool4,pool0,pool2,pool10,(27,[]),pool8,(10,[(1,0,1),(0,6,4)]),(9,[]),(19,[])]
+def h0Block7_8Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block7_8Specs
+def h0Block7_8 : List NodeSpec := [([0,1,93,11,2,3,4],[2,3,4,13],[]),([0,1,96,6,2,3,4,5],[3,13,19],[0]),([0,1,96,2,3,4,5],[1,3,13,18],[0]),([0,1,11,63,3,4],[5,7,12],[]),([0,1,11,2,20,4],[12,16],[]),([0,1,11,2,100,3,4],[2,13,16],[]),([0,1,11,2,21,3],[12,16],[]),([0,1,11,2,3,4,10],[2,3,4,11],[0]),([0,1,11,2,3,4,10,5],[6,7,8,9,10],[]),([0,1,11,2,3,4,103],[0,12],[]),([0,1,6,71,2,3,4,5],[1,17],[]),([0,1,6,53,3,4,121,5],[3,5,11,14,15],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_8Ok : checkNodesBT h0W h0G h0Mask h0Block7_8Pools h0Autos h0Bucket6 7 h0Block7_8 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_8Mem : ∀ ns ∈ h0Block7_8, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_8Ok
+def h0Block7_9Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool14,(29,[]),pool3,pool0,pool2,pool10,pool8,(17,[]),(2,[(1,0,1),(1,11,2)]),(19,[]),(10,[(1,0,1),(1,82,4)])]
+def h0Block7_9Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block7_9Specs
+def h0Block7_9 : List NodeSpec := [([0,1,6,123,2,3,4,5],[6,8,9,11,13],[]),([0,1,6,54,2,3,134,5],[1,2,5,10],[0]),([0,1,6,54,3,133,4,5],[1,2,6,10],[0]),([0,1,6,2,140,3,4,5],[1,6,10],[]),([0,1,6,2,12,3,22,4],[3,4,8,12],[0,1]),([0,1,6,2,3,148,4,5],[1,10],[]),([0,1,6,2,3,139,4,5],[1,4,8],[0]),([0,1,6,2,3,4,43,5],[0,10],[0]),([0,1,6,2,3,4,161,5],[0,4,9,14],[]),([0,1,6,2,3,4,68,5],[0,1,4,8,13],[0]),([0,1,6,2,3,4,120,5],[2,7,8,9],[0]),([0,1,6,2,3,10,16,5],[0,1,2,4],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_9Ok : checkNodesBT h0W h0G h0Mask h0Block7_9Pools h0Autos h0Bucket6 7 h0Block7_9 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_9Mem : ∀ ns ∈ h0Block7_9, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_9Ok
+def h0Block7_10Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool4,pool3,pool6,pool0,pool2,(27,[]),pool8,(13,[]),pool11,(8,[]),(23,[]),(10,[]),pool24,(20,[(1,0,2)])]
+def h0Block7_10Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block7_10Specs
+def h0Block7_10 : List NodeSpec := [([0,1,116,2,3,4],[1,7],[]),([0,1,63,64,4,5],[5,7],[]),([0,1,63,3,4,78],[5,7],[]),([0,1,2,211,184,4,5],[6,7,8,9],[0]),([0,1,2,194,183,3,4,5],[7,9,15,16],[]),([0,1,2,183,3,191,4,5],[7,9,15,16],[]),([0,1,2,183,3,4,193,5],[0,4],[]),([0,1,2,183,3,4,5],[3,4,11],[]),([0,1,2,106,3,134,5],[2,5,8],[0]),([0,1,2,204,3,16,5],[5,12],[]),([0,1,2,181,212,3,4,5],[13,14,17],[0]),([0,1,2,100,3,4],[2,7,10],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_10Ok : checkNodesBT h0W h0G h0Mask h0Block7_10Pools h0Autos h0Bucket6 7 h0Block7_10 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_10Mem : ∀ ns ∈ h0Block7_10, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_10Ok
+def h0Block7_11Specs : List PoolSpec := [pool13,pool1,pool12,(24,[]),pool4,pool3,pool0,pool2,(27,[]),pool8,(10,[]),(2,[])]
+def h0Block7_11Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block7_11Specs
+def h0Block7_11 : List NodeSpec := [([0,1,2,100,3,4,5],[0,6],[]),([0,1,2,39,3,4],[2,3,6],[]),([0,1,2,3,197,4,5],[4,8,10,11],[]),([0,1,2,3,4,319,5],[5,6],[]),([0,1,2,3,4,333,5],[4,5],[]),([0,1,183,3,4,92,5],[4,8],[0]),([0,1,106,3,133,4,5],[1,5,7],[0]),([1,11,2,106,3,4],[6,9],[]),([1,6,2,106,131,3,4,5],[4,6,9],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_11Ok : checkNodesBT h0W h0G h0Mask h0Block7_11Pools h0Autos h0Bucket6 7 h0Block7_11 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block7_11Mem : ∀ ns ∈ h0Block7_11, Impossible h0G 7 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket6Ok h0Block7_11Ok
+def h0Nodes7 : List NodeSpec := h0Block7_0 ++ h0Block7_1 ++ h0Block7_2 ++ h0Block7_3 ++ h0Block7_4 ++ h0Block7_5 ++ h0Block7_6 ++ h0Block7_7 ++ h0Block7_8 ++ h0Block7_9 ++ h0Block7_10 ++ h0Block7_11
 def h0Bucket7 : BT (List (List Nat)) := buildBucketsBT h0W h0Nodes7
 set_option maxRecDepth 200000 in
-lemma h0Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 7 xs.toFinset) h0Bucket7 := buildBucketsBT_sound (by decide) h0Pairs h0WOk h0PoolsOk h0AutosOk h0Bucket6Ok h0Check7
-def h0Block8_0 : List NodeSpec := indexTripleNodes [(303605,32748,2), (28332247,2146730176,2), (98578687,0xa269e55fb58c4dd,6), (106967295,0xebf3891508b4739,2), (794879,0x1ae7fde39938f8a627,2), (29891647,0x7fa57c1428f0629,2), (1687743,0x3a7f90580871b144b9,2), (462975,0x2382e1e3090471267,2), (98603263,0x34e8041447432c29,2), (102797567,7409816964301353,2), (473993471,0x3a529080f02504d1,2), (2539775,0xffc8d58d00206684231827,2), (2572543,0xffb1a2b74046e3419e2231827,2), (490770687,0xa42c51d023c0a60a1,2), (26752063,0xfc80a0f9abe0d0b0629,2), (213983423,0x6c5c8082343e6a3c14a2b0629,2), (222372031,0x3fe483a96816030f0629,2), (1400959,0x1fe858d0b1a0b8670386e7,2), (2769151,0x7e5068b660b0c912164467,2), (1082167551,0xeb0518bc091229,2), (778495,0x7c20514d081a0c90b54087,2), (168191,0x4e09d0341922461127,2), (3326207,0x1ffe540c68371a1948238a627,2), (25705535,0xe44c00c0e23410f0d0b0629,2), (1695871,0x7940980982e1a42453267,2), (6783477,0xa5e8dc0085c0a45,2), (7934167,0x1f31011832598469,2), (26276095,0x2b99ab8613701104438139,2), (30470399,0xd62045f0348360ca512c39,2), (3129599,0x3f9c090204320e12c319208e2c527,2), (90247263,0x7fb0aa0125046091a229,2), (23612479,0xe280840711a08781c0629,2)]
+set_option maxHeartbeats 0 in
+lemma h0Bucket7Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 7 xs.toFinset) h0Bucket7 := buildBucketsBT_of_mem (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append h0Block7_0Mem h0Block7_1Mem) h0Block7_2Mem) h0Block7_3Mem) h0Block7_4Mem) h0Block7_5Mem) h0Block7_6Mem) h0Block7_7Mem) h0Block7_8Mem) h0Block7_9Mem) h0Block7_10Mem) h0Block7_11Mem)
+def h0Block8_0Specs : List PoolSpec := [pool9,pool1,pool14,pool12,pool4,(14,[]),pool0,pool2,pool10,(47,[]),(13,[]),(2,[(1,0,1),(1,6,2)]),(2,[(1,0,1),(2,6,2)]),pool21,(2,[(1,0,1),(1,2,3)]),(2,[(1,0,1),(1,2,4)])]
+def h0Block8_0Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_0Specs
+def h0Block8_0 : List NodeSpec := [([26,44,0,1,2,3,4],[1,2,4,13],[0,1]),([26,41,0,1,2,3,4],[1,3,6,12],[0]),([26,47,0,1,2,3,4],[1,8],[0]),([26,79,0,1,2,3,4],[6,9],[0]),([26,0,1,7,2,3,4],[0,6,8],[]),([26,0,1,58,2,3,4],[4,8,9],[]),([26,0,1,6,2,3,65,4],[0,1,3,6,7,8,14],[0]),([26,0,1,6,2,3,4,92],[0,1,3,6,7,8,15],[0,1]),([26,0,1,53,2,3,4],[6,9,10],[0]),([26,0,1,54,2,3,4],[6,9],[]),([26,0,1,2,18,3,4],[1,2,3,5,10,11],[0]),([26,0,1,2,3,65,4],[0,1,5,6],[0])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_0 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_0 = true := by decide +kernel
-def h0Block8_1 : List NodeSpec := indexTripleNodes [(1876095,0x770f502101c0c4e12087127,2), (17895679,0x3920fe06e808dc1808d010d1,2), (19992831,0x1eae03a02370c0810c3010d1,2), (30478591,0x34a414c07098021d038329,2), (32575743,0x2ca27012819181438329,2), (356585727,0x92e0c4008c9801008444a0a1,2), (3162367,0x1f62b02206c14482c683738a0cd08461127,2), (1216418047,0xf2906901300888684a0a1,2), (22565951,0x1d6c00a0f8b410f0d0b0629,2), (180494527,0xf9681f00c7e01150cc68f048562229,2), (188883135,0x789805cf0752d02c061e2229,2), (1990783,0xfb848403418c06074b0c887,2), (3948799,0x3e60aae01684111619224258c7,2), (1619071231,0x55c032301a091229,2), (827647,0x3da80ab814c6836c3291a8087,2), (17903871,0xff78011b830b06358d1,6), (22098175,0x1ea2274010455006220887071,2), (26292479,0x1f123e02385f037034194a3c39,2), (2638079,0x3d0c022064810cd8d06e10a0c904714527,6), (73478399,0xcc284090051b43192358d1,2), (81875039,0x3b3012e85502d0760c629,2), (200959,0x27e03260e343291231827,2), (21519423,0x3a87380f4d410f0d0b0629,2), (4440191,0xf8809400619c3a20c267,2), (9208063,0xffa1d00ac0c864c1c25863020237927,2), (20472895,0x1c020028351410f0d0b0629,2), (4669567,0xfe5017061a05060c4e0c1046627,2), (18678261,8606779017797,2), (18940395,0x3f4ef018c0484453,2), (9601279,0xf7e812012020c818b0cc904714527,6), (9732351,0x1ffc480a60260dc386ca478a627,6), (4931711,0xfbe0328170c4389043867,6)]
+lemma h0Block8_0Ok : checkNodesBT h0W h0G h0Mask h0Block8_0Pools h0Autos h0Bucket7 8 h0Block8_0 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_1 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_1 = true := by decide +kernel
-def h0Block8_2 : List NodeSpec := indexTripleNodes [(22122751,0x1d4de008c064838329,2), (9994495,0xf7e226c02b00e063260a866040461127,6), (32608511,0x1ac24014414244429,2), (34658431,0x3ff6808a280208802140100870629091a229,2), (69308671,0x510c47c00a12020229,2), (10191103,0x3fe900a8013031a0dc278ccf0631827,2), (5161087,0x3caa00c8160e28082e130e1830e7,2), (10256639,0x1e550006008d180428cc91a18467,2), (2801919,0xcfa0028240811a83819428654a1042ae527,2), (28422399,0x6b0a8024806a190e69,2), (4145407,0x3d580160330021a80837220433291216c527,6), (17333311,0x351a4e01cc5043c670d0d1,6), (34662527,0x68c79b62100b202c398a514d1ce1a0c31,2), (18381887,0xf7043802e7808305c030f0d0d1,2), (413823,0x3f7407a0aa0420c85614231827,2), (10025087,0x3ffb3ee8033ca84c969,6), (15267967,0x3e91e204b428020a09a052101c2214b284e69,6), (32507967,0x1ef12500141f357c338a2d0229,2), (69208127,0x3483240173c142018a5020229,6), (1720821,0xcd405520020e1a2045,2), (876799,0xfec2014d08060b6f670dcc27,2), (487551,0x8f01701c3648870c1046627,2), (1024255,0x1ff7480070298d00844563322188c27,2), (1073279,0xf80800f02d02d14830418e7,2), (2113791,0x7e02003c05a3008519990c467,2), (2474239,0xf5f802901e14d082106658c250bcc27,2), (1366079,0x7f404e201a407c5a0878ce28b21,2), (1890367,0x331bc02500320173c00405e3c53a1,2), (452671,0x7bc04f100cc6821e338a2d0229,6), (897151,0x62409c092c28022d80cc6968608f38a2d0229,6), (1370175,0xc0401c801900b9e046018a5020229,6), (755417279,0x746802703f008a8731410283242b0629,6)]
+lemma h0Block8_0Mem : ∀ ns ∈ h0Block8_0, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_0Ok
+def h0Block8_1Specs : List PoolSpec := [pool9,pool1,pool5,pool12,(29,[]),(30,[]),pool4,pool3,(14,[]),pool0,pool2,pool10,(27,[]),(13,[]),pool7,(16,[]),pool11,(4,[]),(15,[]),pool22,(0,[(1,2,4),(2,6,5)]),(1,[(1,2,4),(2,6,5)])]
+def h0Block8_1Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_1Specs
+def h0Block8_1 : List NodeSpec := [([26,0,1,2,3,4,61],[1,3,8,9,15,18,19],[0,1]),([26,0,1,2,3,4,92],[11,13,20,21],[0]),([86,0,1,2,3,4,61],[7,8,9,17,18,19],[0,1]),([45,0,1,6,2,3,4,5],[1,2,3,5,9,10,12],[0]),([186,0,1,2,3,4,5],[1,4,16],[]),([268,0,1,2,3,4,5],[1,4,16],[]),([332,0,1,2,3,4,318,5],[7,10,16],[0]),([321,0,1,2,3,4,5],[0,16],[]),([397,0,1,2,3,4,5],[7,16],[]),([443,0,1,2,3,4,5],[10,16],[]),([402,0,1,2,3,4,5],[9,14],[]),([446,0,1,2,3,4,5],[2,6],[])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_2 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_2 = true := by decide +kernel
-def h0Block8_3 : List NodeSpec := indexTripleNodes [(822526143,0xf887004e00f02a198d040a0cd162229,6), (2212095,0xe6c0f2028805206c33c2604d04648c6148c27,2), (2277631,0x3e1503c81ec02c0e80780b2c0619888c112334588827,2), (456767,0x76700e782302140c541,6), (355468503,0xfe9f601360140c3,2), (721487063,0x1ffffd4507003501580a1,2), (889259223,0x1f55c8c308f200783f099805c0a0a1,2), (1057031383,0x1d6d5c8cd4507003500230c0a0a1,2), (357565655,0x3f50c50950fa002d003023,2), (359662807,0x7fc69121ee012e01283023,2), (209913047,0xfe7eaf0248be066807415e00a1,2), (226690263,0xc9fe20448ac2812411c028813e00a1,2), (511804031,0x3f5f062300d80130051018481,2), (669002879,0x3fff60e0933c236008202b008d1045,6), (5947519,0x3ea050285439e00340b8670386e7,6), (186122879,0x7e3054de2c32d0cd04f7004500d806023,2), (6111359,0x1e2068130bb803208b02e1c40418e7,2), (621216863,0x2cffea17832062c2080ac0020781,2), (656424063,0xfffd2811a500b06e400581580463045,2), (6176895,0xf282d0b981b700682201c19c1830e7,2), (6275199,0x3c47301700cc01f013808a04e0c11ace7,2), (5150617835,0xfdfc00c600f050c629,2), (198705791,0x3ff4b408c38b403c800f00d402c34084235333,2), (9227481215,0x3ffe50c41cc0de122005814405c020c608c629,2), (8891977855,0x1fdd91874080a1004201218781300483a19908c629,2), (4278284415,0x766f2461d3c06605902480b806a01e14c610a28c629,2), (121111767,0x3f8a027001008504a80140c3,2), (273679575,0x1fa581e83e0d010a09700183023,2), (380634327,0x7d90290260440fb008e05101283023,2), (403703029,0x1fa685b03b050c300220da9,2), (6471807,0xf88930142c09300e901041ace7,2), (18723397727,0x7a4b01db3d0070d80c40085c050a529,6)]
+lemma h0Block8_1Ok : checkNodesBT h0W h0G h0Mask h0Block8_1Pools h0Autos h0Bucket7 8 h0Block8_1 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_3 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_3 = true := by decide +kernel
-def h0Block8_4 : List NodeSpec := indexPairNodes [(5783679,0x1fe04049c01c160e20220082423836e7), (62128767,0x3ff46202211870b04c1a09ee006a004220b18c33), (18454978735,0x3e32017762014c101b050208229), (6537343,0x3f2203b01604f80620aa0620485c08608d4e7), (18454995039,0xfb2ac076930156016201701408229), (6570111,0x3f62840443e1f0558074809c182356e7), (53740159,0x3ff52602205034149810a09d6014705e016070b18c33), (18186576047,0x790280640665500b00cc02e80da0245811229), (6602879,0x784082005821e006a02e1820d4e7), (55837311,0x3ff7a022050e7c261468284801900d80b0682118c33), (5816447,0x1f1b001e0292500510098045c290d636e7), (6209663,0x1fda80d9802880841a34620231827), (17649786975,0xf5682ec02e2a0f812c028808203201808229), (6635647,0x3e88d00f8126009c0911ace7), (15336063,0xffb20a901102870b06870d04158034690d0518c33), (15860351,0x3ff098044250a2d01d601a094008e68682106333), (17381384287,0xf501680442a0470013004101900c1229), (5849215,0x3f79003603bc01620668a432714e7), (188910807,0xfffa90806a71cf00b201831), (353373399,0x7445c9e807aa004a200c3), (1639987415,0x1fb29200e39e0114050105), (6832255,0xe211a00f40fe8011705c33830418e7), (6865023,0x79940021b881e50020d033830418e7), (389024983,0x3f8404200880050035808828da3), (6897791,0x778084011c078c0241e04e0c11ac7), (277120639,0x1f505901682c2c17c07c403a81), (11442073727,0x3ffec10603e4680caf00dc04a02e010631c59a9), (120065239,0x7518020c73018a07703ca00940a80c3), (6257979607,0x1f85025200cb00741540c50141831), (94899415,0x7140d0c6b00b2078f280150161940c3), (6963327,0x3f7068901b2012600a2025c0820d4e7), (60556927,0x7fe282e1d4346e01ac0e1803c1f0086c0235333)]
+lemma h0Block8_1Mem : ∀ ns ∈ h0Block8_1, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_1Ok
+def h0Block8_2Specs : List PoolSpec := [(18,[]),pool1,pool5,pool14,pool12,pool19,(30,[]),(31,[]),pool4,pool3,pool0,pool2,pool17,(11,[]),(2,[(1,0,1),(2,6,2),(2,6,4)]),(10,[(1,0,1),(2,6,4)]),pool21,(0,[(2,6,4),(3,2,5)]),(1,[(2,6,4),(3,2,5)])]
+def h0Block8_2Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_2Specs
+def h0Block8_2 : List NodeSpec := [([236,0,1,2,3,4,5],[8,9,10],[]),([294,0,1,2,3,4,5],[8,9,10],[]),([366,0,1,2,3,4,5],[0,2,10],[]),([44,87,0,1,2,3,5],[9,10,13],[]),([44,41,0,1,2,3,4,5],[1,4,7,10,11,14],[0,1]),([44,70,0,1,6,2,3,4,5],[3,4,5,6,15,16],[0]),([44,70,0,1,2,3,4,5],[4,9,15,17,18],[]),([44,79,0,1,2,3,5],[1,4,10],[0]),([44,0,1,11,2,3,4],[1,2,3,8,11,12,15],[0,1]),([44,0,1,11,2,3,4,5],[0,1,2,3,8,11,15,16],[0,1]),([44,0,1,6,2,3,65,4,5],[3,4,6,9,11],[0]),([44,0,1,54,2,3,5],[9,10],[])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_4 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_4 = true := by decide +kernel
-def h0Block8_5 : List NodeSpec := indexPairNodes [(6799487,0xfd9067c012e00a600938121041b6e7), (6996095,0xf46010f40094012600a602f024270608d4e7), (124259543,0xee010b09c402c8193e00be00a8110420963), (7061631,0x3f906c20e009201fb00970270608d947), (53216895,0x3b702b24192207d65c05f023600302603c2f02c0e1635333), (107482327,0xfc900d601dc07e80132c0506403810c0c3), (7094399,0x1e981610083805f01f05c33858d4e7), (7127167,0x7990233001e001019f05c33858d947), (7028863,0x3ec3ac016e009a036058420d1a2e2c388827), (25955543,0x37e0340e2017c02602c8b00ae01501719380c3), (7159935,0x3ef029e01fb009703628c11ac7), (7192703,0xf076006bc021c670608d4e7), (7323775,0x3ee30b60052801580b82e0b8670386e7), (7356543,0x1f478457005dc01900d02e1a4245147), (7389311,0x1fd18028d411b00d3401b01820a6e7), (7422079,0x1e4141f1008d8053007404e0c11b6e7), (195562111,0x1ff2416709090063008d00dc18c0ec1e0e0c118c33), (3279984767,0x7fffc0c1000740090a6591017010a0408c629), (103290101,0x7f020718e0066801511c0220da9), (7454847,0x3f8881cf18046c00981140320520411b6e7), (7487615,0x7f6200e60046806507a00c81a6c36e7), (7520383,0x7d3300478c024200a200c8148631b6e7), (7585919,0x3fa181a0e60046802b803205c5811b6e7), (7618687,0x3d6503c6011b002601280b869091b6e7), (7651455,0x7ed80e07300348025016e02e1480436e7), (7553151,0x1fb0614a008d802b8084190a416231827), (7684223,0x1e80c00fe0046807780b810c11b6e7), (15075967,0x70501270975005d01c90b806e0a2200e03e0d0ac1c1822433), (7716991,0xf9fa003602340362077010c1b6e7), (7848063,0x3b21e0110200e780242505c3481045147), (1874884703,0x7c400e000201871c980588011b82845), (7880831,0x1e5a802e3300da003607a1408a6e7)]
+lemma h0Block8_2Ok : checkNodesBT h0W h0G h0Mask h0Block8_2Pools h0Autos h0Bucket7 8 h0Block8_2 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_5 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_5 = true := by decide +kernel
-def h0Block8_6 : List NodeSpec := indexPairNodes [(7465865311,0x188a31a40d19007c17f00088008440301045), (7913599,0x7680c600bf018201083a406202356e7), (3716159615,0x7fa28c4b011c07b80b0a41294c023802b803501909c0211045), (3548420223,0xffc902d02a6008f008f0070d32ba0350170286c8c629), (3481327743,0xfebe241ff007a807867fc12c05114024270c8c629), (12985659519,0x3497f8907c403822022c0490170750286a0246531843042229), (7197495391,0x1e782d402140173004b6017033208229), (7946367,0x1f78123e0090802605ec0320520471947), (7979135,0x7e860801d4154060f0342808d947), (7130402911,0xe105414e400bf00a55058805c050a529), (8011903,0x7da05823e005f80529c0190290d11b6e7), (8077439,0x1e704c070664000900f8803206202356e7), (294657199,0x35a016e00a402f00b1a200e0c106023), (8110207,0xec4047c003d00a4c02e1a408e36e7), (8142975,0xfe873600bf02e8144094170e20e36e7), (8044671,0x7684d00ed002fc028b81440420c8520946d427), (26483887,0xfbd0385d802f8137006e0250104044c3), (8175743,0x3d50199002ac039402b0e02356e7), (8208511,0x798f002e81cbc1a471011b6e7), (244189279,0x7ff4bf802c707200f096c019a80781), (1505757279,0x7f653c80178040d03), (138428510,0x1ff386a6980bf803700630038e7f04c2e1), (906233951,0x1f55490d62a2006e06c80784b600940b122e1), (1530923103,0x3b87142242009100a4031801281383), (3020163167,0x3d3aa8c68a6980bf80042004081a80940b122e1), (7969181791,0x7fc0f80612e0004805), (2076182623,0x1f98481060eb000e80c8805301281383), (773850239,0x3e183a820c5880a4b7300aa00c60010f834780418c33), (778044543,0xe582b483086803d2a7301d50090b8360e3084e0c33), (3867170943,0x3ff0e01d6004fc01d0b04d240b819208c629), (3800078463,0x3d7f070264054c001d001c3995103500681701418c33), (3732985983,0xfa7f070048031801ea01e29fe04b0004021214848c629)]
+lemma h0Block8_2Mem : ∀ ns ∈ h0Block8_2, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_2Ok
+def h0Block8_3Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool14,pool19,pool4,pool3,pool6,(14,[]),pool0,pool2,pool10,pool8,pool7,(3,[]),(19,[]),(0,[]),(32,[]),(16,[(1,0,1)]),(2,[(1,0,1),(2,6,114)])]
+def h0Block8_3Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_3Specs
+def h0Block8_3 : List NodeSpec := [([44,0,1,2,3,4,5],[6,7],[]),([44,0,1,2,3,312,5],[7,10,17],[]),([44,0,1,2,3,61,5],[7,10,15],[0,1]),([119,0,1,2,3,4,5],[3,6,7,11,20],[0]),([87,89,0,1,6,2,3,4,5],[0,1,2,4,8,13],[0,1]),([87,31,0,1,6,2,3,4,5],[0,5,12,13,16,19],[]),([87,28,0,1,6,2,3,4,5],[1,4,11,14,16,18],[0]),([87,328,0,1,3,4,5],[7,10],[]),([87,0,1,11,2,3,4],[10,13],[]),([87,0,1,6,2,131,3,4,5],[2,6,7,9,10,13],[0]),([87,0,1,2,3,229,4,5],[1,6,14],[]),([87,0,1,2,3,298,5],[7,10,15],[])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_6 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_6 = true := by decide +kernel
-def h0Block8_7 : List NodeSpec := indexPairNodes [(14663299199,0xf427f0700eb007c36073032bc026c008382c18e0c33), (14327795839,0x645895e0e01c6004ac600420340808c0643a18c70629), (13992292479,0xf4613f83806e80121dc08b003e03a8082004714c6380c33), (6031605,0x3e34048a80223001a05b6d), (87033951,0x3360511c10052090802880841a140a0383), (23332415,0x190a8094620023c01a6bc82c3432b031), (16941183,0x3d280a31000c600fc070ce1208d4e7), (16810111,0xfdf05e0a3c01ed00e1703380436e7), (396363871,0xf8817011c100520eb8008c381082b04c3), (17006719,0x3fb817046200908021804a069091b6e7), (17137791,0x3f9c0d15380206014c0e17038808d4e7), (467667039,0x7d7f004639c01140a403c081805302f01d03), (202938779743,0x1febfe0083b400a100cd008810400e0641), (7600165079,0x7eb4c00a5502104e051229), (18352223,0x4436200d4800b403), (1111492703,0x3d680b002335600ee075401281383), (2143291487,0xfcc40086c40148322014c090340686c3), (1186990175,0xce4011c1005200980692da0308108361183), (17334399,0x1e7a0231000c600fc070ce1208d4e7), (610272383,0x7de01a0f4830cf8008e01dd889b011c064a0d838b022433), (8339583,0x1f630147803da01c2e0520c714e7), (29460832431,0x1f2701312000d0094008a6c142429), (421529695,0xfd9c07436200c4804e0a48010b0d0383), (17399935,0xf75016180206014c04a0670608d4e7), (217056383,0x7f2d0068291041867c011d00ccc0ee0333e0d83c222433), (16875647,0x1f3b017e8015600860240d0290b1b6e7), (4118829183,0xffe198060c009f803a1609bf8020ce88c629), (3984644223,0x1ffdc29800c6007a8078a7f830403706318c629), (15334428799,0xf4abb9568012ab017200840240816406e330970629), (8405405871,0xfe00c003b400e11408411229), (84940895,0x1f50ee600a411b00b701a141408656023), (22809151,0x3c82841405ae0023c01a6b8c1a18d031)]
+lemma h0Block8_3Ok : checkNodesBT h0W h0G h0Mask h0Block8_3Pools h0Autos h0Bucket7 8 h0Block8_3 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_7 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_7 = true := by decide +kernel
-def h0Block8_8 : List NodeSpec := indexPairNodes [(17662079,0xe183ed8024200a200981a70f8a627), (17727615,0xfec85002c47813858db627), (392173663,0x1ee146c37300520eb8008f3803834106023), (17793151,0x1fe0f07b600f5800700c814848db627), (17858687,0xf78160aa072e0049800d017404106a627), (463476831,0x3fae063580ff802281dc027400183), (8338354271,0x7f8e068a000c0c40170040e031), (1178605663,0x758361b98029004c03496d00e401206c29a16023), (17989759,0xea40f6c002500268019027091c1827), (18055295,0x3e501ff003480f83ac04e04b8a627), (417339487,0x3dc023617093350077011a0138352400858686743), (18120831,0xf1400d60024c0210120404106a627), (18186367,0xf060719c8006804400f02e0458db627), (4253063295,0x7fff3a00064008e1ccb2203458540828c629), (41423999,0x18c0288014815407b00de015cf650da08634333), (1050678399,0x3ff96f8ab0153802f817c0f602180790090b18c33), (396372213,0xfa19dc800c9002544701541a9), (229643391,0xfb1449f88f00fe803140ee04703d81c409301900c18c33), (18514047,0x1fb65002981882954084190bc2231827), (18579583,0xfdbf8014c01a04502100848620231827), (84095,0x1ee2c00ff00340b84618215493), (51394687,0xfec3e802ec400c2026816e00410998f42c3066ad), (306204887,0x349807b600488033804b8b708104d1), (495743,0xe42800a200480cd649a810a627), (1089663,0x3e4b0034b8ce010a627), (18645119,0xfc8edc0045805c23010234433), (1292001375,0x7c970027c0129003180820ae0c844220a1), (18710655,0x1f284009f00acc01623c09c2c6a627), (1224925279,0xf32a0045805c804105706426020a1), (18776191,0xfcce80116028c00780881864e03852010a627), (616585343,0x1fd34c0180800ba08464c9f0110822433), (1302655,0x18ca001a0170196c28211020831827)]
+lemma h0Block8_3Mem : ∀ ns ∈ h0Block8_3, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_3Ok
+def h0Block8_4Specs : List PoolSpec := [pool9,pool1,pool12,(29,[]),pool4,pool3,pool6,pool0,pool2,pool10,pool8,pool7,(16,[]),pool11,(8,[]),(36,[]),(35,[]),(1,[(2,2,4),(3,3,5),(1,28,2)])]
+def h0Block8_4Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_4Specs
+def h0Block8_4 : List NodeSpec := [([87,0,1,2,3,134,5],[5,10,14,15,16],[0]),([87,0,1,30,3,4,5],[0,6,8,17],[0]),([87,0,1,174,3,188,4,5],[0,4,7,8],[0]),([297,0,1,2,3,4,5],[7,11],[]),([369,0,1,2,3,4,5],[7,11],[]),([377,0,1,2,3,4,5],[1,2,3],[]),([433,0,1,2,3,4,5],[8,13],[]),([198,108,0,1,2,3,5],[5,13],[]),([198,0,1,2,3,188,4,5],[4,5,8,9,13],[1]),([198,0,1,2,3,114,5],[8,11,13],[]),([198,0,1,2,3,4,5],[5,13],[]),([198,0,1,2,3,312,5],[5,7,12],[])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_8 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_8 = true := by decide +kernel
-def h0Block8_9 : List NodeSpec := indexPairNodes [(18841727,0x1fd05400ff00340b846021c4433), (964784255,0x3fe99c3000d81080881440a9016c0104ecc61011219a9), (50600681599,0x3eb788598016b00a900260261219a9), (18972799,0x7f445003dc00d02e198486627), (19038335,0x1e8d800478007821403206c52c6a627), (348180695,0x3d19003fa00a501f409878ca0081160e160a1), (19103871,0x1f42a004b403d04c3c7500438c106a627), (1728639,0x3f1c40077002408607c318e0c33), (2298515583,0x1d9d8020401c5b0021aa008e053a188f80bf01c3e16668da9), (2231423103,0x7c21e802040048ec0242802503903f86889181f80e1e842061a9), (19169407,0xfa5c2006080f7010c0f851a3627), (2533412991,0xffe799004b80b3017202d035017f088230070f432471431), (1400967383,0xdc35b300147658198361a1960a1), (1417744479,0x330538047c03fb0053710c0cc02161a1960a1), (1908863,0x1ece80088318a4b00c190270081827), (1925247,0xf81c01f180090411403204e010a627), (12386687,0x7e5cc001d401f9c0d02c0b0d0238a627), (19234943,0xfc938c004580643c2cc118c33), (6373503,0x1f987002ec060804180643c281045427), (2843777151,0x7e61c008a0594012428c99807c038045244827), (2130747567,0x379c00a2bb01b0528223068d808420a1), (683710591,0x3cba002f802d29d40116007050a8828e07c05c1043646f1), (2063671471,0x18d50010f00788414560529a1706426020a1), (19300479,0xfc6c80091802b052a80c1e06962c6a627), (717265023,0xf3a8007a01a54d8022c02a196f0190058170545044846f1), (1468084319,0x1fefa800903d00c5c02160904aa1), (19366015,0x7f3ae0005a0050a0f4030781cb010a627), (1426277247,0x7b7b001620123640540a1), (893425791,0xfcf980091008900ac72c65d05701f00e010884106333), (901814399,0x3f98a6c0003802f808b0038266544143500381410823585), (12517759,0x6503c3e5cc000bc01ec0a80a241704e04231827), (4865606527,0xf0d801e18f81ec0540a1)]
+lemma h0Block8_4Ok : checkNodesBT h0W h0G h0Mask h0Block8_4Pools h0Autos h0Bucket7 8 h0Block8_4 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_9 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_9 = true := by decide +kernel
-def h0Block8_10 : List NodeSpec := indexPairNodes [(9110067327,0x3fd8a002f805480be022c00e1ccb220321c108923585), (19497087,0x1fd62400ff00340c878598e0c33), (6406271,0x7d0f8018e030407b801a0643c2890b627), (457265367,0x6790075600e10d02780f5704604a0a1), (675326079,0x3fa2008900b94ea004900c616b804c0b062105c1043646f1), (1384206431,0x3e680261003b2a08c092c06c34140a1), (4472959,0x7c5e005530258060c813810c6a627), (1434538199,0x3db200d64015c4a00208a01b0121a20a1), (4505727,0xf6f8035100538640680104500c813810c6a627), (10420607,0x6503c3e5cc00e080743008818d0cc8340e0238a627), (1493262511,0x1f16801b40740881923306c2203031), (314659031,0x722c00a901de052a810836090c60a1), (19562623,0x3fd7740015801703e18c118c33), (17203327,0x1f8b600f8401820046005c0f850229427), (3439382655,0x1ff22b8022f0023200b80b900081a0d4048101980387a19908dd1), (19628159,0x1e73c001f400181f05205154064e0484106a627), (1434546271,0x7e3036390063600470114062e010b04812a1), (19693695,0x3f958032a018700340e400700c9c0909c2c6a627), (4735103,0x3e310009bc400d02e010631c4433), (4800639,0x3e3d00120c02e15090b627), (4866175,0x7e230017300fc01884190c41c1827), (19759231,0x7ac92001106017008318234433), (19824767,0x7ecba0020c02e1501045427), (5062783,0x3f7fc00cec0288084190b8b0231827), (5554303,0xf504002f004f7010c008324118c33), (19890303,0x759dc0027b801a02e05a4118c33)]
+lemma h0Block8_4Mem : ∀ ns ∈ h0Block8_4, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_4Ok
+def h0Block8_5Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool14,pool12,(29,[]),pool4,pool3,pool6,pool0,pool2,pool10,pool8,(2,[(1,0,1),(1,6,2),(2,18,4)]),pool7,(16,[]),pool11,(3,[]),(2,[(1,0,2),(2,174,4),(1,3,4)]),(36,[]),(35,[])]
+def h0Block8_5Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_5Specs
+def h0Block8_5 : List NodeSpec := [([198,0,1,2,3,16,5],[2,8,13,17,18,19],[1]),([233,0,1,2,3,4,5],[15,16,17],[]),([436,0,1,2,3,4,5],[0,3,10],[]),([176,234,0,1,3,4,5],[8,10],[]),([176,0,1,174,3,4,5],[10,15],[]),([38,0,1,6,2,3,5],[2,5,10,11,14],[0]),([38,0,1,2,3,4,5],[7,8],[]),([38,0,1,2,3,5],[2,10,13,14,15],[]),([89,180,0,1,2,4,5],[2,9,16,17],[]),([89,314,0,1,2,4,5],[6,7],[]),([89,98,0,1,2,4,5],[8,12,20,21],[0]),([89,0,1,6,2,3,4,92,5],[0,1,2,4,5,9,11,13],[0])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test8_10 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Block8_10 = true := by decide +kernel
-def h0Nodes8 : List NodeSpec := h0Block8_0 ++ h0Block8_1 ++ h0Block8_2 ++ h0Block8_3 ++ h0Block8_4 ++ h0Block8_5 ++ h0Block8_6 ++ h0Block8_7 ++ h0Block8_8 ++ h0Block8_9 ++ h0Block8_10
-lemma h0Check8 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket7 8 h0Nodes8 = true := by
-  unfold h0Nodes8 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨h0Test8_0,h0Test8_1⟩,h0Test8_2⟩,h0Test8_3⟩,h0Test8_4⟩,h0Test8_5⟩,h0Test8_6⟩,h0Test8_7⟩,h0Test8_8⟩,h0Test8_9⟩,h0Test8_10⟩
+lemma h0Block8_5Ok : checkNodesBT h0W h0G h0Mask h0Block8_5Pools h0Autos h0Bucket7 8 h0Block8_5 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_5Mem : ∀ ns ∈ h0Block8_5, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_5Ok
+def h0Block8_6Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool12,pool3,pool6,pool0,pool2,pool10,pool8,pool11,(6,[]),(19,[]),(0,[]),(2,[(1,0,1),(1,2,3),(2,65,4)]),(36,[]),(35,[])]
+def h0Block8_6Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_6Specs
+def h0Block8_6 : List NodeSpec := [([89,0,1,2,146,4,5],[5,10,16,17],[0]),([165,0,1,2,3,4,5],[5,9,16,17],[0]),([239,0,1,2,3,4,5],[1,6,11],[]),([372,0,1,2,3,4,5],[5,6,13],[]),([285,0,1,2,3,4,5],[2,6],[]),([285,0,1,2,3,312,5],[5,11,14],[]),([290,0,1,2,3,4,5],[2,6],[]),([159,0,1,2,3,4,5],[0,5,12,16,17],[0]),([69,0,1,6,2,3,65,4,5],[1,4,5,8,10],[]),([69,0,1,6,2,3,4,5],[0,1,2,3,5,7,8,15],[0]),([69,0,1,2,3,114,5],[3,10],[]),([69,0,1,2,3,4,5],[1,6,8,16],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_6Ok : checkNodesBT h0W h0G h0Mask h0Block8_6Pools h0Autos h0Bucket7 8 h0Block8_6 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_6Mem : ∀ ns ∈ h0Block8_6, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_6Ok
+def h0Block8_7Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool14,pool12,pool4,pool3,pool6,pool0,pool2,pool10,(27,[]),(2,[(1,0,1),(2,6,2),(2,6,3)]),pool11,(17,[]),(19,[]),(8,[(1,0,1),(3,4,5)]),(2,[(1,0,2),(3,1,174),(2,35,3)])]
+def h0Block8_7Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_7Specs
+def h0Block8_7 : List NodeSpec := [([394,0,1,2,3,4,5],[7,10],[]),([215,0,1,2,3,4,5],[7,14],[]),([31,74,0,1,2,3,4,5],[6,7,14],[]),([31,0,1,292,2,3,4,5],[6,7,14],[]),([31,0,1,7,6,2,3,4,5],[4,10,11],[0]),([31,0,1,6,53,2,3,4,5],[6,10,11,14,15,16,17],[0]),([31,0,1,2,109,3,4,5],[7,11,14],[]),([42,0,1,6,2,3,4,5],[3,5,7,8,9],[0]),([182,0,1,2,174,3,4,5],[3,6,10,12,18],[0]),([46,41,0,1,2,3,4,5],[2,3,5,9,10,13],[0,1]),([104,0,1,11,2,3,4],[0,3,4],[]),([180,177,0,1,174,3,4,5],[1,8,9,12],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_7Ok : checkNodesBT h0W h0G h0Mask h0Block8_7Pools h0Autos h0Bucket7 8 h0Block8_7 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_7Mem : ∀ ns ∈ h0Block8_7, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_7Ok
+def h0Block8_8Specs : List PoolSpec := [pool13,pool1,pool5,pool14,pool12,pool4,pool3,pool6,pool0,pool2,pool10,(27,[]),(11,[]),pool8,(2,[(1,0,1),(1,6,2),(2,18,3)]),pool7,pool11,(1,[]),(19,[(3,1,174)])]
+def h0Block8_8Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_8Specs
+def h0Block8_8 : List NodeSpec := [([180,35,0,1,2,3,4,5],[1,8,9,15,18],[]),([180,0,1,2,131,4,5],[8,9,15],[]),([180,0,1,2,3,4,203,5],[2,6,16],[]),([230,0,1,2,3,4,5],[1,9,15,17],[]),([223,0,1,2,3,4,5],[13,15,16],[]),([37,0,1,6,2,4,5],[1,4,8,9,14],[0]),([37,0,1,2,4,5],[0,1,8,12],[]),([314,205,0,1,2,3,5],[1,7],[]),([344,0,1,2,3,4,5],[5,6],[]),([77,0,1,2,4,312,5],[5,6,8],[]),([98,0,1,6,2,3,4,92,5],[1,7,9,10,11],[]),([98,0,1,6,2,3,4,5],[2,3,4,6,9,10],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_8Ok : checkNodesBT h0W h0G h0Mask h0Block8_8Pools h0Autos h0Bucket7 8 h0Block8_8 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_8Mem : ∀ ns ∈ h0Block8_8, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_8Ok
+def h0Block8_9Specs : List PoolSpec := [pool13,pool9,pool1,pool14,pool4,pool3,pool6,pool0,pool2,pool17,(47,[]),pool8,pool7,pool11,(19,[]),(20,[]),(9,[(1,0,1),(3,3,5)]),(32,[]),(1,[(1,0,4),(3,3,5)]),pool23,pool25]
+def h0Block8_9Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_9Specs
+def h0Block8_9 : List NodeSpec := [([98,0,1,2,131,4,5],[0,8],[]),([417,0,1,2,3,4,5],[6,8],[]),([28,177,0,1,174,3,4,5],[1,6,8,15],[]),([28,35,0,1,2,3,4,5],[2,7,8,11],[]),([28,205,0,1,2,3,312,5],[2,6,10],[0]),([28,74,0,1,2,3,4,312,5],[4,7,17,18],[]),([28,74,0,1,2,3,4,5],[2,5,12,13,19,20],[0]),([28,0,1,330,2,3,4,5],[2,6,10],[]),([28,0,1,84,2,3,4,5],[2,6,10],[]),([28,0,1,7,6,2,3,4,5],[1,3,8,9],[0]),([28,0,1,6,54,2,3,4,5],[1,2,5,8,14,16],[0]),([28,0,1,2,106,3,4,5],[1,2,6,8,15],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_9Ok : checkNodesBT h0W h0G h0Mask h0Block8_9Pools h0Autos h0Bucket7 8 h0Block8_9 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_9Mem : ∀ ns ∈ h0Block8_9, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_9Ok
+def h0Block8_10Specs : List PoolSpec := [pool13,(18,[]),pool9,pool1,pool5,pool14,pool12,(29,[]),pool3,pool6,pool0,pool2,pool8,(13,[]),pool7,(8,[]),(9,[]),(10,[]),(2,[(1,0,1),(0,2,3),(2,6,53)]),(2,[(1,0,1),(0,2,4),(2,6,54)]),(2,[(1,0,1),(2,6,153)]),(1,[(2,2,4),(3,3,5),(1,87,28)])]
+def h0Block8_10Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_10Specs
+def h0Block8_10 : List NodeSpec := [([28,0,1,2,407,3,4,5],[2,3,9],[]),([149,0,1,2,3,4,5],[2,9,11,21],[0]),([41,47,0,1,3,4,5],[3,6,10],[0]),([41,0,1,11,2,3,4],[10,12],[]),([41,0,1,6,2,3,4,16,5],[5,6,7,11,12,14],[0,1]),([41,0,1,53,3,4,5],[10,14],[]),([41,0,1,54,3,4,5],[10,14],[]),([157,0,1,2,3,4,5],[4,8,10,16,20],[1]),([136,0,1,2,3,4,5],[4,6,10,15,19],[0]),([113,0,1,2,3,4,5],[1,3,10,13,16,17,18],[0]),([282,0,1,2,3,4,5],[0,10],[]),([278,0,1,2,3,4,5],[0,10],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_10Ok : checkNodesBT h0W h0G h0Mask h0Block8_10Pools h0Autos h0Bucket7 8 h0Block8_10 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_10Mem : ∀ ns ∈ h0Block8_10, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_10Ok
+def h0Block8_11Specs : List PoolSpec := [pool13,pool9,pool1,pool12,(29,[]),pool4,pool3,pool6,pool0,pool2,pool10,(5,[]),pool8,pool7,(16,[]),(2,[(1,0,1),(1,6,4),(3,2,61)]),pool23,pool25]
+def h0Block8_11Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_11Specs
+def h0Block8_11 : List NodeSpec := [([107,0,1,11,2,3,4],[0,5,9],[]),([328,0,1,3,312,92,5],[6,8],[]),([336,0,1,2,3,4,5],[5,6,8],[]),([313,0,1,2,3,312,5],[6,8],[]),([76,0,1,6,3,4,5],[2,3,8,9,15],[0]),([76,0,1,3,4,312,5],[5,6,8],[]),([76,0,1,3,4,61,5],[2,4,11,14,15],[0,1]),([76,0,1,3,4,5],[2,8,12,13,15],[]),([70,205,0,1,2,3,312,5],[8,13],[]),([70,74,0,1,2,3,4,5],[5,6,7,8,16,17],[0]),([70,0,1,292,2,3,4,5],[1,8,13],[]),([70,0,1,84,2,3,4,5],[8,10,13],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_11Ok : checkNodesBT h0W h0G h0Mask h0Block8_11Pools h0Autos h0Bucket7 8 h0Block8_11 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_11Mem : ∀ ns ∈ h0Block8_11, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_11Ok
+def h0Block8_12Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool14,pool12,(29,[]),(24,[]),(30,[]),(31,[]),pool4,pool3,pool6,pool0,pool2,pool10,(47,[]),(11,[]),pool15,pool8,(13,[]),(16,[]),(4,[]),(10,[(1,0,1),(0,6,4)]),(10,[(1,0,1),(1,6,4)]),(19,[]),pool16]
+def h0Block8_12Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_12Specs
+def h0Block8_12 : List NodeSpec := [([70,0,1,58,6,2,3,4,5],[4,5,6,15,23],[0]),([70,0,1,2,3,4,61,5],[1,3,11,13,17,24],[]),([70,0,1,2,3,312,203,5],[9,11,13,25],[]),([431,0,1,2,3,4,5],[11,14,19],[]),([317,0,1,2,3,4,5],[10,11,13],[]),([117,350,0,1,2,3,4],[13,16],[]),([117,0,1,6,2,3,4],[2,6,8,13,18],[0]),([117,0,1,2,3,4,312],[11,13,26],[]),([47,0,1,11,2,3,4],[2,4,5,7],[0]),([124,0,1,2,3,4,5],[11,13,20,22],[]),([79,0,1,11,2,3,4],[0,13,21],[]),([141,0,1,2,3,4,5],[12,13,20,22],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_12Ok : checkNodesBT h0W h0G h0Mask h0Block8_12Pools h0Autos h0Bucket7 8 h0Block8_12 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_12Mem : ∀ ns ∈ h0Block8_12, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_12Ok
+def h0Block8_13Specs : List PoolSpec := [pool9,pool1,(29,[]),pool4,pool3,pool6,(14,[]),pool0,pool2,pool10,(27,[]),pool8,pool7,pool11,(19,[])]
+def h0Block8_13Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_13Specs
+def h0Block8_13 : List NodeSpec := [([421,0,1,2,3,4,5],[1,3,7],[]),([454,0,1,2,3,4,5],[8,13],[]),([396,0,1,2,3,4,5],[1,3,7],[]),([426,0,1,2,3,4,5],[8,13],[]),([442,0,1,2,3,4,5],[8,13],[]),([177,0,1,181,174,3,4,5],[5,7,10,11],[]),([177,0,1,174,3,4,16,5],[2,12,13],[]),([457,0,1,2,3,4,5],[1,4,6],[]),([296,0,1,2,3,4,5],[0,4,7],[]),([352,0,1,2,3,4,5],[5,7,9],[]),([368,0,1,2,3,4,5],[1,3,7,14],[]),([376,0,1,2,3,4,5],[1,3,7],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_13Ok : checkNodesBT h0W h0G h0Mask h0Block8_13Pools h0Autos h0Bucket7 8 h0Block8_13 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_13Mem : ∀ ns ∈ h0Block8_13, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_13Ok
+def h0Block8_14Specs : List PoolSpec := [pool1,pool5,pool12,pool4,pool3,pool0,pool2,(27,[]),(5,[]),pool8,pool7,(16,[]),pool11,(12,[]),(2,[]),(19,[(3,1,174)])]
+def h0Block8_14Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_14Specs
+def h0Block8_14 : List NodeSpec := [([406,0,1,2,3,4,5],[0,3,5],[]),([432,0,1,2,3,4,5],[6,12],[]),([35,187,0,2,3,4,5],[0,6,14],[]),([35,0,1,2,181,3,4,5],[0,1,5,7,9],[0]),([35,0,1,2,3,4,16,5],[0,10,11,12,13,15],[]),([35,0,6,2,3,4,5],[0,2,5,6,8],[0]),([424,0,1,2,3,4,5],[1,4],[]),([429,0,1,2,3,4,5],[1,10],[]),([448,0,1,2,3,4,5],[1,10],[]),([238,0,1,2,3,4,5],[0,1,4],[]),([354,0,1,2,3,4,5],[0,1,10],[]),([371,0,1,2,3,4,5],[0,1,3],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_14Ok : checkNodesBT h0W h0G h0Mask h0Block8_14Pools h0Autos h0Bucket7 8 h0Block8_14 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_14Mem : ∀ ns ∈ h0Block8_14, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_14Ok
+def h0Block8_15Specs : List PoolSpec := [pool13,pool1,pool5,pool4,pool3,pool6,(14,[]),pool0,pool10,(47,[]),(5,[]),pool8,pool7,pool11,(17,[]),(19,[(3,1,263)])]
+def h0Block8_15Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_15Specs
+def h0Block8_15 : List NodeSpec := [([266,0,1,2,3,4,92,5],[3,5,7,14,15],[]),([410,0,1,2,3,4,5],[2,4],[]),([438,0,1,2,3,4,5],[1,2,4],[]),([214,0,1,2,3,4,5],[1,2,7],[]),([205,0,1,2,3,65,312,5],[0,7],[]),([205,0,1,2,3,298,5],[1,12],[]),([205,0,1,2,3,269,5],[5,13],[0]),([404,0,1,2,3,4,5],[1,8,10],[]),([450,0,1,2,3,4,5],[1,6,12],[]),([241,0,1,2,3,4,5],[3,5,8],[]),([299,0,1,2,3,4,5],[3,9,12],[]),([374,0,1,2,3,4,5],[1,3,11],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_15Ok : checkNodesBT h0W h0G h0Mask h0Block8_15Pools h0Autos h0Bucket7 8 h0Block8_15 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_15Mem : ∀ ns ∈ h0Block8_15, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_15Ok
+def h0Block8_16Specs : List PoolSpec := [pool1,(24,[]),pool4,pool3,pool6,pool0,pool2,pool10,pool11,(9,[]),(19,[]),pool23,pool25]
+def h0Block8_16Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_16Specs
+def h0Block8_16 : List NodeSpec := [([451,0,1,2,3,4,5],[6,8],[]),([74,0,1,2,3,65,4,5],[0,3,5,11,12],[]),([74,0,1,2,3,4,92,5],[2,3,5,11,12],[]),([74,0,1,2,3,4,16,5],[2,3,8,9,11,12],[]),([453,0,1,2,3,4,5],[0,1,4],[]),([440,0,1,2,3,4,5],[2,4,7],[]),([208,234,0,1,3,4,5],[0,8],[]),([208,350,0,1,2,3,5],[0,5],[]),([208,364,0,1,2,3,4,5],[0,5,7,10],[]),([208,0,1,2,3,4,5],[2,4,7],[]),([208,0,1,2,3,312,92,5],[3,5,7],[]),([208,0,1,2,3,312,5],[0,5],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_16Ok : checkNodesBT h0W h0G h0Mask h0Block8_16Pools h0Autos h0Bucket7 8 h0Block8_16 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_16Mem : ∀ ns ∈ h0Block8_16, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_16Ok
+def h0Block8_17Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool12,(29,[]),pool4,pool3,pool0,pool2,(47,[]),(27,[]),pool7,(16,[]),pool11,(2,[(3,0,2),(1,3,4),(3,1,16)])]
+def h0Block8_17Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_17Specs
+def h0Block8_17 : List NodeSpec := [([208,0,1,174,3,4,5],[2,14],[]),([219,0,1,2,3,4,5],[2,8,13],[]),([255,234,0,1,2,3,4,5],[2,3,7,9,15],[]),([286,0,1,2,3,4,5],[2,3,8],[]),([187,234,0,1,2,3,4,16,5],[2,5,8,9,12],[0]),([187,0,1,2,3,4,298,5],[0,2,8,9,10,11],[]),([422,0,1,2,3,4,5],[2,4,8],[]),([400,0,1,2,3,4,5],[3,6],[]),([427,0,1,2,3,4,5],[2,4,8],[]),([445,0,1,2,3,4,5],[3,6],[]),([234,0,1,2,3,229,4,5],[1,6,9],[]),([234,0,1,258,3,4,5],[9,14],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_17Ok : checkNodesBT h0W h0G h0Mask h0Block8_17Pools h0Autos h0Bucket7 8 h0Block8_17 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_17Mem : ∀ ns ∈ h0Block8_17, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_17Ok
+def h0Block8_18Specs : List PoolSpec := [pool1,pool12,(29,[]),pool4,pool3,pool6,pool0,pool2,pool7,pool11]
+def h0Block8_18Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_18Specs
+def h0Block8_18 : List NodeSpec := [([234,0,1,249,3,4,5],[5,9],[]),([234,0,1,175,3,4,16,5],[2,3,8],[]),([234,0,1,3,253,4,5],[4,9],[]),([234,0,1,3,133,4,5],[4,7],[]),([234,0,1,3,4,121,5],[7,9],[]),([234,0,1,3,4,243,5],[3,4],[0]),([456,0,1,2,3,4,5],[4,7],[]),([256,0,1,2,3,4,5],[4,7],[]),([262,0,1,2,3,4,5],[4,7],[]),([257,0,1,2,3,4,5],[4,9],[]),([260,0,1,2,3,4,5],[5,7],[]),([408,0,1,2,3,4,5],[0,1,6],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_18Ok : checkNodesBT h0W h0G h0Mask h0Block8_18Pools h0Autos h0Bucket7 8 h0Block8_18 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_18Mem : ∀ ns ∈ h0Block8_18, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_18Ok
+def h0Block8_19Specs : List PoolSpec := [pool9,pool1,pool5,pool12,pool4,pool3,pool0,pool2,pool10,(47,[]),(5,[]),(13,[]),pool7,pool11,(6,[]),(23,[]),(10,[])]
+def h0Block8_19Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_19Specs
+def h0Block8_19 : List NodeSpec := [([434,0,1,2,3,4,5],[2,4],[]),([34,1,6,2,3,4,5],[1,3,6,10],[]),([291,0,1,2,158,4,5],[5,6,16],[]),([291,0,1,2,4,122,5],[12,13,16],[]),([423,0,1,2,3,4,5],[0,5,6],[]),([306,0,1,2,3,4,5],[6,12],[]),([311,0,1,2,3,4,5],[5,8,13],[]),([428,0,1,2,3,4,5],[6,9,14],[]),([447,0,1,2,3,4,5],[6,11,12],[]),([409,0,1,2,3,4,5],[0,5,6],[]),([437,0,1,2,3,4,5],[5,6,15],[]),([381,0,1,2,3,4,5],[5,7],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_19Ok : checkNodesBT h0W h0G h0Mask h0Block8_19Pools h0Autos h0Bucket7 8 h0Block8_19 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_19Mem : ∀ ns ∈ h0Block8_19, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_19Ok
+def h0Block8_20Specs : List PoolSpec := [pool13,(18,[]),pool1,pool14,pool4,pool3,pool6,(14,[]),pool0,pool2,pool10,pool8,pool7,pool11,(3,[]),(0,[])]
+def h0Block8_20Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_20Specs
+def h0Block8_20 : List NodeSpec := [([350,0,1,2,3,130,5],[0,8],[]),([350,0,1,2,3,103,5],[6,8],[]),([350,0,1,2,3,160,5],[0,8],[]),([350,0,1,2,3,134,5],[1,2,11,12],[]),([403,0,1,2,3,4,5],[6,8,10],[]),([449,0,1,2,3,4,5],[7,8,12],[]),([73,1,6,2,3,4,5],[2,3,4,14],[]),([73,1,2,3,4,312,5],[4,5,15],[]),([73,1,2,3,4,61,5],[4,5,14],[]),([73,1,2,3,312,203,5],[4,5],[]),([378,0,1,2,3,4,5],[6,10,13],[]),([452,0,1,2,3,4,5],[6,8,9],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_20Ok : checkNodesBT h0W h0G h0Mask h0Block8_20Pools h0Autos h0Bucket7 8 h0Block8_20 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_20Mem : ∀ ns ∈ h0Block8_20, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_20Ok
+def h0Block8_21Specs : List PoolSpec := [pool13,(18,[]),pool9,pool5,pool4,pool3,pool6,pool0,pool2,pool10,(47,[]),pool7,pool11,(12,[]),(19,[]),(0,[]),(2,[]),(0,[(3,3,5),(1,28,350)])]
+def h0Block8_21Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_21Specs
+def h0Block8_21 : List NodeSpec := [([439,0,1,2,3,4,5],[6,9,12],[]),([326,0,1,2,3,4,5],[6,8],[]),([326,1,2,3,4,312,5],[5,7,15],[]),([326,1,2,3,312,92,5],[5,7],[]),([338,1,2,3,4,312,5],[5,12,15],[]),([388,0,1,2,3,4,5],[7,8,13],[]),([364,0,1,375,2,3,4,5],[3,4,7,14],[]),([364,0,1,2,3,4,103,5],[1,7,10],[]),([364,1,2,106,3,4,5],[0,7,16],[]),([357,0,1,2,3,4,5],[7,11],[]),([363,0,1,2,3,4,5],[2,6,17],[]),([307,0,1,2,3,4,5],[5,12],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_21Ok : checkNodesBT h0W h0G h0Mask h0Block8_21Pools h0Autos h0Bucket7 8 h0Block8_21 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_21Mem : ∀ ns ∈ h0Block8_21, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_21Ok
+def h0Block8_22Specs : List PoolSpec := [pool13,pool9,pool1,pool3,pool6,pool0,pool2,(47,[]),pool8,pool7,pool11,(2,[])]
+def h0Block8_22Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_22Specs
+def h0Block8_22 : List NodeSpec := [([309,0,1,2,3,4,5],[1,5,9],[]),([358,0,1,2,3,4,5],[2,4,8],[]),([361,0,1,2,3,4,5],[1,5,9],[]),([245,0,1,2,3,4,5],[3,6],[]),([248,0,1,2,3,4,5],[6,10],[]),([300,0,1,2,3,4,5],[1,3,5],[]),([303,0,1,2,3,4,5],[2,7,9],[]),([356,0,1,2,3,4,5],[3,5,8],[]),([0,359,1,2,3,92,5],[4,6],[]),([0,390,1,2,3,4,5],[4,5,8],[]),([0,398,395,1,2,3,4,5],[0,5,11],[]),([0,301,1,2,3,4,5],[2,3,10],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_22Ok : checkNodesBT h0W h0G h0Mask h0Block8_22Pools h0Autos h0Bucket7 8 h0Block8_22 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_22Mem : ∀ ns ∈ h0Block8_22, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_22Ok
+def h0Block8_23Specs : List PoolSpec := [pool1,pool5,pool12,pool4,pool3,pool6,pool0,pool2,pool10,pool8,pool7,(16,[]),pool11,(4,[]),(0,[]),(2,[])]
+def h0Block8_23Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_23Specs
+def h0Block8_23 : List NodeSpec := [([0,305,1,2,3,4,5],[4,8,12],[]),([0,415,1,2,3,4,5],[4,6,13,15],[]),([0,302,1,2,3,4,203,5],[0,9,12],[]),([0,242,1,175,3,4,5],[0,6,11],[]),([0,246,1,2,3,4,5],[4,12,14],[]),([0,251,1,3,4,92,5],[3,4],[]),([0,254,1,2,3,4,5],[4,7],[]),([0,247,1,2,3,4,203,5],[4,12],[]),([0,412,1,2,3,4,92,5],[5,6,7],[]),([0,412,1,2,3,4,5],[0,2,6],[]),([0,206,1,2,3,4,5],[9,10,12],[]),([0,202,1,2,3,4,5],[1,10],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_23Ok : checkNodesBT h0W h0G h0Mask h0Block8_23Pools h0Autos h0Bucket7 8 h0Block8_23 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_23Mem : ∀ ns ∈ h0Block8_23, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_23Ok
+def h0Block8_24Specs : List PoolSpec := [pool9,pool1,pool5,pool14,pool4,pool3,pool6,pool0,pool2,(11,[]),pool8,pool7,pool11,(12,[]),(17,[]),(10,[]),(1,[]),(2,[(1,0,2),(3,1,2),(3,177,174)]),(2,[(1,0,4),(3,1,4),(3,205,312)])]
+def h0Block8_24Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_24Specs
+def h0Block8_24 : List NodeSpec := [([0,178,1,174,3,4,5],[1,3,8,12,17],[]),([0,271,1,2,3,4,5],[1,6,16],[]),([0,315,1,2,3,312,5],[1,4,7,18],[0]),([0,1,209,174,3,4,5],[1,12],[]),([0,1,220,2,3,4,5],[1,9,10],[]),([0,1,225,2,174,3,4,5],[0,1,2,8,11],[0]),([0,1,287,2,3,4,5],[1,6,14,15],[]),([0,1,216,2,3,4,5],[1,2,9,11],[]),([0,1,342,2,3,4,5],[1,2,5,13],[]),([0,1,416,2,3,4,5],[2,5],[]),([0,1,231,2,174,3,4,5],[0,2,4,8],[]),([0,1,231,2,3,4,92,5],[6,8],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_24Ok : checkNodesBT h0W h0G h0Mask h0Block8_24Pools h0Autos h0Bucket7 8 h0Block8_24 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_24Mem : ∀ ns ∈ h0Block8_24, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_24Ok
+def h0Block8_25Specs : List PoolSpec := [pool9,pool1,pool5,pool12,(29,[]),(24,[]),pool4,pool3,pool6,pool0,pool2,(2,[(1,0,1),(0,6,2)]),pool17,(11,[]),pool8,pool11,(23,[]),(10,[]),(2,[])]
+def h0Block8_25Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_25Specs
+def h0Block8_25 : List NodeSpec := [([0,1,265,2,3,4,5],[1,8,9],[]),([0,1,276,2,3,4,5],[8,9,13,17,18],[]),([0,1,330,2,3,312,5],[1,9],[]),([0,1,334,2,3,4,5],[7,9,13,17,18],[]),([0,1,50,2,3,4,16,5],[0,1,4,5,15],[]),([0,1,292,2,3,4,92,5],[0,6,7,9,13,16],[]),([0,1,382,2,3,4,5],[10,15],[]),([0,1,84,2,3,65,4,5],[1,8,9,14],[]),([0,1,411,2,3,4,5],[10,15],[]),([0,1,365,2,3,4,92,5],[1,2,6,9,10],[]),([0,1,7,11,2,3,4],[1,2,3,5,9,12],[0]),([0,1,7,11,2,3,4,5],[1,2,3,4,8,9,10,11],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_25Ok : checkNodesBT h0W h0G h0Mask h0Block8_25Pools h0Autos h0Bucket7 8 h0Block8_25 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_25Mem : ∀ ns ∈ h0Block8_25, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_25Ok
+def h0Block8_26Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool14,pool12,(29,[]),pool19,pool4,pool3,pool0,pool2,pool10,(27,[]),pool15,pool8,(13,[]),pool7,(19,[]),(20,[]),(1,[(1,2,3),(0,6,65)]),(2,[(1,0,1),(3,70,6)]),(0,[(3,2,5),(3,70,6)])]
+def h0Block8_26Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_26Specs
+def h0Block8_26 : List NodeSpec := [([0,1,7,6,2,3,4,16,5],[1,3,4,5,6,13],[0]),([0,1,7,18,3,4,5],[2,4,5],[0]),([0,1,82,6,2,3,4,5],[1,2,3,5,7,10,12,14,21],[0]),([0,1,82,2,3,4,5],[1,12,19,22],[]),([0,1,151,2,3,4,5],[8,9],[]),([0,1,129,2,3,4,5],[10,17],[]),([0,1,67,6,2,3,65,4,5],[1,2,4,11],[]),([0,1,67,6,2,3,4,5],[1,2,3,5,9,10,18],[0]),([0,1,67,2,3,4,5],[9,11,16,20],[]),([0,1,58,11,2,3,4],[0,8,15],[]),([0,1,58,6,2,3,65,4,5],[4,5,6,11,12,15],[0]),([0,1,58,2,3,61,5],[2,5,10],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_26Ok : checkNodesBT h0W h0G h0Mask h0Block8_26Pools h0Autos h0Bucket7 8 h0Block8_26 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_26Mem : ∀ ns ∈ h0Block8_26, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_26Ok
+def h0Block8_27Specs : List PoolSpec := [pool13,pool1,pool5,pool14,pool12,pool4,pool6,(14,[]),pool0,pool2,pool17,pool10,(47,[]),pool15,pool8,(13,[]),pool7,(8,[]),(2,[(1,0,1),(1,11,2)]),(2,[(1,0,1),(1,11,4)]),(1,[]),(2,[(1,0,1),(1,2,4),(0,6,92)]),(0,[(1,2,4),(0,6,92)]),(0,[(3,4,5),(3,31,6)])]
+def h0Block8_27Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_27Specs
+def h0Block8_27 : List NodeSpec := [([0,1,170,6,2,3,4,5],[1,2,3,5,9,11,12,13],[]),([0,1,170,2,3,4,5],[2,11,15,17,23],[]),([0,1,145,2,3,4,5],[8,16],[]),([0,1,93,6,2,3,4,92,5],[3,4,9,11],[]),([0,1,93,6,2,3,4,5],[1,2,4,6,8,9,11,21],[0,1]),([0,1,93,2,3,4,5],[6,11,20,22],[]),([0,1,11,6,2,12,3,4],[1,2,4,8,9,10,14,18],[0,1]),([0,1,11,6,2,3,65,4],[1,4,9,14,15],[0]),([0,1,11,6,2,3,4],[1,4,8,10],[]),([0,1,11,6,2,3,4,13],[1,2,3,5,9,14,19],[0,1]),([0,1,11,6,2,3,4,92],[0,1,2,5,7,9],[0,1]),([0,1,11,53,2,3,4],[0,1,8,13],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_27Ok : checkNodesBT h0W h0G h0Mask h0Block8_27Pools h0Autos h0Bucket7 8 h0Block8_27 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_27Mem : ∀ ns ∈ h0Block8_27, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_27Ok
+def h0Block8_28Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool12,(24,[]),pool4,pool3,(14,[]),pool0,pool2,pool17,pool10,pool15,pool8,(13,[]),pool11,(10,[(1,0,1),(1,6,4)]),(23,[]),(17,[]),(19,[]),(0,[(0,6,5)])]
+def h0Block8_28Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_28Specs
+def h0Block8_28 : List NodeSpec := [([0,1,11,53,2,3,4,5],[0,9,20],[0]),([0,1,11,54,2,3,4],[0,9,21],[0]),([0,1,11,2,18,3,4],[2,14],[0]),([0,1,11,2,3,65,4],[3,10,14],[]),([0,1,11,2,3,4,61],[2,4,9],[0,1]),([0,1,11,2,3,4,61,5],[2,3,4,5,9,10,11,12,17,18],[]),([0,1,11,2,3,4,92],[0,2,6,9,10],[]),([0,1,6,85,2,3,4],[2,4,9,13,15],[]),([0,1,6,51,2,3,4],[2,4,9,13,15],[]),([0,1,6,53,2,3,114,4,5],[1,2,6,9,10,16,19,20],[0,1]),([0,1,6,54,2,131,3,4,5],[2,6,7,8,9,14],[0]),([0,1,6,63,3,4,5],[2,4,5,8,9],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_28Ok : checkNodesBT h0W h0G h0Mask h0Block8_28Pools h0Autos h0Bucket7 8 h0Block8_28 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_28Mem : ∀ ns ∈ h0Block8_28, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_28Ok
+def h0Block8_29Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool14,pool12,(29,[]),pool19,pool4,pool3,pool6,(14,[]),pool0,pool2,pool10,(27,[]),(11,[]),pool15,pool8,(13,[]),pool7,(2,[(1,0,1),(1,11,2)]),(19,[]),(9,[(1,0,1),(1,87,3)]),(7,[(1,0,1),(1,107,3)]),(13,[(1,0,1)])]
+def h0Block8_29Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_29Specs
+def h0Block8_29 : List NodeSpec := [([0,1,6,2,33,3,4,5],[2,3,4,7,9,13,14,22],[0]),([0,1,6,2,20,4,5],[2,5,12,13,16,19],[0]),([0,1,6,2,21,3,5],[2,5,11,12,13,16],[0]),([0,1,6,2,59,3,4,5],[2,3,5,10,11,12,13,15],[]),([0,1,6,2,40,3,4],[2,5,12,17,19],[]),([0,1,6,2,12,3,4,5],[2,3,5,12,13,20,21],[0]),([0,1,6,2,142,3,4,92,5],[1,3,8,10,12,13,15],[0]),([0,1,6,2,3,146,4,5],[3,9,12,19,23],[0]),([0,1,6,2,3,152,4,5],[3,8,11,13,15,24],[]),([0,1,6,2,3,163,4,5],[3,4,5,9,13,20,25],[0,1]),([0,1,6,2,3,8,4,5],[0,1,2,3,4,5,6],[0]),([0,1,6,2,3,125,65,4,5],[1,4,9,13,18],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_29Ok : checkNodesBT h0W h0G h0Mask h0Block8_29Pools h0Autos h0Bucket7 8 h0Block8_29 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_29Mem : ∀ ns ∈ h0Block8_29, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_29Ok
+def h0Block8_30Specs : List PoolSpec := [pool13,(18,[]),pool9,pool1,pool5,pool14,pool12,(29,[]),pool19,(30,[]),pool4,pool3,pool6,(14,[]),pool0,pool2,pool10,(27,[]),pool15,pool8,(13,[]),pool7,(2,[(1,0,1),(1,11,4)]),(19,[])]
+def h0Block8_30Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_30Specs
+def h0Block8_30 : List NodeSpec := [([0,1,6,2,3,138,4,5],[2,4,6,14],[]),([0,1,6,2,3,158,4,5],[4,6,9,11,14,20],[0,1]),([0,1,6,2,3,65,4,5],[4,6,9,11,14,20],[0]),([0,1,6,2,3,4,130,5],[0,4,6,8,11,14,16],[]),([0,1,6,2,3,4,72,5],[3,4,5,7,8,15,18,21],[0]),([0,1,6,2,3,4,10,5],[3,4,5,8,10,11,12,13],[0]),([0,1,6,2,3,4,78],[3,6,14,18,20],[]),([0,1,6,2,3,4,13,5],[3,4,5,10,11,15,19,22],[]),([0,1,6,2,3,4,103,5],[1,3,14,15,16,19,23],[0]),([0,1,6,2,3,4,121,5],[3,4,10,12,13,15,17],[0]),([0,1,6,2,3,4,160,5],[3,4,11,12,13,14,18],[1]),([0,1,6,2,3,4,92,16,5],[1,3,4,5,15,16,19,21],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_30Ok : checkNodesBT h0W h0G h0Mask h0Block8_30Pools h0Autos h0Bucket7 8 h0Block8_30 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_30Mem : ∀ ns ∈ h0Block8_30, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_30Ok
+def h0Block8_31Specs : List PoolSpec := [pool13,(18,[]),pool9,pool1,pool5,pool14,pool12,(30,[]),pool4,pool3,pool6,(14,[]),pool0,pool2,pool10,(11,[]),pool15,(13,[]),pool7,(16,[]),(4,[]),(19,[]),(2,[]),(10,[(0,2,3)])]
+def h0Block8_31Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_31Specs
+def h0Block8_31 : List NodeSpec := [([0,1,6,2,3,4,92,5],[3,4,9,10,11,12,13],[]),([0,1,6,2,3,4,94,5],[1,4,5,7,13,16,21],[0]),([0,1,144,2,3,4,5],[12,18,19,20],[]),([0,1,171,2,3,4,5],[3,14,17,20],[]),([0,1,128,2,3,4,5],[12,15,17,18,20],[]),([0,1,150,2,3,4,5],[9,12,15,17,20],[]),([0,1,162,2,3,4,5],[2,8,17,20],[]),([0,1,53,2,3,4,318,5],[0,12,21],[0]),([0,1,53,2,353,4,5],[10,12],[]),([0,1,53,3,4,121,5],[4,6,8,10,13,23],[0]),([0,1,123,2,3,4,5],[4,9,13,14,22],[0]),([0,1,283,2,3,4,5],[3,14],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_31Ok : checkNodesBT h0W h0G h0Mask h0Block8_31Pools h0Autos h0Bucket7 8 h0Block8_31 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_31Mem : ∀ ns ∈ h0Block8_31, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_31Ok
+def h0Block8_32Specs : List PoolSpec := [pool9,pool1,(29,[]),(24,[]),pool4,pool3,pool6,(14,[]),pool0,pool2,(11,[]),(21,[]),(1,[(0,2,4),(0,3,5),(1,2,131)]),(1,[(0,2,4),(0,3,5),(1,131,4)]),(1,[(0,2,4),(3,3,5),(1,28,54)])]
+def h0Block8_32Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_32Specs
+def h0Block8_32 : List NodeSpec := [([0,1,281,2,3,4,5],[1,6],[]),([0,1,54,2,3,298,5],[5,8],[]),([0,1,54,2,3,134,5],[0,1,5,9,13],[0]),([0,1,54,3,133,4,5],[0,1,5,9,12],[0]),([0,1,329,3,4,196,5],[5,8,11],[]),([0,1,329,3,312,92,5],[4,5],[]),([0,1,337,2,3,4,5],[0,4],[]),([0,1,331,2,3,312,5],[4,5,8],[]),([0,1,63,3,4,312,5],[4,5,8],[]),([0,1,63,3,4,61,5],[1,2,3,7,10],[0]),([0,1,2,140,3,4,5],[0,6,9,14],[0]),([0,1,2,325,3,4,5],[4,5],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_32Ok : checkNodesBT h0W h0G h0Mask h0Block8_32Pools h0Autos h0Bucket7 8 h0Block8_32 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_32Mem : ∀ ns ∈ h0Block8_32, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_32Ok
+def h0Block8_33Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool4,pool3,pool6,pool0,pool2,(47,[]),pool8,(13,[]),pool7,pool11,(19,[])]
+def h0Block8_33Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_33Specs
+def h0Block8_33 : List NodeSpec := [([0,1,2,30,3,4,312,5],[3,5,6,8],[0]),([0,1,2,249,3,312,5],[7,8],[]),([0,1,2,273,3,263,4,5],[0,2],[]),([0,1,2,273,3,4,312,5],[4,7,12],[]),([0,1,2,355,3,4,5],[7,9],[]),([0,1,2,304,3,4,5],[7,9],[]),([0,1,2,308,3,4,5],[5,7,11],[]),([0,1,2,360,3,4,5],[0,7],[]),([0,1,2,211,181,3,4,5],[2,7,8,12,14],[0]),([0,1,2,232,3,4,5],[1,8,10],[]),([0,1,2,228,3,4,5],[5,13],[]),([0,1,2,183,174,3,188,4,5],[2,7],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_33Ok : checkNodesBT h0W h0G h0Mask h0Block8_33Pools h0Autos h0Bucket7 8 h0Block8_33 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_33Mem : ∀ ns ∈ h0Block8_33, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_33Ok
+def h0Block8_34Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool4,pool3,pool6,pool0,pool2,(47,[]),(27,[]),pool8,pool7,pool11,(12,[]),(19,[]),(20,[]),(10,[]),pool24,(17,[(1,0,2)]),(2,[(1,0,2),(1,1,3)]),(2,[(1,0,2),(1,1,4),(0,174,203)]),(1,[(1,0,2),(0,174,3)])]
+def h0Block8_34Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_34Specs
+def h0Block8_34 : List NodeSpec := [([0,1,2,183,3,188,4,5],[3,4,6,7,18],[0]),([0,1,2,183,3,4,5],[0,4,7,12,17,18,19],[0,1]),([0,1,2,227,3,4,5],[2,6,10,13],[]),([0,1,2,106,131,3,4,5],[2,4,5,7,8,16],[0]),([0,1,2,204,3,4,5],[5,11,13,14,15,21],[0]),([0,1,2,224,3,4,5],[2,9,12,13],[]),([0,1,2,181,174,3,188,4,5],[3,6,8,10,20],[0,1]),([0,1,2,181,3,4,203,5],[0,3,11,13],[]),([0,1,2,174,212,3,4,5],[1,2,8,13,22],[0]),([0,1,2,174,221,3,4,5],[2,3,8,13],[]),([0,1,2,174,3,207,4,5],[2,11,14],[]),([0,1,2,174,3,229,4,5],[3,4,8,10],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_34Ok : checkNodesBT h0W h0G h0Mask h0Block8_34Pools h0Autos h0Bucket7 8 h0Block8_34 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_34Mem : ∀ ns ∈ h0Block8_34, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_34Ok
+def h0Block8_35Specs : List PoolSpec := [(18,[]),pool9,pool1,pool5,pool12,pool4,pool3,pool6,(14,[]),pool0,pool2,(47,[]),(27,[]),pool15,pool8,(13,[]),pool7,pool11,(3,[]),(4,[]),(12,[]),(9,[]),(9,[(1,0,1)]),(19,[]),(8,[(1,0,1)]),(2,[(1,0,3),(1,1,2),(0,175,263)]),(22,[]),(1,[(2,2,4),(0,3,5),(1,87,131)])]
+def h0Block8_35Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_35Specs
+def h0Block8_35 : List NodeSpec := [([0,1,2,174,3,184,4,5],[2,3,7,9,12,14,23],[0]),([0,1,2,174,3,203,16,5],[3,6,11,17],[0]),([0,1,2,264,3,4,5],[0,2,5,9,10,25],[]),([0,1,2,111,3,4,5],[4,9,15,19,21,24],[0]),([0,1,2,135,3,4,5],[2,8,9,18,19,20,22],[]),([0,1,2,156,3,4,5],[4,9,13,15,20],[]),([0,1,2,340,4,269,5],[5,9,26],[]),([0,1,2,345,3,4,5],[1,5],[]),([0,1,2,64,4,312,5],[5,6,9],[]),([0,1,2,418,3,4,5],[7,10],[]),([0,1,2,3,148,4,5],[6,10,14,27],[0]),([0,1,2,3,323,4,5],[9,16],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_35Ok : checkNodesBT h0W h0G h0Mask h0Block8_35Pools h0Autos h0Bucket7 8 h0Block8_35 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_35Mem : ∀ ns ∈ h0Block8_35, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_35Ok
+def h0Block8_36Specs : List PoolSpec := [pool13,(18,[]),pool1,pool5,pool4,pool3,pool6,pool0,pool2,pool10,(27,[]),pool7,pool11,(9,[]),(15,[]),(20,[]),(2,[(1,0,3),(1,1,4),(0,263,203)])]
+def h0Block8_36Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_36Specs
+def h0Block8_36 : List NodeSpec := [([0,1,2,3,430,4,5],[5,8],[]),([0,1,2,3,163,4,312,5],[3,5,9,11,13],[0]),([0,1,2,3,207,4,312,5],[0,2,4,6],[]),([0,1,2,3,252,4,5],[5,8],[]),([0,1,2,3,259,4,5],[5,8],[]),([0,1,2,3,362,4,5],[2,7,11,14],[]),([0,1,2,3,280,4,5],[7,11],[]),([0,1,2,3,270,4,5],[2,3,7,8,12,15,16],[]),([0,1,2,3,279,4,5],[2,9],[]),([0,1,2,3,413,4,92,5],[6,7,8],[]),([0,1,2,3,263,289,4,5],[0,2],[]),([0,1,2,3,414,4,92,5],[1,4,6,9,10],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_36Ok : checkNodesBT h0W h0G h0Mask h0Block8_36Pools h0Autos h0Bucket7 8 h0Block8_36 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_36Mem : ∀ ns ∈ h0Block8_36, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_36Ok
+def h0Block8_37Specs : List PoolSpec := [pool13,(18,[]),pool9,pool1,pool5,(30,[]),pool4,pool3,pool6,pool0,pool2,(27,[]),(11,[]),(13,[]),pool7,pool11,(17,[]),(2,[(1,0,2),(1,1,3),(1,174,4)]),(1,[(0,2,4),(0,3,5),(1,54,131)])]
+def h0Block8_37Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_37Specs
+def h0Block8_37 : List NodeSpec := [([0,1,2,3,229,4,92,5],[5,6,10,11],[]),([0,1,2,3,188,4,196,5],[8,10,15,16,17],[0]),([0,1,2,3,320,4,5],[2,6,7],[]),([0,1,2,3,139,4,5],[3,7,9,10,13,18],[0]),([0,1,2,3,65,386,4,5],[7,9,10],[]),([0,1,2,3,4,405,5],[4,14],[]),([0,1,2,3,4,217,5],[0,7,15],[]),([0,1,2,3,4,52,5],[9,12,14],[]),([0,1,2,3,4,277,5],[9,14],[]),([0,1,2,3,4,185,5],[6,7,9],[]),([0,1,2,3,4,267,5],[1,4,9],[]),([0,1,2,3,4,261,5],[10,15],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_37Ok : checkNodesBT h0W h0G h0Mask h0Block8_37Pools h0Autos h0Bucket7 8 h0Block8_37 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_37Mem : ∀ ns ∈ h0Block8_37, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_37Ok
+def h0Block8_38Specs : List PoolSpec := [(18,[]),pool1,pool5,(29,[]),(24,[]),(31,[]),pool4,pool3,pool0,pool2,pool7,(16,[]),pool11,(4,[]),(23,[]),(15,[]),pool22,(17,[]),(32,[]),(2,[(1,0,1),(1,6,114)]),(2,[])]
+def h0Block8_38Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_38Specs
+def h0Block8_38 : List NodeSpec := [([0,1,2,3,4,310,5],[10,12,15],[]),([0,1,2,3,4,383,5],[9,12],[]),([0,1,2,3,4,312,78],[6,7,8],[]),([0,1,2,3,4,312,347,5],[5,6,7],[]),([0,1,2,3,4,312,348,5],[6,7,18],[]),([0,1,2,3,4,322,5],[7,8,13,20],[]),([0,1,2,3,4,324,5],[7,8,13,20],[]),([0,1,2,3,4,235,5],[9,12],[]),([0,1,2,3,4,293,5],[1,3,12],[]),([0,1,2,3,4,78,61],[7,8,11,16,17],[0,1]),([0,1,2,3,4,78,61,5],[2,4,7,8,11,14,16],[]),([0,1,2,3,4,169,5],[0,1,8,13,19],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_38Ok : checkNodesBT h0W h0G h0Mask h0Block8_38Pools h0Autos h0Bucket7 8 h0Block8_38 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_38Mem : ∀ ns ∈ h0Block8_38, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_38Ok
+def h0Block8_39Specs : List PoolSpec := [pool1,pool5,(29,[]),pool3,pool6,(14,[]),pool0,pool2,(13,[]),(16,[]),(3,[]),(4,[]),(12,[]),(10,[]),(0,[]),(1,[]),(2,[]),pool16]
+def h0Block8_39Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block8_39Specs
+def h0Block8_39 : List NodeSpec := [([0,1,2,3,4,61,5],[3,5,6,9,10,12],[]),([0,1,2,3,4,120,5],[0,1,4,5,6,7],[0]),([0,1,2,3,4,92,420,5],[4,7],[]),([0,1,2,3,4,316,5],[3,6,11,16],[]),([0,1,2,3,4,335,5],[3,6,17],[]),([0,1,2,3,4,343,5],[3,6,17],[]),([0,1,2,3,130,312,5],[3,6,8],[]),([0,1,2,3,240,312,5],[3,6,14],[]),([0,1,2,3,298,312,5],[3,6,10],[]),([0,1,2,3,298,203,5],[0,2,15],[]),([0,1,2,3,312,103,5],[3,6,14],[]),([0,1,2,3,312,160,5],[3,6,13],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_39Ok : checkNodesBT h0W h0G h0Mask h0Block8_39Pools h0Autos h0Bucket7 8 h0Block8_39 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_39Mem : ∀ ns ∈ h0Block8_39, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_39Ok
+def h0Block8_40Specs : List PoolSpec := [pool1,pool12,pool4,pool3,pool6,pool0,pool2,pool10,(5,[]),pool15,pool7,pool11,(0,[]),(1,[]),pool16]
+def h0Block8_40Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_40Specs
+def h0Block8_40 : List NodeSpec := [([0,1,2,3,312,92,5],[3,5,12],[]),([0,1,2,3,312,134,5],[0,3,10,14],[]),([0,1,2,3,203,269,5],[3,11,13],[]),([0,1,210,174,3,4,5],[10,11],[]),([0,1,174,3,188,4,92,5],[2,6,7,10],[0]),([0,1,174,3,4,179,5],[0,2,4,11],[]),([0,50,6,2,3,4,5],[0,1,5,8],[]),([0,6,2,155,3,4,5],[0,5,9],[]),([327,1,2,3,4,312,5],[3,5,12],[]),([339,1,2,3,4,312,5],[3,11,12],[]),([346,1,2,3,4,312,5],[7,11,12],[]),([49,1,6,2,3,4,5],[0,1,5,8],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_40Ok : checkNodesBT h0W h0G h0Mask h0Block8_40Pools h0Autos h0Bucket7 8 h0Block8_40 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_40Mem : ∀ ns ∈ h0Block8_40, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_40Ok
+def h0Block8_41Specs : List PoolSpec := [pool13,pool1,pool14,pool12,pool4,pool3,pool0,pool15,pool7,(3,[]),(9,[(1,0,1)]),(8,[(1,0,1)]),(2,[(1,0,1),(0,2,4),(1,0,54)])]
+def h0Block8_41Pools : BT (Option BoundPool) := buildPoolsBT 4 h0W h0R h0Slices h0Block8_41Specs
+def h0Block8_41 : List NodeSpec := [([83,1,6,2,3,4,5],[1,2,4,9],[]),([1,6,2,109,3,4,5],[3,6,11],[]),([1,6,2,106,3,4,5],[0,6,10,12],[0]),([1,6,2,154,3,4,5],[3,6,7],[]),([1,6,2,3,4,167,5],[2,4,7],[]),([1,2,109,3,4,312,5],[5,6,9],[]),([1,2,106,3,263,4,5],[0,6,9],[]),([1,2,174,3,222,4,5],[6,8,9],[])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_41Ok : checkNodesBT h0W h0G h0Mask h0Block8_41Pools h0Autos h0Bucket7 8 h0Block8_41 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block8_41Mem : ∀ ns ∈ h0Block8_41, Impossible h0G 8 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket7Ok h0Block8_41Ok
+def h0Nodes8 : List NodeSpec := h0Block8_0 ++ h0Block8_1 ++ h0Block8_2 ++ h0Block8_3 ++ h0Block8_4 ++ h0Block8_5 ++ h0Block8_6 ++ h0Block8_7 ++ h0Block8_8 ++ h0Block8_9 ++ h0Block8_10 ++ h0Block8_11 ++ h0Block8_12 ++ h0Block8_13 ++ h0Block8_14 ++ h0Block8_15 ++ h0Block8_16 ++ h0Block8_17 ++ h0Block8_18 ++ h0Block8_19 ++ h0Block8_20 ++ h0Block8_21 ++ h0Block8_22 ++ h0Block8_23 ++ h0Block8_24 ++ h0Block8_25 ++ h0Block8_26 ++ h0Block8_27 ++ h0Block8_28 ++ h0Block8_29 ++ h0Block8_30 ++ h0Block8_31 ++ h0Block8_32 ++ h0Block8_33 ++ h0Block8_34 ++ h0Block8_35 ++ h0Block8_36 ++ h0Block8_37 ++ h0Block8_38 ++ h0Block8_39 ++ h0Block8_40 ++ h0Block8_41
 def h0Bucket8 : BT (List (List Nat)) := buildBucketsBT h0W h0Nodes8
 set_option maxRecDepth 200000 in
-lemma h0Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 8 xs.toFinset) h0Bucket8 := buildBucketsBT_sound (by decide) h0Pairs h0WOk h0PoolsOk h0AutosOk h0Bucket7Ok h0Check8
-def h0Block9_0 : List NodeSpec := indexTripleNodes [(143615,0x55023089c9108c9cf5a55f,6), (168191,0xaa44394ff4c80c58638904622527,2), (176383,0x7d1f9e0d870b03118b0c71208522527,2), (192767,0x7888214486214024058386043192242f2527,2), (200959,0x15430498e760184141b8604332912372527,2), (209151,0x79969e8806406868140a0c08632448522527,6), (217343,0x791fe900c611901810c66312372527,2), (225535,0x5448e9255400204202a0460c732448522527,6), (233727,0x1985121fd0267c0190089501186399224622527,6), (241919,0x710801902c3c150231632a524258927,6), (129151,0x3bb80ba05500c81386c43867,2), (250111,0x1ca600a40b8308c80c586528a6098927,6), (663807,0xf0c40133e0078060b070c73e5b24a9238927,6), (696575,0x2ae0093c0a20078060506e2fe23ccd1638927,6), (712959,0x98f101d406c0340160e1810ccb6a6b18927,6), (372863,0x3c4059640620ba0284021c18c4041247,6), (729343,0x3c405b2407d005066230218ca50218927,6), (194623,23005505,6), (1491135,0xf417408ca5020229,6), (745727,0xfc809c01e018e820830c1194a2d18927,6), (1523903,0x72407500501c5020229,6), (132214,0xf0d805d026c04c18e7,2), (263286,0x34a91308a50018e7,2), (525438,0x1fa3d7e849d219a088b003046a627,6), (688767,0x3ffb230960a4c1a083601440a2b00e1140608db627,2), (754303,0x167b170cf48610960a343c2840d800408380a0d6627,2), (819839,0xffff04612c14e741420d803e053005c0b0b0d6627,2), (885375,0x7b8e266c0281a0a4c242854200873006868b4146a627,2), (5587071,0xb8941a0b6028407f808607c2cc11ac7,2), (5637335,0x54651e0a2000407415408e0283023,2), (5899479,0x2c6142c789807c0344a804402c03023,2), (3736191,0x3ffc838064a05829cf1e243dc01ac00418c1045b33,2)]
+set_option maxHeartbeats 0 in
+lemma h0Bucket8Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 8 xs.toFinset) h0Bucket8 := buildBucketsBT_of_mem (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append h0Block8_0Mem h0Block8_1Mem) h0Block8_2Mem) h0Block8_3Mem) h0Block8_4Mem) h0Block8_5Mem) h0Block8_6Mem) h0Block8_7Mem) h0Block8_8Mem) h0Block8_9Mem) h0Block8_10Mem) h0Block8_11Mem) h0Block8_12Mem) h0Block8_13Mem) h0Block8_14Mem) h0Block8_15Mem) h0Block8_16Mem) h0Block8_17Mem) h0Block8_18Mem) h0Block8_19Mem) h0Block8_20Mem) h0Block8_21Mem) h0Block8_22Mem) h0Block8_23Mem) h0Block8_24Mem) h0Block8_25Mem) h0Block8_26Mem) h0Block8_27Mem) h0Block8_28Mem) h0Block8_29Mem) h0Block8_30Mem) h0Block8_31Mem) h0Block8_32Mem) h0Block8_33Mem) h0Block8_34Mem) h0Block8_35Mem) h0Block8_36Mem) h0Block8_37Mem) h0Block8_38Mem) h0Block8_39Mem) h0Block8_40Mem) h0Block8_41Mem)
+def h0Block9_0Specs : List PoolSpec := [pool9,pool1,pool14,pool12,pool4,pool3,pool6,(14,[]),pool0,pool2,pool17,pool10,(11,[]),pool15,pool8,pool7,(16,[]),(3,[]),(4,[]),(6,[]),(12,[]),(8,[]),(9,[]),(23,[]),(15,[]),pool21,(9,[(1,0,1)]),(0,[(2,6,4)]),(1,[(2,6,4)]),(19,[]),(20,[]),(0,[(2,6,5)]),(10,[]),(2,[(1,0,1),(2,2,4)]),(7,[]),(2,[]),(36,[]),pool20,pool16,(21,[]),(22,[]),(35,[]),(1,[(2,2,4),(3,3,5)])]
+def h0Block9_0Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_0Specs
+def h0Block9_0 : List NodeSpec := [([26,0,1,6,2,3,4],[1,3,8,10,18,30,31],[0,1]),([332,0,1,2,3,4,312,5],[5,7,8,12,29,38,39],[0]),([341,0,1,2,3,4,312,5],[5,8,20,23,24,29,38,40],[0]),([349,0,1,2,3,4,312,5],[5,8,18,29,37],[0]),([44,0,1,6,2,3,4,5],[1,2,4,5,13,22,25],[0,1]),([44,0,1,2,3,4,5],[4,5,13,16,19,20,21,25,27,28],[0,1]),([87,89,0,1,2,3,4,5],[0,6,15,19,21,36,41],[0,1]),([87,31,0,1,2,3,4,5],[5,7,11,14,16,35,36,41],[0]),([87,28,0,1,2,3,4,5],[0,6,9,14,32,34,35,42],[0]),([87,291,0,1,2,3,4,5],[0,7,8,15,17,22],[0]),([87,364,0,1,2,3,4,5],[5,6,8,14,18,29],[]),([87,0,1,6,2,3,4,5],[1,5,6,7,8,13,14,22,26,33],[0,1])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test9_0 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket8 9 h0Block9_0 = true := by decide +kernel
-def h0Block9_1 : List NodeSpec := indexTripleNodes [(3867263,0xd9b60c60630a7c29cf062ba03601b80b020801020e0b060823333,6), (3998335,0x7a48f5300c940b0539d0901b00108829880d4008380418c1045b33,6), (4129407,0xf4ff320250a7c29cf1a201b00840a200b8050c48823333,2), (8520319,0x2471b900c8c0d050b0480d80638045ce15c074318229b33,2), (9044607,0xc5c01603e0461a7c2870e85480941680d060804c01209c32106333,2), (5619839,0x34a028b4c06e806680d17160418e7,2), (9831039,0xefa00f81181a0a73c68842049019808a01d944ba1823333,2), (10355327,0x4f81184b0539c1c04808814404419e0150081045e63682823333,2), (5652607,0x21c0e2a607480620c202201190c4041247,2), (133238,0x1a718a804871d700a2018e7,2), (624255,0x3ff1092403faec08d803700e1af0220608db627,2), (689791,0x64fce347ac033d8b866d103c47c00c8090cf8041c0506a627,2), (755327,0x7951fa61d701fd450091001e01901e0540b0b0d6627,2), (820863,0x6f0ad30ce80ee222920245c8022f808e012705344106a627,2), (6668415,0xfb04180a400100f607f80b80d03e16608d4e7,2), (5377239,0x690686876c00302d01c9c07011503023,2), (3606143,0x3fc0a15d981b80fa8dc80f1e5002a00418c1045b33,2), (3737215,0x10c020a15cd020d80b2e8044680d4a800f02080af8041c160c106333,2), (3868287,0x3d4050aecc2d81d24688c0082013c11a0330143e0107008318229b33,2), (3999359,0x7c4020a15d5062074c92080655800d0238054028660823333,2), (4130431,0x2dc0fb300a011420035006e00822e85a02824e04874318229b33,2), (8783487,0x97008d0fd509c121401282d01205fc2fc0a24e0484e0c106333,2), (6701183,0x1f1803c0c8806a804d00040d17160418e7,2), (9569919,0xb500870faa04818e018881c3b00be023804c0eca25f823333,2), (10094207,0x30402143f5431a00c200f043c04103117008d5e630406333,2), (6733951,0x3ff004a000100d301c4184062e0c8620208ce7,2), (135294,0x7fffe46017601b824383b8030806e03046a627,2), (266366,0xfff2ce50a600b08f009e03203a02209046a627,2), (625279,0x7386ce54a4018a4315166c20c41e11a01b81d06502e0b06388827,2), (690815,0x3f890c9e5454035d6e046c0166803601604b88827,2), (756351,0x2a07069ca960044029c446981b8245c8024d02080840cc1a270c9c1827,2), (7225471,0x111fc0c100a40d40238053806410c08c0408d947,2)]
+lemma h0Block9_0Ok : checkNodesBT h0W h0G h0Mask h0Block9_0Pools h0Autos h0Bucket8 9 h0Block9_0 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test9_1 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket8 9 h0Block9_1 = true := by decide +kernel
-def h0Block9_2 : List NodeSpec := indexTripleNodes [(2427519,0xf640b093caee804840050711047831470050d20823333,2), (2558591,0x1d605849a7774007806f0054e226c65106b01705c045860823333,6), (2689663,0x3a7024f2bba00b100e65f218330688a0420b82c24106333,2), (2820735,0x7b7024d38530048d501c8e930129802e0586660823333,2), (2951807,0x381009033caee800440144888263803c03500909c24106333,2), (3082879,0x4780383269c35800340780878654704d0208061280e8344e0c106333,2), (7258239,0x3ff401c401e3003205a188a6e7,2), (9308799,0x1d681e1216798530048e409202680b9c076512d1320433,2), (9833087,0x123b03c243279ba2006c0840c202681b81d00f0170485e63386520433,2), (7291007,0xf23013d00430093007601702100848620208947,6), (270462,0xfe06029220401620200d40486a0441208db627,2), (560767,0x6926b19c01cd890cd8419100a5102505c020c638d427,2), (626303,0x1b28cd62a802badc060805d01ac02c09715427,2), (691839,0x3224560c8033888d3037068804b014be00f03a19938d427,2), (7749759,0x4c120ff805206a00d802d01fe02181186608d947,2), (2297471,0x7d090cd68d802e6008822214700105a41045b33,2), (2428543,0x1d104866901b002962e288297c05c17008318229b33,6), (2559615,0xe300c35a36005f8065116a052a81082e010648229b33,2), (2690687,0x6304c030d264401de0323a2a02a805c0082cc1045b33,2), (2821759,0x75050a15a3600128048c89c80510090e8648229b33,2), (2952831,0x7603829471a579801215720510294403a074318229b33,6), (7782527,0x3c103211980242008c8138698a6e7,2), (9047679,0x25c0a5294a4c88024e00d203b047a2642a33,2), (9571967,0xa90294a3348558014a20717048dcc7a19968a33,6), (7815295,0x28a0606f006780a70108144042010909c18208947,6), (2113630,0x171ef80e480510346c02e8128041c2507,6), (984191,0x1fce09530033d890225e018600820041c0b01827,2), (4210782,0x940619e023a01381b803c0ea802502507,2), (8405118,0x1041dac0eb0058ee2234c0dc122e40102a01217068b1b42c1827,2), (8241279,0x73038075802903502780f203fc04303e18c11ac7,2), (2753663,0xf1e05641840e009e00060011608a94213208a6cab,2), (3540095,0x1b601404a44106207006e0641510054882653649008382c24106333,2)]
+lemma h0Block9_0Mem : ∀ ns ∈ h0Block9_0, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_0Ok
+def h0Block9_1Specs : List PoolSpec := [pool13,pool9,pool1,(29,[]),pool4,pool3,pool6,(14,[]),pool0,(27,[]),(11,[]),pool8,pool7,(16,[]),pool11,(4,[]),(6,[]),(12,[]),(8,[]),(9,[]),(15,[]),(17,[]),(19,[]),(10,[]),(0,[]),(7,[]),(14,[(1,0,2)]),(0,[(2,2,4)]),(0,[(2,174,4)]),(1,[(1,0,2),(2,174,4)]),(2,[(1,0,2),(2,174,4)]),(36,[]),(0,[(2,3,4)]),(1,[(1,0,2),(2,3,4)]),(2,[(1,0,2),(2,3,4)]),(1,[(3,0,2),(2,3,4)]),pool16,(1,[(1,0,4),(2,3,4)]),(8,[(3,0,5)]),(1,[(3,0,5),(2,3,4)]),(35,[]),(0,[(2,2,4),(0,3,5)]),(1,[(2,2,4),(0,3,5)])]
+def h0Block9_1Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_1Specs
+def h0Block9_1 : List NodeSpec := [([87,0,1,2,131,3,4,5],[5,8,11,16,18,19,41,42],[0]),([87,0,1,2,3,263,4,5],[6,7,8,11,21,22],[0]),([87,0,1,2,3,4,312,5],[5,7,8,10,11,22,24,36],[0]),([87,0,1,174,3,4,5],[10,11,12,14,16,25,26,27],[0]),([198,0,1,2,174,3,4,5],[11,12,13,14,16,25],[]),([198,0,1,2,3,4,5],[5,11,13,14,16,17,18,23,28,29,30],[0]),([89,234,0,1,2,3,4,5],[1,2,5,6,18,25,32,35],[0]),([89,364,0,1,2,3,4,5],[0,2,3,9,15,20,22,32,38,39],[]),([89,0,1,2,174,3,4,5],[0,2,12,13,18,32,33,34],[0,1]),([89,0,1,2,3,4,312,5],[0,2,4,5,17,19,20,22,32,36,37],[0]),([89,0,1,2,3,4,92,5],[1,5,6,9,10,11,16,18,19,31,40],[0]),([285,0,1,2,3,263,4,5],[2,6,17,19],[])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test9_2 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket8 9 h0Block9_2 = true := by decide +kernel
-def h0Block9_3 : List NodeSpec := indexTripleNodes [(3802239,0x1eb01a0f906103802780fd00f42ddc0a1008382c24106333,2), (4064383,0xfffe03c0e8820c4fa00900818601a1b80c94020e010648229b33,2), (18352223,0x1fa8042121900504011061018b82e1383,6), (9176191,0xf681d104189f400c805e00a962e2883081082e0282433,2), (9700479,0x305015906103802781c60399445a81a2281082e0282433,2), (20449375,0x63e008228f0004c036c0718340686c3,2), (10749055,0x3d20060d906103802780860144888255404102500838690906333,2), (11273343,0x1041a44104640e00dc0c8268030114485470468012030a0080452c690906333,2), (8274047,0xf2086402580574012700aa0620484e1908087,2), (13370495,0xe080180d07441810600b2e824405345014c031020801070a868a33,2), (13894783,0x38a00f03a20c04300650d0580480400300441e80d400838041468a33,2), (14943359,0x1a600d02a961ed002224024020f5011c022e70c40671705c3d0c668a33,2), (15991935,0x12b00cb070f4b0e78055a00c820404a06e0718786a0338b82e19c324833,6), (8306815,0x36101a87c4017600ab00c41a104068c40418e7,6), (37225599,0x32603d10613e801904080441cc04100209b98d9033,2), (8421502,0x7fbc8055c03b888d300781720082d00cc16370ca641827,2), (17465471,0x79cad4003a02780f203fc04303e18c11ac7,2), (2493567,0x3b7308528180b3c007d8008a88844b208a6cab,2), (3279999,0x1f66c849de03010015220609b3f80a189106333,6), (3542143,0x711c5c852dd02f50048401581e85a2200428dd106333,2), (3804287,0x74851640424b903fbca8023e00b60020b12229b33,2), (17307743,0xf7031b0536003e0181d801a0081c023,2), (10226815,0xd20c857ac09f0032400110051222095500b603a3184906333,2), (10751103,0x31829b21acb5801e1684854706607c19e02c6e19c306333,6), (17531007,0xee407a8046600d301f82a805c0ce1908087,2), (14421119,0x60c0b010f5b70011420035007e0129ce2480340f42c4e8a33,2), (15469695,0x3fc1c5b0d6cc80242802505a03418209a00d0370cdb4833,6), (17596543,0x3d701990057c029c04201a02080b1c40418e7,6), (18251903,0x700a0035015407b027c03208607c2cc11ac7,2), (2233471,0xafc8172002a80f6024c02c13494213208a6cab,2), (3019903,0xf4ba106801ec09f0130548872899c81209c32106333,2), (3282047,0x1efe8172002a80f603e80e8216eb01213852106333,2)]
+lemma h0Block9_1Ok : checkNodesBT h0W h0G h0Mask h0Block9_1Pools h0Autos h0Bucket8 9 h0Block9_1 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test9_3 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket8 9 h0Block9_3 = true := by decide +kernel
-def h0Block9_4 : List NodeSpec := indexTripleNodes [(3544191,0x1cb552284075bca802381ec04301a0540120e8664229b33,2), (3806335,0x230fe8172002a80f600b80e2208f0625a02c61024823333,2), (4068479,0x2105ae8252006503d80bc054304b89b0338023458e810506333,6), (8655999,0xbc17d02e4005501ec08c1cca2344086051008d163482506333,2), (9180287,0x16824ba094801af81ec051c8ef480f416370ca2823333,2), (18317439,0xfd0f78066a00cc1740aa0190120488087,6), (11801727,0x1141aa91a8803551b901e2381ec04f00d603d0cca42a33,2), (12326015,0x20836ba3350068e822c018d9607b03304102d05500468b19c324833,2), (12850303,0x920d548bd401d24688c02381ec0a607a0f815013008d1637199968a33,2), (13374591,0x22836ba2cb007c924100d7c0f60530334058c21b720433,2), (18382975,0x3aa0a4c00498028811a02e809160418e7,6), (18448511,0x3be00560002403d814c0c405809809100810909808087,2), (79999,0x209c00ab000820404d01cc0760a4060b6af,2), (49293439,0x74d00820079005ac03ce004f27cf52082319d,6), (53487743,0xb0c1f8041005ac00e980840209be22c94232410619d,6), (405631,0x30600a600a200f018a4a1b4b0d0e7,6), (219199,3899913195569,6), (1237119,0x3c2a8011a01f040801280138bb0660208b627,2), (228612223,0x7d8f0015221cd932bc0c411823,2), (43014271,0xd64025801415a013a019040130548818269fc1b042d12208c31,2), (47208575,0x6e2012c00a0a4c0116008402780982a442c69240239cc670c841831,2), (237000831,0x1c4804b019900a9401240a442209ca30364208c31,6), (1286271,0x29603f4046600808065f864190b4108087,2), (1302655,0x60c014c005c065b0a084804642f088087,2), (245389439,0x14b00c1400a132d898272c81106c41831,2), (266360959,0xf948028b00260a910e5348102702441831,2), (1646719,0x71660046807c10202a401703b0660208b627,6), (1663103,0x7cf40007003414808e014e008880907608c0408d4e7,2), (88191,0x29603f40466006b801e02720409c2c18e7,2), (40921215,0x7cb00920002014e805ac001a01e81e1f1244406cf16ba208c31,2), (45115519,0x6ccf009203bc01f60054807f80f0f449ec108047398ce14841831,2), (1679487,0x60c014c01b80b6c38108321a140418e7,2)]
+lemma h0Block9_1Mem : ∀ ns ∈ h0Block9_1, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_1Ok
+def h0Block9_2Specs : List PoolSpec := [pool13,(18,[]),pool9,pool1,pool5,pool14,pool12,(29,[]),(30,[]),pool4,pool3,pool6,pool0,pool2,pool17,pool10,(47,[]),(11,[]),pool15,pool8,(13,[]),pool7,(3,[]),(4,[]),(6,[]),(12,[]),(8,[]),(9,[]),(17,[]),(19,[]),(20,[]),(10,[]),(8,[(1,0,1)]),(2,[(1,0,1),(2,2,3)]),(7,[]),(2,[]),(0,[(2,263,4)]),(1,[(1,0,3),(2,263,4)]),(2,[(1,0,3),(2,263,4)]),(0,[(3,4,5)]),pool20,(1,[(1,0,4),(3,4,5)]),(0,[(1,2,3),(2,65,4)]),(1,[(1,2,3),(2,65,4)]),(0,[(2,2,3)])]
+def h0Block9_2Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_2Specs
+def h0Block9_2 : List NodeSpec := [([285,0,1,2,3,4,5],[0,3,11,17,24,26,28,31,36,37,38],[0,1]),([69,0,1,2,3,65,4,5],[2,4,11,13,17,24],[0]),([69,0,1,2,3,4,5],[1,2,17,19,24,26,28,31,35,42,43],[0,1]),([31,234,0,1,2,3,4,5],[10,13,15,31,34,35],[0]),([31,291,0,1,2,3,4,5],[10,16,22,28,30,39],[0]),([31,0,1,6,2,3,4,5],[3,4,6,9,10,12,13,14,18,27],[0,1]),([31,0,1,53,2,3,4,5],[4,10,13,15,31,34,35],[0,1]),([31,0,1,2,3,4,312,5],[9,10,27,31,39,40,41],[0]),([104,350,0,1,2,3,4,5],[0,12,25,26,27],[0]),([104,364,0,1,2,3,4,5],[0,12,23,29],[]),([104,0,1,6,2,3,4,5],[4,6,7,8,12,18,20,25,26,32,33],[0]),([104,0,1,2,3,114,4,5],[4,5,11,21,25,26,27,44],[0])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test9_4 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket8 9 h0Block9_4 = true := by decide +kernel
-def h0Block9_5 : List NodeSpec := indexTripleNodes [(1712255,0x27203e1004980d900de0123039a3b0661a3627,2), (1859711,0xd3cc800a6014808e00f200380d0d1d83e18c714e7,6), (13142143,0x3ec8005c01a3801880b994e8a4f800c0387a169041831,2), (15239295,0x3a678009400b33005e0141590823c4448401c30869041831,2), (1581183,0x10ae0057c000e01b0260360487d058e2030e7,6), (1941631,0x3ce604008d00f820405100606202431e8260229427,6), (784373887,0x3cf7900442002a1825c5d05502f807004140c3,2), (1958015,0xe88063fa00f203417c0917202c80100700d0d0d8061e18c11ac7,2), (792762495,0xe88062f40282010b401430450ae82a8108070085450105,2), (8951935,0xc9e800c7c13a0346e00082863933d4418404402041c2a020a1,2), (10000511,0xc808012868ca008850c7788ba0aa02201020e0105020a1,2), (12097663,0xc5e0016800e6005f803e1451b5124045ce2480b82e1e863041831,2), (14194815,0x639000ec014f00e980160543044c65618c3c4d01705c3a58c841831,2), (178296959,0x1d183400a736d45105298191704c140810841831,2), (1597567,0x1af8001c031068040d829e3706d1a140418e7,2), (608213119,0x345193194414106c0a789170388804141831,2), (38836351,0x389c006407b4004201f02a584a2883080c5c0231398da0a0a1,2), (64002175,0x11161800be011b00f300a860922e816809091706434e1c0a1,2), (4374655,0x744e0046807c1f800c0660d12a034540904c0453627,6), (4407423,0x39b4002d0083001403414808e01d82c35806868a8120f0c608d4e7,2), (8956031,0x333e004a1a2980297c90c14f01841700850820a1,6), (11053183,0xae25003ef27401045ce168062105c3d0c9041831,2), (13150335,0x3a59200d5401a64b91602c61a3040a201170ce14841831,2), (1335423,0x35f000380620740881890935068c40418e7,6), (36743295,0x18c30480131cc972d40d114044021c1398d2120a1,2), (104575,0x633005a800864a26200b81c40418e7,2), (4571263,0x3a7b0024c06c80d8748090c760cc0453627,2), (4604031,0x62b802cb00042c81e2e40020bf00d0d1d83e18c11ac7,2), (10008703,0x7c3400bd001840163bb08e0539c3f019380e1e8598208c31,2), (12105855,0x366220059500c180763560e40c1043019380e184364208c31,2), (4636799,0x35f005500cd21014407a0b1c40418e7,6), (4702335,0xacd0023403e0810197880141d833090b627,6)]
+lemma h0Block9_2Ok : checkNodesBT h0W h0G h0Mask h0Block9_2Pools h0Autos h0Bucket8 9 h0Block9_2 = true := by decide +kernel
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test9_5 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket8 9 h0Block9_5 = true := by decide +kernel
-def h0Block9_6 : List NodeSpec := indexTripleNodes [(4767871,0x126e0001c00d052023802a4b80640483b07c2cc714e7,2), (4833407,0x1af8007801158c04d00740b8b030e7,6), (4898943,0xc18047014fd81c4184084190d0a030e7,6), (4964479,0xeb94008d00f80ec00e010802b1d83301045427,6), (4997247,0xed6c003417c090f200105380640483b07c2cc11ac7,2), (5030015,0xd7c02381cc40f80e9017160418e7,6), (5128319,0x1830154066904901880b0170210642f088087,6), (438399,0x2c2c001d01b811806e002a0120c76094310453627,2), (446591,0x5f1006ec34c07e0aa01703b14608087,6), (503935,0xec4c001d01881f0386b01f602606290285810453627,6), (520319,0x5dd00592405100aa0620112270608087,6)]
+lemma h0Block9_2Mem : ∀ ns ∈ h0Block9_2, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_2Ok
+def h0Block9_3Specs : List PoolSpec := [pool9,pool5,pool4,pool3,pool6,pool0,pool2,pool10,(47,[]),(27,[]),(11,[]),pool8,(13,[]),pool7,(16,[]),pool11,(3,[]),(4,[]),(12,[]),(8,[]),(9,[]),(15,[]),(17,[]),(19,[]),(20,[]),(10,[]),(1,[]),(7,[]),(2,[]),(0,[(2,174,3)]),(1,[(1,0,2),(2,174,3)]),(2,[(1,0,2),(2,174,3)]),pool16,(22,[]),(0,[(3,3,312)]),(1,[(1,0,4),(3,3,312)]),(2,[(1,0,4),(3,3,312)]),(1,[(1,2,4),(3,3,92)]),(0,[(1,2,4),(3,3,92)])]
+def h0Block9_3Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_3Specs
+def h0Block9_3 : List NodeSpec := [([104,0,1,2,3,4,312,5],[3,5,12,20,22,23,32],[0]),([180,0,1,2,174,3,4,5],[1,6,10,13,16,29,30,31],[0]),([180,0,1,2,3,4,5],[1,4,10,20,22,24,25,27,29,30],[0]),([108,234,0,1,2,3,4,5],[1,3,15,21,27],[0]),([108,364,0,1,2,3,4,5],[1,11,15,17,23],[]),([108,0,1,2,174,3,4,5],[11,13,14,15,20,27],[0]),([314,0,1,2,3,4,312,5],[2,3,16,18,33],[]),([314,0,1,2,3,4,5],[1,2,3,10,19,22,24,25,27,34,35,36],[0,1]),([98,0,1,2,3,4,92,5],[3,6,7,9,10,19,37],[0]),([98,0,1,2,3,4,5],[1,3,7,10,19,22,23,25,26,27,38],[0]),([28,107,0,1,2,3,4,5],[6,8,14,20,24,25],[0]),([28,234,0,1,2,3,4,5],[0,4,6,25,27,28],[0])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test9_6 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket8 9 h0Block9_6 = true := by decide +kernel
-def h0Nodes9 : List NodeSpec := h0Block9_0 ++ h0Block9_1 ++ h0Block9_2 ++ h0Block9_3 ++ h0Block9_4 ++ h0Block9_5 ++ h0Block9_6
-lemma h0Check9 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket8 9 h0Nodes9 = true := by
-  unfold h0Nodes9 checkNodesBT
-  simp only [List.all_append, Bool.and_eq_true]
-  exact ⟨⟨⟨⟨⟨⟨h0Test9_0,h0Test9_1⟩,h0Test9_2⟩,h0Test9_3⟩,h0Test9_4⟩,h0Test9_5⟩,h0Test9_6⟩
+lemma h0Block9_3Ok : checkNodesBT h0W h0G h0Mask h0Block9_3Pools h0Autos h0Bucket8 9 h0Block9_3 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_3Mem : ∀ ns ∈ h0Block9_3, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_3Ok
+def h0Block9_4Specs : List PoolSpec := [pool9,pool1,pool12,pool4,pool3,pool6,pool0,pool2,(47,[]),(5,[]),(11,[]),pool15,pool8,(13,[]),(2,[(1,0,1),(2,6,2)]),pool7,(16,[]),(4,[]),(6,[]),(12,[]),(0,[(2,6,2)]),(1,[(2,6,2)]),(8,[]),(9,[]),(15,[]),(19,[]),(20,[]),(10,[]),(1,[(1,2,4)]),(7,[]),(2,[]),(8,[(1,0,2)]),(1,[(1,0,2),(3,3,5)]),(0,[(3,2,263)]),(1,[(1,0,3),(3,2,263)]),pool20,pool16,(1,[(1,0,4),(3,3,5)]),(0,[(3,2,3)]),(1,[(1,0,4),(3,2,3)]),(0,[(3,3,5)]),(1,[(3,0,4),(3,2,3)]),(8,[(3,0,5)]),(1,[(3,0,5),(3,2,3)]),(1,[(0,2,4),(3,3,5)])]
+def h0Block9_4Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_4Specs
+def h0Block9_4 : List NodeSpec := [([28,350,0,1,2,3,4,5],[5,8,23,26,27,40],[0,1]),([28,0,1,54,2,3,4,5],[0,5,7,27,29,30,44],[0]),([28,0,1,2,174,3,4,5],[5,7,10,12,19,22,25,31,32],[0]),([28,0,1,2,3,4,312,5],[3,4,5,7,22,24,35,36,37,40],[0,1]),([28,0,1,2,3,4,92,5],[5,7,16,19,22,23,28,29],[0]),([41,0,1,6,2,3,4,5],[1,2,6,7,9,10,11,14,15],[0]),([41,0,1,2,3,4,5],[7,11,14,15,16,18,19,20,21,22],[0]),([105,350,0,1,2,3,4,5],[1,4,5,12,22,23,41],[0]),([105,364,0,1,2,3,4,5],[1,7,12,17,25,42,43],[0]),([105,0,1,2,3,4,312,5],[1,3,4,13,16,25,36,38,39],[0]),([275,0,1,2,3,263,4,5],[1,5,19,29],[]),([275,0,1,2,3,4,5],[1,6,16,18,19,26,27,29,33,34],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_4Ok : checkNodesBT h0W h0G h0Mask h0Block9_4Pools h0Autos h0Bucket8 9 h0Block9_4 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_4Mem : ∀ ns ∈ h0Block9_4, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_4Ok
+def h0Block9_5Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool12,pool4,pool3,pool6,(14,[]),pool0,pool2,pool17,pool10,(27,[]),(11,[]),pool15,pool7,(7,[(1,0,1)]),(16,[]),pool11,(3,[]),(4,[]),(6,[]),(12,[]),(8,[]),(9,[]),(19,[]),(20,[]),(10,[]),(0,[]),(2,[(1,0,1),(3,2,4)]),(7,[]),(1,[(3,2,5)]),(2,[]),(0,[(3,2,5)]),(2,[(1,0,3)]),(14,[(1,0,4)]),(21,[]),(0,[(3,2,312)]),(1,[(1,0,4),(3,2,312)]),(2,[(1,0,4),(3,2,312)])]
+def h0Block9_5Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_5Specs
+def h0Block9_5 : List NodeSpec := [([107,291,0,1,2,3,4,5],[6,8,10,19,20],[0]),([107,364,0,1,2,3,4,5],[0,10,19,21,26],[]),([107,0,1,6,2,3,4,5],[2,5,7,8,10,13,14,15,17,30,31],[0]),([107,0,1,2,131,3,4,5],[5,6,10,14,19,24,31],[0]),([107,0,1,2,3,263,4,5],[0,7,19,22,23],[0]),([107,0,1,2,3,312,5],[5,9,10,22,25,29,36],[0]),([328,0,1,2,3,4,312,5],[5,6,14,22,37,38],[0]),([328,0,1,2,3,4,5],[5,6,9,10,18,22,23,24,27,28,38,39,40],[0]),([70,291,0,1,2,3,4,5],[1,16,20,27,28,33,34],[0,1]),([70,350,0,1,2,3,4,5],[12,16,25,27,28,33,34],[0,1]),([70,0,1,6,2,3,4,5],[2,3,4,9,10,11,15,16,31,32],[0,1]),([70,0,1,2,3,263,4,5],[0,3,14,23,31,34,35],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_5Ok : checkNodesBT h0W h0G h0Mask h0Block9_5Pools h0Autos h0Bucket8 9 h0Block9_5 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_5Mem : ∀ ns ∈ h0Block9_5, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_5Ok
+def h0Block9_6Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool12,(24,[]),pool4,pool3,pool6,(14,[]),pool0,pool2,pool17,pool10,(27,[]),(5,[]),(11,[]),pool15,pool8,pool7,(7,[(1,0,1)]),(16,[]),pool11,(3,[]),(4,[]),(12,[]),(8,[]),(9,[]),(9,[(1,0,1)]),(19,[]),(20,[]),(10,[]),(0,[]),(7,[]),(1,[(1,0,2)]),(2,[(1,0,2),(3,1,2)]),(2,[(1,0,2),(3,1,174)]),(0,[(3,1,174)]),(0,[(3,1,3)]),(2,[(1,0,2),(3,1,3)]),(1,[(3,0,2)]),pool20,pool16,(0,[(0,2,3),(3,53,5)]),(1,[(0,2,3),(3,53,5)])]
+def h0Block9_6Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_6Specs
+def h0Block9_6 : List NodeSpec := [([70,0,1,2,3,4,312,5],[0,3,6,7,9,10,11,19,29,33,41,42],[0]),([117,0,1,2,3,4],[26,31,33,43,44],[0,1]),([47,0,1,6,2,3,4,5],[1,2,4,5,12,16,17,20],[0]),([79,0,1,6,2,3,4,5],[2,10,12,13,17,18,28],[0,1]),([90,0,1,6,2,3,4,5],[2,4,10,12,24,29,30],[0]),([177,291,0,1,2,3,4,5],[1,7,10,15,23],[0]),([177,0,1,2,3,263,4,5],[2,3,8,10,15,25,29],[0]),([177,0,1,174,3,4,5],[2,21,22,32,33,34,35],[0]),([35,0,1,2,174,3,4,5],[2,10,11,14,16,22,34,36],[0]),([35,0,1,2,3,4,5],[2,6,10,21,25,26,27,31,34,36,37],[0]),([201,234,0,1,2,3,4,5],[1,7,26,33,38,40],[0]),([201,0,1,2,174,3,4,5],[3,11,16,19,26,34,38,39],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_6Ok : checkNodesBT h0W h0G h0Mask h0Block9_6Pools h0Autos h0Bucket8 9 h0Block9_6 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_6Mem : ∀ ns ∈ h0Block9_6, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_6Ok
+def h0Block9_7Specs : List PoolSpec := [pool1,pool5,pool4,pool3,pool6,pool0,pool2,pool10,(47,[]),(5,[]),(11,[]),pool8,pool7,(16,[]),pool11,(3,[]),(12,[]),(8,[]),(9,[]),(17,[]),(20,[]),(10,[]),(0,[]),(1,[]),(1,[(1,2,4)]),(7,[]),(1,[(3,0,2)]),(7,[(3,1,5)]),(1,[(1,0,3)]),(0,[(3,1,263)]),(2,[(1,0,3),(3,1,263)]),(1,[(1,0,4)]),(2,[(1,0,4),(3,1,4)]),pool23,(9,[(3,1,312)]),(0,[(3,1,312)]),(2,[(1,2,4),(3,1,92)])]
+def h0Block9_7Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_7Specs
+def h0Block9_7 : List NodeSpec := [([266,0,1,2,3,263,4,5],[0,5,19,28],[]),([266,0,1,2,3,4,5],[0,1,2,5,9,10,18,19,21,23,29,30],[0]),([205,234,0,1,2,3,4,5],[4,7,14,18,25],[0]),([205,291,0,1,2,3,4,5],[0,8,12,15,18],[0]),([205,0,1,2,174,3,4,5],[11,12,13,14,18,25],[0]),([205,0,1,2,3,263,4,5],[0,1,4,18,19],[0]),([205,0,1,2,3,312,5],[0,2,5,18,22,31,32],[0]),([74,0,1,2,3,4,312,5],[0,2,5,22,31,33],[0,1]),([74,0,1,2,3,4,5],[0,5,9,10,16,17,21,31,33,34,35],[0,1]),([208,0,1,2,3,4,92,5],[4,6,7,10,24],[0]),([208,0,1,2,3,4,5],[0,2,4,7,9,13,16,17,21,22,24,36],[0,1]),([187,234,0,1,2,3,4,5],[0,3,4,6,14,20,21,26,27],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_7Ok : checkNodesBT h0W h0G h0Mask h0Block9_7Pools h0Autos h0Bucket8 9 h0Block9_7 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_7Mem : ∀ ns ∈ h0Block9_7, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_7Ok
+def h0Block9_8Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool14,pool4,pool3,pool6,(14,[]),pool0,pool2,pool10,(27,[]),pool8,pool7,pool11,(12,[]),(8,[]),(9,[]),(15,[]),(20,[]),(10,[]),(1,[]),pool18,(7,[]),(0,[(1,1,2)]),(1,[(1,0,2)]),(0,[(1,3,4)]),(2,[(3,0,2),(1,1,2)]),(1,[(3,0,2),(1,3,4)]),(2,[(3,0,2),(1,3,4)]),(10,[(3,0,3)]),(25,[]),pool16]
+def h0Block9_8Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_8Specs
+def h0Block9_8 : List NodeSpec := [([187,291,0,1,2,3,4,5],[2,5,6,9,10,14,20,31,32],[0]),([187,350,0,1,2,3,4,5],[0,5,13,18,20,21],[]),([187,0,1,2,174,3,4,5],[2,3,10,12,13,20,21,26],[0]),([187,0,1,2,3,263,4,5],[0,2,4,20,21],[0]),([187,0,1,2,3,4,312,5],[3,5,6,8,9,10,19,20,33],[0]),([234,0,1,2,88,3,4,5],[1,15,17,24],[0]),([234,0,1,2,131,3,4,5],[6,9,10,17,24],[0]),([234,0,1,2,3,114,4,5],[7,10,15,18,24],[0]),([234,0,1,2,3,4,203,5],[6,15,20,24],[0]),([234,0,1,2,3,4,16,5],[3,6,7,10,16,24,27,29,30],[0]),([234,0,1,175,3,4,5],[2,9,10,15,22,24,25,28],[0]),([234,0,1,3,4,92,5],[6,7,10,11,15,18,23,24],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_8Ok : checkNodesBT h0W h0G h0Mask h0Block9_8Pools h0Autos h0Bucket8 9 h0Block9_8 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_8Mem : ∀ ns ∈ h0Block9_8, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_8Ok
+def h0Block9_9Specs : List PoolSpec := [pool13,pool9,pool1,pool4,pool3,pool6,pool0,pool2,pool10,(47,[]),(11,[]),pool8,pool7,pool11,(3,[]),(4,[]),(8,[]),(9,[]),(23,[]),(17,[]),(20,[]),(0,[]),pool18,(7,[]),(10,[(3,0,3)]),(1,[(3,0,3),(1,2,4)]),(2,[(3,0,3),(1,2,4)]),(0,[(1,2,3)]),(0,[(0,3,5)]),(2,[(3,0,4)]),(1,[(3,0,4),(1,2,3)]),(10,[(3,0,4)]),(1,[(3,0,4),(0,3,5)])]
+def h0Block9_9Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_9Specs
+def h0Block9_9 : List NodeSpec := [([291,0,1,54,2,3,4,5],[6,9,14,17],[0]),([291,0,1,153,2,3,4,5],[4,6,16,24],[0]),([291,0,1,2,3,114,4,5],[12,13,16,24],[0]),([291,0,1,2,3,4,203,5],[2,4,13,14,17,20],[0]),([291,0,1,2,3,4,92,5],[2,4,7,10,14,18,22,25,26],[0,1]),([381,0,1,2,3,65,4,5],[4,7,10,21],[]),([381,0,1,2,3,4,5],[1,4,7,10,13,15,17,19,20,27],[0]),([350,0,1,53,2,3,4,5],[6,9,16,17,29],[0]),([350,0,1,153,2,3,4,5],[0,6,17,23],[0]),([350,0,1,2,131,3,4,5],[2,3,12,17,28,31,32],[0]),([350,0,1,2,3,65,4,5],[3,5,10,11,17,27,30],[0,1]),([350,0,1,2,3,92,5],[5,6,7,8,12,17,22,23],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_9Ok : checkNodesBT h0W h0G h0Mask h0Block9_9Pools h0Autos h0Bucket8 9 h0Block9_9 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_9Mem : ∀ ns ∈ h0Block9_9, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_9Ok
+def h0Block9_10Specs : List PoolSpec := [pool13,pool5,pool14,pool12,(29,[]),pool4,pool3,pool6,(14,[]),pool0,pool2,pool10,(47,[]),(27,[]),(11,[]),pool8,(13,[]),pool7,pool11,(3,[]),(4,[]),(6,[]),(12,[]),(9,[]),(17,[]),(19,[]),(10,[]),(1,[]),pool18,(7,[]),(0,[(2,2,4)]),(0,[(1,3,4)]),(0,[(3,4,5)]),(10,[(0,2,3)]),(8,[(3,0,5)]),(1,[(3,0,5),(1,2,4)]),(2,[(1,2,4)]),(0,[(2,2,3)]),(2,[(1,2,4),(3,0,92)]),(1,[(1,2,4),(3,0,92)]),(0,[(3,2,4)]),(1,[(3,2,4),(1,107,0)]),(1,[(3,4,5),(1,31,0)]),(2,[(1,31,0)])]
+def h0Block9_10Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_10Specs
+def h0Block9_10 : List NodeSpec := [([326,0,1,2,3,4,92,5],[7,10,14,21,28],[0]),([326,0,1,2,3,4,5],[7,10,14,18,19,20,21,22,28,38,39],[0,1]),([364,0,1,53,2,3,4,5],[3,4,9,12,25,33,34],[0]),([364,0,1,54,2,3,4,5],[0,9,20,25],[0]),([364,0,1,2,88,3,4,5],[15,18,25,26,34],[]),([364,0,1,2,3,65,4,5],[1,10,15,20,25],[]),([364,0,1,2,3,4,92,5],[0,7,10,13,15,20,25,34,35,36],[0,1]),([364,0,1,2,3,4,16,5],[0,1,2,4,10,17,20,25,31],[]),([0,327,1,2,3,4,5],[8,9,14,15,17,18,19,20,22,27,29,30],[0,1]),([0,346,1,2,3,4,5],[10,11,12,14,18,19,24,29,32,42,43],[0]),([0,395,1,2,3,4,5],[9,16,17,18,20,23,24,27,29,37],[0,1]),([0,425,1,2,3,4,5],[5,6,8,10,14,19,20,22,23,40,41],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_10Ok : checkNodesBT h0W h0G h0Mask h0Block9_10Pools h0Autos h0Bucket8 9 h0Block9_10 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_10Mem : ∀ ns ∈ h0Block9_10, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_10Ok
+def h0Block9_11Specs : List PoolSpec := [pool9,pool1,pool5,pool14,pool12,pool4,pool3,pool6,(14,[]),pool0,pool2,(2,[(1,0,1),(0,6,2)]),pool17,(5,[]),(11,[]),pool15,pool8,(13,[]),pool7,(16,[]),pool11,(3,[]),(12,[]),(8,[]),(2,[(1,0,1),(0,6,4)]),(9,[]),(17,[]),(19,[]),(0,[(0,6,5)]),(1,[(0,6,5)]),(10,[]),(0,[]),(1,[]),(7,[]),(1,[(3,2,5)]),(1,[(3,0,2)]),(2,[(3,0,2),(1,234,1)]),(0,[(1,234,1)]),(0,[(3,2,5)]),(0,[(1,291,1)]),(2,[(3,0,3),(1,291,1)]),(0,[(1,350,1)]),(2,[(3,0,4),(1,350,1)]),(1,[(3,0,5)]),(1,[(2,2,3)]),(0,[(2,2,3),(1,104,1)]),(1,[(2,2,4)]),(0,[(2,2,4),(1,87,1)]),(1,[(3,2,4)]),(0,[(3,2,4),(1,107,1)])]
+def h0Block9_11Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_11Specs
+def h0Block9_11 : List NodeSpec := [([0,441,1,2,3,4,5],[0,8,19,20,21,22,25,30,32,38],[0,1]),([0,1,209,2,3,4,5],[8,9,14,16,18,22,23,30,33,46,47],[0,1]),([0,1,399,2,3,4,5],[9,13,17,18,25,26,30,44,45],[0,1]),([0,1,330,2,3,4,5],[6,8,14,20,22,23,25,30,48,49],[0]),([0,1,444,2,3,4,5],[0,2,5,8,19,22,23,25,30,31,34],[0]),([0,1,50,2,3,4,5],[1,5,9,10,13,22,23,25,30,35,36,37],[0]),([0,1,292,2,3,4,5],[5,9,13,14,23,25,30,39,40],[0]),([0,1,84,2,3,4,5],[1,9,13,14,22,23,25,30,41,42],[0]),([0,1,365,2,3,4,5],[1,2,5,9,13,14,22,23,25,27,43],[0]),([0,1,7,6,2,3,4,5],[1,4,6,7,9,11,13,14,15],[0]),([0,1,58,6,2,3,4,5],[1,3,5,7,15,16,18,24,25],[0,1]),([0,1,11,6,2,3,4],[1,4,9,12,15,28,29],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_11Ok : checkNodesBT h0W h0G h0Mask h0Block9_11Pools h0Autos h0Bucket8 9 h0Block9_11 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_11Mem : ∀ ns ∈ h0Block9_11, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_11Ok
+def h0Block9_12Specs : List PoolSpec := [pool13,pool1,pool5,pool14,pool12,(29,[]),(24,[]),(30,[]),pool4,pool3,pool6,pool0,pool2,pool17,(5,[]),(11,[]),pool15,pool8,(13,[]),(2,[(1,0,1),(1,6,2)]),pool7,(7,[(1,0,1)]),(8,[]),(9,[]),(23,[]),pool22,(9,[(1,0,1)]),(0,[(0,6,5)]),(1,[(0,6,5)]),(2,[(1,0,1),(1,2,3)]),(2,[(1,0,1),(1,2,4)]),(10,[]),(8,[(1,0,1)]),(2,[(1,0,1),(0,2,3)]),(0,[]),(1,[]),(2,[(1,0,1),(0,2,4)]),pool18,(1,[(1,2,4)]),(7,[]),(2,[]),pool20,pool16,(10,[(0,2,3)]),(0,[(0,2,3),(0,4,5)]),(1,[(0,2,3),(0,4,5)])]
+def h0Block9_12Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_12Specs
+def h0Block9_12 : List NodeSpec := [([0,1,11,6,2,3,4,5],[1,2,4,6,11,12,13,16,17,24],[0,1]),([0,1,11,2,3,4],[27,28,31],[0,1]),([0,1,6,53,2,3,4,5],[4,5,7,11,13,16,21,32,33,34,35],[0,1]),([0,1,6,54,2,3,4,5],[0,1,9,11,16,21,26,34,36],[0]),([0,1,6,153,2,3,4,5],[1,2,4,7,9,11,13,16,34,35],[0,1]),([0,1,6,2,18,3,4,5],[1,3,4,12,13,14,15,16,19],[0]),([0,1,6,2,3,65,4,5],[1,2,4,9,10,11,12,15,16,29],[0]),([0,1,6,2,3,114,4,5],[1,2,3,8,10,12,13,16,20,34,35],[0,1]),([0,1,6,2,3,4,61,5],[1,4,11,13,16,23,25],[0,1]),([0,1,6,2,3,4,92,5],[1,8,9,10,11,12,15,16,30,37,38],[0,1]),([0,1,53,2,3,114,4,5],[1,3,4,8,10,22,39,40,43,44,45],[0,1]),([0,1,53,2,3,4,312,5],[9,11,18,23,34,39,41,42],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_12Ok : checkNodesBT h0W h0G h0Mask h0Block9_12Pools h0Autos h0Bucket8 9 h0Block9_12 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_12Mem : ∀ ns ∈ h0Block9_12, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_12Ok
+def h0Block9_13Specs : List PoolSpec := [pool13,pool1,pool5,pool14,pool12,pool4,pool3,pool6,(14,[]),pool0,pool2,(27,[]),(11,[]),pool8,(13,[]),pool7,(16,[]),(4,[]),(6,[]),(12,[]),(8,[]),(9,[]),(17,[]),(19,[]),(20,[]),(10,[]),(0,[]),(1,[]),(7,[]),(2,[]),(1,[(1,0,2),(0,174,3)]),(0,[(0,174,3)]),(2,[(1,0,2),(0,174,3)]),(0,[(1,291,2)]),(1,[(3,0,3),(1,291,2)]),pool16,(6,[(1,0,4)]),(0,[(1,350,2)]),(1,[(3,0,4),(1,350,2)]),(0,[(0,2,3)]),(2,[(0,2,3),(1,0,53)]),(10,[(0,2,4)]),(0,[(0,2,4),(0,3,5)]),(1,[(0,2,4),(0,3,5)]),(0,[(3,4,5),(1,31,2)]),(1,[(3,4,5),(1,31,2)])]
+def h0Block9_13Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_13Specs
+def h0Block9_13 : List NodeSpec := [([0,1,274,2,3,263,4,5],[1,2,7,12,19,23],[]),([0,1,54,2,131,3,4,5],[1,3,5,6,21,28,41,42,43],[0]),([0,1,54,2,3,263,4,5],[0,9,19,26,28],[0]),([0,1,329,2,3,4,312,5],[5,6,12,23,26,35,36],[0]),([0,1,153,2,3,263,4,5],[0,9,19,20,28],[0]),([0,1,153,2,3,4,312,5],[6,9,21,35],[0]),([0,1,2,33,3,4,5],[6,8,15,18,20,22,29,44,45],[0]),([0,1,2,295,3,4,5],[6,13,14,16,18,20,25,33,34],[0]),([0,1,2,351,3,4,5],[7,8,10,11,16,19,20,21,25,37,38],[0]),([0,1,2,367,3,4,5],[9,15,17,18,19,20,23,27],[0,1]),([0,1,2,211,174,3,4,5],[1,10,12,15,19,30,31,32],[0]),([0,1,2,109,3,4,5],[1,4,9,17,20,21,24,28,39,40],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_13Ok : checkNodesBT h0W h0G h0Mask h0Block9_13Pools h0Autos h0Bucket8 9 h0Block9_13 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_13Mem : ∀ ns ∈ h0Block9_13, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_13Ok
+def h0Block9_14Specs : List PoolSpec := [pool1,pool5,pool4,pool3,pool6,pool0,pool2,(27,[]),(11,[]),pool8,pool7,(16,[]),pool11,(3,[]),(4,[]),(12,[]),(8,[]),(9,[]),(19,[]),(20,[]),(10,[]),(0,[]),(1,[]),(7,[]),(2,[]),(17,[(1,0,2)]),(2,[(1,0,2),(1,1,3)]),(2,[(1,0,2),(1,1,4)]),(1,[(1,0,2),(0,174,5)]),(0,[(1,3,4)]),(1,[(1,0,2),(1,3,4)]),(2,[(1,0,2),(1,3,4)]),(1,[(1,0,2),(0,3,5)]),(10,[(1,0,2)]),(0,[(0,2,4)]),(2,[(0,2,4),(1,0,54)]),(1,[(0,2,4)]),(2,[(0,2,4),(1,1,54)]),(2,[(1,0,153)]),(0,[(0,2,5)]),(2,[(1,1,153)]),(1,[(0,2,5)])]
+def h0Block9_14Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_14Specs
+def h0Block9_14 : List NodeSpec := [([0,1,2,218,174,3,4,5],[9,10,11,12,23],[0]),([0,1,2,106,3,4,5],[2,5,13,14,15,17,19,23,34,35],[0]),([0,1,2,181,174,3,4,5],[1,6,7,8,9,24,28],[0]),([0,1,2,154,3,4,5],[5,6,12,13,15,17,22,23,38,39],[0,1]),([0,1,2,174,88,3,4,5],[7,9,11,12,16,21,23],[0]),([0,1,2,174,131,3,4,5],[0,6,8,10,16,23,32],[0]),([0,1,2,174,3,188,4,5],[1,2,4,5,6,8,10,15,16,25,26],[0,1]),([0,1,2,174,3,114,4,5],[8,10,12,17,23,33],[0]),([0,1,2,174,3,4,203,5],[0,3,9,10,11,12,23,27],[0,1]),([0,1,2,174,3,4,16,5],[1,9,10,11,15,16,17,29,30,31],[0,1]),([0,1,2,407,3,4,5],[0,5,15,16,17,18,20,23,36,37],[0,1]),([0,1,2,155,3,4,5],[0,1,5,15,16,17,21,23,40,41],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_14Ok : checkNodesBT h0W h0G h0Mask h0Block9_14Pools h0Autos h0Bucket8 9 h0Block9_14 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_14Mem : ∀ ns ∈ h0Block9_14, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_14Ok
+def h0Block9_15Specs : List PoolSpec := [pool1,pool5,pool4,pool3,pool6,(14,[]),pool0,pool2,pool17,pool10,(27,[]),(11,[]),pool8,(13,[]),(2,[(1,0,1),(1,6,2)]),pool7,(16,[]),pool11,(3,[]),(4,[]),(6,[]),(12,[]),(0,[(1,6,2)]),(1,[(1,6,2)]),(8,[]),(9,[]),(15,[]),(17,[]),(19,[]),(20,[]),(10,[]),(1,[]),(7,[]),(2,[]),(0,[(1,234,3)]),(2,[(1,0,3),(1,1,2)]),pool16,(0,[(0,3,5)]),(1,[(1,0,4),(0,3,5)]),(0,[(1,350,3)]),(1,[(1,2,4),(0,3,92)]),(1,[(1,2,4),(0,3,5)]),(0,[(2,2,4),(1,87,3)]),(1,[(2,2,4),(1,87,3)]),(7,[(1,107,3)]),(0,[(3,2,4),(1,107,3)]),(0,[(3,2,5),(1,70,3)]),(1,[(3,2,5),(1,70,3)])]
+def h0Block9_15Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_15Specs
+def h0Block9_15 : List NodeSpec := [([0,1,2,175,3,263,4,5],[0,2,6,7,11,21,35],[0]),([0,1,2,18,3,4,5],[0,7,8,14,15,16,17,18,19,20,21,22,23],[0]),([0,1,2,340,3,4,312,5],[2,3,18,21,28,36],[0]),([0,1,2,142,3,4,92,5],[3,7,9,10,11,21,40],[0]),([0,1,2,131,3,4,312,5],[0,2,3,25,36,37,38],[0]),([0,1,2,131,3,4,92,5],[0,3,7,11,24,30,33,41],[0]),([0,1,2,3,146,4,5],[3,12,13,24,27,30,32,42,43],[0]),([0,1,2,3,152,4,5],[1,5,11,25,27,30,31,44,45],[0,1]),([0,1,2,3,163,4,5],[4,10,11,13,21,25,32,46,47],[0,1]),([0,1,2,3,237,4,5],[1,3,4,7,25,27,29,30,32,34],[0]),([0,1,2,3,353,4,5],[1,4,11,15,25,26,27,30,31,32,39],[0,1]),([0,1,2,3,370,4,5],[1,4,11,19,25,28,31,32],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_15Ok : checkNodesBT h0W h0G h0Mask h0Block9_15Pools h0Autos h0Bucket8 9 h0Block9_15 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_15Mem : ∀ ns ∈ h0Block9_15, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_15Ok
+def h0Block9_16Specs : List PoolSpec := [pool13,pool9,pool1,pool5,pool14,pool4,pool3,pool6,pool0,pool2,(11,[]),(13,[]),(16,[]),pool11,(6,[]),(12,[]),(8,[]),(9,[]),(17,[]),(10,[]),(1,[]),pool18,(7,[]),(2,[]),(2,[(1,0,3),(1,1,4)]),(1,[(1,0,3),(1,2,4)]),(2,[(1,0,3),(1,2,4)]),(10,[(1,0,3)]),pool16,(0,[(1,2,3)]),(1,[(1,0,4),(1,2,3)]),(2,[(1,0,4),(1,2,3)]),(0,[(2,2,3),(1,104,3)]),(0,[(0,2,4),(1,54,3)]),(0,[(0,2,5),(1,153,3)]),(1,[(0,2,5),(1,153,3)])]
+def h0Block9_16Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_16Specs
+def h0Block9_16 : List NodeSpec := [([0,1,2,3,284,263,4,5],[2,7,18],[0]),([0,1,2,3,288,263,4,5],[0,2,4,15,23],[0]),([0,1,2,3,263,114,4,5],[7,13,15,16,27],[0]),([0,1,2,3,263,4,203,5],[2,3,8,13,15,17,24],[0]),([0,1,2,3,263,4,92,5],[2,7,9,10,18,21,25,26],[0,1]),([0,1,2,3,125,65,4,5],[1,3,7,9,10],[0,1]),([0,1,2,3,138,4,5],[3,11,17,18,19,20,22,33],[0,1]),([0,1,2,3,393,65,4,5],[3,6,9,10,23],[]),([0,1,2,3,158,4,5],[6,7,17,18,19,22,34,35],[0,1]),([0,1,2,3,65,114,4,5],[3,7,9,10,17,19,23],[0]),([0,1,2,3,65,4,312,5],[5,6,9,12,28,29,30,31],[0]),([0,1,2,3,65,4,5],[3,6,7,11,12,14,19,20,22,32],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_16Ok : checkNodesBT h0W h0G h0Mask h0Block9_16Pools h0Autos h0Bucket8 9 h0Block9_16 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_16Mem : ∀ ns ∈ h0Block9_16, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_16Ok
+def h0Block9_17Specs : List PoolSpec := [pool13,pool5,(29,[]),pool4,pool3,pool6,(14,[]),pool0,pool2,(11,[]),pool7,(16,[]),pool11,(3,[]),(4,[]),(6,[]),(12,[]),(8,[]),(9,[]),(23,[]),(15,[]),(17,[]),(19,[]),(20,[]),(10,[]),(1,[]),pool18,(7,[]),(2,[]),(0,[(1,174,3)]),(0,[(1,234,4)]),(0,[(1,291,4)]),(0,[(1,1,4)]),(1,[(1,0,4)]),pool20,pool16,(1,[(1,0,4),(1,2,4)]),(2,[(1,0,4),(1,2,4)]),(2,[(1,0,4),(1,2,312)]),(1,[(2,2,3),(1,104,4)]),(0,[(2,2,3),(1,104,4)]),(0,[(3,2,5),(1,70,4)]),(1,[(3,2,5),(1,70,4)]),(2,[(1,0,114)]),(0,[(0,4,5)])]
+def h0Block9_17Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_17Specs
+def h0Block9_17 : List NodeSpec := [([0,1,2,3,213,4,5],[1,8,11,12,14,15,16,23,29],[0]),([0,1,2,3,4,130,5],[0,4,6,17,21,24,27,39,40],[0,1]),([0,1,2,3,4,72,5],[4,6,10,15,17,21,28,41,42],[0]),([0,1,2,3,4,240,5],[4,5,6,8,12,17,21,24,25,27,30],[0]),([0,1,2,3,4,298,5],[2,10,11,12,15,17,20,24,25,31],[0,1]),([0,1,2,3,4,373,5],[0,4,11,15,16,17,22,25],[0]),([0,1,2,3,4,318,312,5],[3,4,8,11,19,21,34],[0]),([0,1,2,3,4,167,5],[3,7,8,9,13,16,18,25,27,43,44],[0]),([0,1,2,3,4,312,203,5],[3,4,12,18,25,32],[0,1]),([0,1,2,3,4,312,61,5],[3,4,7,33,34,35],[0,1]),([0,1,2,3,4,312,92,5],[3,4,11,15,18,26,35,36,37],[0]),([0,1,2,3,4,312,196,5],[4,7,11,15,35,38],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_17Ok : checkNodesBT h0W h0G h0Mask h0Block9_17Pools h0Autos h0Bucket8 9 h0Block9_17 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_17Mem : ∀ ns ∈ h0Block9_17, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_17Ok
+def h0Block9_18Specs : List PoolSpec := [pool13,(18,[]),pool5,pool4,pool3,pool6,(14,[]),pool0,pool2,pool17,pool10,(27,[]),(5,[]),(11,[]),pool8,pool7,(16,[]),pool11,(3,[]),(4,[]),(6,[]),(12,[]),(8,[]),(9,[]),pool22,(17,[]),(0,[(1,6,4)]),(1,[(1,6,4)]),(20,[]),(10,[]),(0,[]),(1,[]),(1,[(1,2,4)]),(7,[]),(2,[]),(2,[(1,0,2),(1,174,4)]),(0,[(1,174,4)]),(0,[(1,3,4)]),(36,[]),(2,[(1,0,3),(1,263,4)]),(0,[(1,263,4)]),pool16,(2,[(1,0,4),(1,3,4)]),(1,[(1,0,4),(1,3,4)]),(2,[(1,0,4),(1,3,312)]),(0,[(0,2,3),(1,53,4)]),(1,[(0,2,3),(1,53,4)]),(35,[]),(1,[(2,2,4),(1,87,4)]),(2,[(1,153,4)]),(0,[(0,2,5),(1,153,4)]),(1,[(0,2,5),(1,153,4)]),(2,[(1,2,114)]),(0,[(0,4,5),(1,2,114)]),(1,[(0,4,5),(1,2,114)])]
+def h0Block9_18Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block9_18Specs
+def h0Block9_18 : List NodeSpec := [([0,1,2,3,4,312,16,5],[3,4,22,23,25,37,41,42,43],[0]),([0,1,2,3,4,312,269,5],[4,7,18,25,41,44],[0]),([0,1,2,3,4,61,5],[3,4,7,9,12,13,18,19,21,24,26,27],[0,1]),([0,1,2,3,4,103,5],[4,10,22,28,29,33,45,46],[0,1]),([0,1,2,3,4,419,92,5],[5,8,13,32,34],[0]),([0,1,2,3,4,121,5],[5,11,16,21,22,23,52,53,54],[0,1]),([0,1,2,3,4,160,5],[4,5,21,22,33,49,50,51],[0,1]),([0,1,2,3,4,92,16,5],[4,5,10,13,14,15,20,21,22,38,47],[0]),([0,1,2,3,4,92,5],[5,6,8,11,16,21,22,23,29,30,33,48],[0]),([0,1,2,3,4,196,5],[4,8,16,17,18,19,21,31,35,36],[0]),([0,1,2,3,4,269,5],[0,1,7,13,19,20,25,31,39,40],[0,1]),([0,1,2,3,4,94,5],[2,4,5,8,16,21,29,30,31,34],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_18Ok : checkNodesBT h0W h0G h0Mask h0Block9_18Pools h0Autos h0Bucket8 9 h0Block9_18 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_18Mem : ∀ ns ∈ h0Block9_18, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_18Ok
+def h0Block9_19Specs : List PoolSpec := [pool1,pool4,pool3,pool0,pool2,pool7,(16,[]),pool11,(6,[]),(9,[]),pool18,(7,[]),(0,[(1,1,2)]),(1,[(1,0,2)]),(2,[(1,0,2),(1,1,2)]),(2,[(1,0,2),(1,2,4)]),(0,[(1,1,4)]),(1,[(1,0,4)]),(2,[(1,0,4),(1,1,4)]),(2,[(1,0,4),(1,2,4)]),(6,[(1,0,4)])]
+def h0Block9_19Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block9_19Specs
+def h0Block9_19 : List NodeSpec := [([0,1,2,3,312,203,5],[1,2,7,9,16,17,18],[0,1]),([0,1,2,3,312,92,5],[2,3,4,8,9,10,19,20],[0,1]),([0,1,174,175,3,4,5],[0,4,5,6,7,12,13,14],[0]),([0,1,174,3,4,92,5],[4,5,6,7,8,10,11,15],[0])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_19Ok : checkNodesBT h0W h0G h0Mask h0Block9_19Pools h0Autos h0Bucket8 9 h0Block9_19 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block9_19Mem : ∀ ns ∈ h0Block9_19, Impossible h0G 9 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket8Ok h0Block9_19Ok
+def h0Nodes9 : List NodeSpec := h0Block9_0 ++ h0Block9_1 ++ h0Block9_2 ++ h0Block9_3 ++ h0Block9_4 ++ h0Block9_5 ++ h0Block9_6 ++ h0Block9_7 ++ h0Block9_8 ++ h0Block9_9 ++ h0Block9_10 ++ h0Block9_11 ++ h0Block9_12 ++ h0Block9_13 ++ h0Block9_14 ++ h0Block9_15 ++ h0Block9_16 ++ h0Block9_17 ++ h0Block9_18 ++ h0Block9_19
 def h0Bucket9 : BT (List (List Nat)) := buildBucketsBT h0W h0Nodes9
 set_option maxRecDepth 200000 in
-lemma h0Bucket9Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 9 xs.toFinset) h0Bucket9 := buildBucketsBT_sound (by decide) h0Pairs h0WOk h0PoolsOk h0AutosOk h0Bucket8Ok h0Check9
-def h0Block10_0 : List NodeSpec := indexTripleNodes [(254,0x4d04c00c07b80241d83c10386e7,6), (1150,0x37c04e00180118017033858a6e7,2), (2174,0x4101da00f700d02e0670386e7,6), (4222,0x4207b802600602981ce03383346e7,6), (8318,0x2c44200670386e7,6), (16510,0x1a85aa0034130030023002e0670386e7,6), (32894,0x687c00a6028802e0670386e7,6), (65662,0x2c1c005c80670386e7,6), (75903,0x5a05c0c9e0e199f,6), (88191,0x18cc00d7003c0e3f833830418e7,6), (92287,0x2b40484f0340b819c1830e7,6), (100479,0x5f00208501a05c0ce0d0e7,6), (104575,0x18cc016a0021e26200b819c2c18e7,6), (108671,0x2e2d201a05c0ce0d0e7,6), (112767,0x8c3d200b819c2c18e7,6), (116863,0x49ed00d02e0520d0e7,6), (120959,0x7f0208c00b819c2c18e7,6), (340095,0x92980a200b810824d0e7,6), (356479,0x494c051000c098ce0d0e7,6)]
+set_option maxHeartbeats 0 in
+lemma h0Bucket9Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 9 xs.toFinset) h0Bucket9 := buildBucketsBT_of_mem (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append (forall_append h0Block9_0Mem h0Block9_1Mem) h0Block9_2Mem) h0Block9_3Mem) h0Block9_4Mem) h0Block9_5Mem) h0Block9_6Mem) h0Block9_7Mem) h0Block9_8Mem) h0Block9_9Mem) h0Block9_10Mem) h0Block9_11Mem) h0Block9_12Mem) h0Block9_13Mem) h0Block9_14Mem) h0Block9_15Mem) h0Block9_16Mem) h0Block9_17Mem) h0Block9_18Mem) h0Block9_19Mem)
+def h0Block10_0Specs : List PoolSpec := [pool17,(11,[]),(16,[]),(8,[]),(9,[]),(17,[]),(10,[]),(0,[]),(1,[]),(7,[]),(1,[(3,2,5)]),(2,[]),(0,[(2,2,4)]),(1,[(3,0,2)]),(2,[(3,0,2)]),(0,[(3,2,5)]),(0,[(3,4,5)]),(1,[(3,0,3)]),(2,[(3,0,3)]),(2,[(3,0,4)]),(1,[(3,0,4)]),(1,[(3,0,5)]),(0,[(0,2,3)]),(1,[(0,2,3)]),(2,[(0,2,3)]),(0,[(2,2,3)]),(1,[(2,2,3)]),(2,[(2,2,3)]),(0,[(0,2,4)]),(1,[(0,2,4)]),(2,[(0,2,4)]),(1,[(2,2,4)]),(2,[(2,2,4)]),(0,[(3,2,4)]),(1,[(3,2,4)]),(2,[(3,2,4)]),(1,[(3,4,5)])]
+def h0Block10_0Pools : BT (Option BoundPool) := buildPoolsBT 6 h0W h0R h0Slices h0Block10_0Specs
+def h0Block10_0 : List NodeSpec := [([87,0,1,2,3,4,5],[3,4,6,9,12,31,32],[0,1]),([31,0,1,2,3,4,5],[2,3,4,5,6,9,11,16,36],[0,1]),([104,0,1,2,3,4,5],[3,4,5,6,9,25,26,27],[0,1]),([107,0,1,2,3,4,5],[1,3,4,6,9,33,34,35],[0,1]),([70,0,1,2,3,4,5],[1,3,4,6,9,10,11,15],[0,1]),([234,0,1,2,3,4,5],[3,4,6,7,9,13,14],[0,1]),([291,0,1,2,3,4,5],[3,4,6,7,9,17,18],[0,1]),([350,0,1,2,3,4,5],[3,4,6,7,9,19,20],[0,1]),([364,0,1,2,3,4,5],[3,4,6,7,9,11,21],[0,1]),([0,1,6,2,3,4,5],[0,3,4,6,7,8,9,11],[0,1]),([0,1,53,2,3,4,5],[3,4,6,9,11,22,23,24],[0,1]),([0,1,54,2,3,4,5],[3,4,6,9,28,29,30],[0,1])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test10_0 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket9 10 h0Block10_0 = true := by decide +kernel
-def h0Nodes10 : List NodeSpec := h0Block10_0
-lemma h0Check10 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket9 10 h0Nodes10 = true := h0Test10_0
+lemma h0Block10_0Ok : checkNodesBT h0W h0G h0Mask h0Block10_0Pools h0Autos h0Bucket9 10 h0Block10_0 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block10_0Mem : ∀ ns ∈ h0Block10_0, Impossible h0G 10 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket9Ok h0Block10_0Ok
+def h0Block10_1Specs : List PoolSpec := [(16,[]),(12,[]),(8,[]),(9,[]),(17,[]),(10,[]),(0,[]),pool18,(1,[(1,2,4)]),(7,[]),(2,[]),(1,[(1,0,2)]),(2,[(1,0,2)]),(1,[(1,0,3)]),(2,[(1,0,3)]),(1,[(1,0,4)]),pool20,(0,[(1,2,3)]),(2,[(1,2,4)]),(1,[(1,2,3)]),(2,[(1,2,3)]),(0,[(0,2,5)]),(1,[(0,2,5)]),(0,[(0,4,5)]),(1,[(0,4,5)])]
+def h0Block10_1Pools : BT (Option BoundPool) := buildPoolsBT 5 h0W h0R h0Slices h0Block10_1Specs
+def h0Block10_1 : List NodeSpec := [([0,1,153,2,3,4,5],[2,3,9,10,21,22],[0,1]),([0,1,2,174,3,4,5],[0,2,3,5,6,9,11,12],[0]),([0,1,2,3,263,4,5],[2,3,4,5,6,9,13,14],[0,1]),([0,1,2,3,65,4,5],[0,1,2,3,5,9,17,19,20],[0,1]),([0,1,2,3,114,4,5],[2,3,9,10,23,24],[0,1]),([0,1,2,3,4,312,5],[2,3,5,6,9,15,16],[0,1]),([0,1,2,3,4,92,5],[0,2,3,5,7,8,9,18],[0,1])]
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block10_1Ok : checkNodesBT h0W h0G h0Mask h0Block10_1Pools h0Autos h0Bucket9 10 h0Block10_1 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block10_1Mem : ∀ ns ∈ h0Block10_1, Impossible h0G 10 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket9Ok h0Block10_1Ok
+def h0Nodes10 : List NodeSpec := h0Block10_0 ++ h0Block10_1
 def h0Bucket10 : BT (List (List Nat)) := buildBucketsBT h0W h0Nodes10
 set_option maxRecDepth 200000 in
-lemma h0Bucket10Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 10 xs.toFinset) h0Bucket10 := buildBucketsBT_sound (by decide) h0Pairs h0WOk h0PoolsOk h0AutosOk h0Bucket9Ok h0Check10
-def h0Block11_0 : List NodeSpec := [([0,1,2,3,4,5],[0,1,50],[0,1])]
+set_option maxHeartbeats 0 in
+lemma h0Bucket10Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 10 xs.toFinset) h0Bucket10 := buildBucketsBT_of_mem (forall_append h0Block10_0Mem h0Block10_1Mem)
+def h0Block11_0Specs : List PoolSpec := [(0,[]),(1,[]),(2,[])]
+def h0Block11_0Pools : BT (Option BoundPool) := buildPoolsBT 2 h0W h0R h0Slices h0Block11_0Specs
+def h0Block11_0 : List NodeSpec := [([0,1,2,3,4,5],[0,1,2],[0,1])]
 set_option maxRecDepth 200000 in
 set_option maxHeartbeats 0 in
-lemma h0Test11_0 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket10 11 h0Block11_0 = true := by decide +kernel
+lemma h0Block11_0Ok : checkNodesBT h0W h0G h0Mask h0Block11_0Pools h0Autos h0Bucket10 11 h0Block11_0 = true := by decide +kernel
+set_option maxRecDepth 200000 in
+set_option maxHeartbeats 0 in
+lemma h0Block11_0Mem : ∀ ns ∈ h0Block11_0, Impossible h0G 11 (nodeValsBT h0W ns).toFinset := checkNodesBT_mem (by decide) h0Pairs h0WOk (buildPoolsBT_sound h0SlicesOk) h0AutosOk h0Bucket10Ok h0Block11_0Ok
 def h0Nodes11 : List NodeSpec := h0Block11_0
-lemma h0Check11 : checkNodesBT h0W h0G h0Mask h0Pools h0Autos h0Bucket10 11 h0Nodes11 = true := h0Test11_0
 def h0Bucket11 : BT (List (List Nat)) := buildBucketsBT h0W h0Nodes11
 set_option maxRecDepth 200000 in
-lemma h0Bucket11Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 11 xs.toFinset) h0Bucket11 := buildBucketsBT_sound (by decide) h0Pairs h0WOk h0PoolsOk h0AutosOk h0Bucket10Ok h0Check11
+set_option maxHeartbeats 0 in
+lemma h0Bucket11Ok : btAll (fun bk => ∀ xs ∈ bk, Impossible h0G 11 xs.toFinset) h0Bucket11 := buildBucketsBT_of_mem h0Block11_0Mem
 set_option maxRecDepth 200000 in
-lemma h0Bound : Lower h0R h0G 12 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,9,13),(VAR 3,5,13),(VAR 4,6,22),(VAR 5,5,37)]) (by decide +kernel) h0Bucket11Ok (by decide +kernel)
-def wit : List PEqualNP.CircuitLowerBounds.Gate := [⟨PEqualNP.CircuitLowerBounds.GateOp.and, [2, 4]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.or, [0, 6]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.and, [3, 4]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.or, [1, 8]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.and, [7, 9]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.or, [0, 1]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.or, [3, 4]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.or, [2, 12]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.and, [2, 3]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.or, [5, 14]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.and, [13, 15]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.and, [11, 16]⟩,⟨PEqualNP.CircuitLowerBounds.GateOp.or, [10, 17]⟩]
+set_option maxHeartbeats 0 in
+lemma lifted : Lower h0R h0G 12 := lower_of_forestBT (essPairs := [(VAR 0,2,3),(VAR 1,1,3),(VAR 2,9,13),(VAR 3,5,13),(VAR 4,6,22),(VAR 5,5,37)]) (by decide +kernel) h0Bucket11Ok (by decide +kernel)
+def wit : List PEqualNP.CircuitLowerBounds.Gate := [⟨PEqualNP.CircuitLowerBounds.GateOp.and, [2, 4]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.or, [0, 6]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.and, [3, 4]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.or, [1, 8]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.and, [7, 9]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.or, [0, 1]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.or, [3, 4]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.or, [2, 12]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.and, [2, 3]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.or, [5, 14]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.and, [13, 15]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.and, [11, 16]⟩, ⟨PEqualNP.CircuitLowerBounds.GateOp.or, [10, 17]⟩]
 def wo : Nat := 18
 lemma wit_mono : PEqualNP.MetaComplexity.Monotone2 ⟨wit, wo⟩ := by simp [PEqualNP.MetaComplexity.Monotone2, wit]
 set_option maxRecDepth 100000 in set_option maxHeartbeats 0 in
 lemma wit_eval : ∀ r : Row, PEqualNP.CircuitLowerBounds.Circuit.eval ⟨wit, wo⟩ (List.ofFn (evalInput6 r)) = ((4277071592 * 2 ^ 32 + 4207470728) ||| ((4277071592 * 2 ^ 32 + 4207470728) <<< 64)).testBit r.val := by decide +kernel
-lemma low_root : Lower (varsOf 63) ((4277071592 * 2 ^ 32 + 4207470728) ||| ((4277071592 * 2 ^ 32 + 4207470728) <<< 64)) 12 := h0Bound
+lemma low_root : Lower (varsOf 63) ((4277071592 * 2 ^ 32 + 4207470728) ||| ((4277071592 * 2 ^ 32 + 4207470728) <<< 64)) 12 := lifted
 end PEqualNP.Outside.L_meta_46856
 theorem PEqualNP.Outside.L_meta_46856 : ∀ s : ℕ, PEqualNP.MetaComplexity.HasCircuitSize 6 (fun x : Fin 6 → Bool => Nat.testBit (4277071592 * 2 ^ 32 + 4207470728) (∑ i : Fin 6, if x i then 2 ^ (i : ℕ) else 0)) s → ∃ C : PEqualNP.CircuitLowerBounds.Circuit, PEqualNP.MetaComplexity.Monotone2 C ∧ C.size ≤ s ∧ ∀ x : Fin 6 → Bool, C.eval (List.ofFn x) = Nat.testBit (4277071592 * 2 ^ 32 + 4207470728) (∑ i : Fin 6, if x i then 2 ^ (i : ℕ) else 0) := by
   intro s hcs
