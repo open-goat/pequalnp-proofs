@@ -4034,6 +4034,602 @@ def remainder (rs : List ℕ) : ℕ := FF ^^^ rs.foldr (fun i mask => (2 ^ i) ||
 def bucketList (rs : List ℕ) : List (ℕ × ℕ) := (remainder rs, 1) :: rs.map (fun r => (2 ^ r,0))
 lemma oneBucket {E Q : List (ℕ × ℕ)} {Z K t : ℕ} (h : chk E Q Z K t FF 1 = false) : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk E Q Z K t p.1 p.2 = false :=
   ⟨[(FF, 1)], ffull, fun q hq => by simp only [List.mem_singleton] at hq; subst hq; exact h⟩
+
+def routed (ps : List (ℕ × ℕ)) (mask a b : ℕ) : Prop :=
+  b &&& mask = b ∧ ∀ p ∈ ps, a.testBit p.2 = b.testBit p.1
+
+def routeMask (ps : List (ℕ × ℕ)) : ℕ :=
+  ps.foldr (fun p b => (1 <<< p.1) ||| b) 0
+
+lemma routeMask_mem (ps : List (ℕ × ℕ)) (i : ℕ)
+    (hi : (routeMask ps).testBit i = true) : ∃ p ∈ ps, p.1 = i := by
+  induction ps with
+  | nil => simp [routeMask] at hi
+  | cons p ps ih =>
+    change (((1 <<< p.1) ||| routeMask ps : ℕ).testBit i = true) at hi
+    rw [Nat.testBit_or, Bool.or_eq_true] at hi
+    rcases hi with hp | hs
+    · have e : p.1 = i := by simpa [Nat.one_shiftLeft, Nat.testBit_two_pow] using hp
+      exact ⟨p, by simp, e⟩
+    · obtain ⟨q,hq,e⟩ := ih hs
+      exact ⟨q, List.mem_cons_of_mem _ hq,e⟩
+
+lemma routed.unique {ps : List (ℕ × ℕ)} {m a b c : ℕ} (cover : routeMask ps = m)
+    (hb : routed ps m a b) (hc : routed ps m a c) : b = c := by
+  apply Nat.eq_of_testBit_eq
+  intro i
+  cases h : m.testBit i with
+  | true =>
+    obtain ⟨p,hp,e⟩ := routeMask_mem ps i (cover ▸ h)
+    exact e ▸ ((hb.2 p hp).symm.trans (hc.2 p hp))
+  | false =>
+    have f (x : ℕ) (he : x &&& m = x) : x.testBit i = false := by
+      have := congrArg (fun v : ℕ => v.testBit i) he
+      simpa [Nat.testBit_and, h] using this.symm
+    exact (f b hb.1).trans (f c hc.1).symm
+
+lemma Sol.routed {ps : List (ℕ × ℕ)} {m n T V q : ℕ} {S : Set ℕ}
+    (cover : routeMask ps = n) (hm : routed ps n m n) (hV : routed ps n T V)
+    (run : Sol Z0 m T q S) {D : Set ℕ} (hD : ∀ a ∈ S, ∃ b ∈ D, routed ps n a b) :
+    Sol Z0 n V q D := by
+  induction run generalizing D with
+  | done h =>
+    obtain ⟨b,hb,hr⟩ := hD _ h
+    exact .done ((hr.unique cover hV) ▸ hb)
+  | @un q S a ha _ ih =>
+    obtain ⟨b,hb,hr⟩ := hD _ ha
+    apply Sol.un hb
+    apply ih
+    intro x hx
+    rcases hx with rfl | hx
+    · refine ⟨b ^^^ n, Or.inl rfl, ?_, ?_⟩
+      · rw [and_neg (Nat.and_self n), hr.1]
+      · intro p hp
+        rw [Nat.testBit_xor, Nat.testBit_xor, hr.2 p hp, hm.2 p hp]
+    · obtain ⟨y,hy,hr⟩ := hD x hx
+      exact ⟨y,Or.inr hy,hr⟩
+  | @bi q S d a a' ha ha' _ _ ih =>
+    obtain ⟨b,hb,hr⟩ := hD _ ha
+    obtain ⟨b',hb',hr'⟩ := hD _ ha'
+    apply Sol.bi (d := d) hb hb' (al0 _ _ _)
+    apply ih
+    intro x hx
+    rcases hx with rfl | hx
+    · refine ⟨op d b b', Or.inl rfl, ?_, ?_⟩
+      · rw [and_op, hr.1, hr'.1]
+      · intro p hp
+        rw [op_bit, op_bit, hr.2 p hp, hr'.2 p hp]
+    · obtain ⟨y,hy,hr⟩ := hD x hx
+      exact ⟨y,Or.inr hy,hr⟩
+
+def maskRows (ps : List (ℕ × ℕ)) (m n : ℕ) : Bool :=
+  ps.all fun p => m.testBit p.2 && n.testBit p.1
+
+def agreeRows (ps : List (ℕ × ℕ)) (a b : ℕ) : Bool :=
+  ps.all fun p => a.testBit p.2 == b.testBit p.1
+
+lemma agreeRows_ok {ps a b} (h : agreeRows ps a b = true) : ∀ p ∈ ps, a.testBit p.2 = b.testBit p.1 :=
+  fun p hp => beq_iff_eq.mp (List.all_eq_true.mp h p hp)
+
+def inputRows (ps : List (ℕ × ℕ)) : Bool :=
+  rawP.all fun a => rawP.any fun b => agreeRows ps a b
+
+lemma transferBound {z d L : ℕ} (ps : List (ℕ × ℕ))
+    (cover : routeMask ps = mz d) (hm : maskRows ps (mz z) (mz d) = true)
+    (ht : agreeRows ps (tz z) (tz d) = true) (hw : inputRows ps = true)
+    (low : Imp [] d L) : Imp [] z L := by
+  intro q hq run
+  have masks (p : ℕ × ℕ) (hp : p ∈ ps) : (mz z).testBit p.2 = true ∧ (mz d).testBit p.1 = true := by
+    simpa only [Bool.and_eq_true] using (List.all_eq_true.mp hm p hp)
+  have mr : routed ps (mz d) (mz z) (mz d) :=
+    ⟨Nat.and_self _, fun p hp => (masks p hp).1.trans (masks p hp).2.symm⟩
+  have tr : routed ps (mz d) (tz z) (tz d) := ⟨by simp [tz, Nat.and_assoc], agreeRows_ok ht⟩
+  apply low q hq
+  apply run.routed cover mr tr
+  intro a ha
+  rcases ha with ⟨w,hw',rfl⟩ | ha
+  · have hwp : w ∈ rawP := by simpa [rawL] using hw'
+    obtain ⟨v,hv,hagree⟩ := List.any_eq_true.mp (List.all_eq_true.mp hw w hwp)
+    refine ⟨v &&& mz d, Or.inl ⟨v,by simpa [rawL] using hv,rfl⟩, by simp [Nat.and_assoc], ?_⟩
+    intro p hp
+    simp only [Nat.testBit_and, (masks p hp).1, (masks p hp).2, Bool.and_true]
+    exact agreeRows_ok hagree p hp
+  · rcases ha with ha | ha
+    · change a = 0 at ha
+      subst a
+      exact ⟨0, Or.inr (Or.inl rfl), Nat.zero_and _, fun _ _ => by simp⟩
+    · change a = mz z at ha
+      subst a
+      exact ⟨mz d, Or.inr (Or.inr rfl), mr⟩
+
+def Chosen (M : List (ℕ × ℕ)) (a b : ℕ) : Prop := ∃ p ∈ M, hb p.1 (a + b) = true
+
+def Selected (R : ℕ → ℕ) (M : List (ℕ × ℕ)) (m T k t : ℕ) (S : Finset ℕ) : Prop :=
+  Live R m T k t S ∨ ∃ k0 d a b S1, k = k0 + 1 ∧ R a ≠ 0 ∧ R b ≠ 0 ∧ Bi Z0 d a b S S1 ∧ Live Z0 m T k0 t S1 ∧ Chosen M a b
+
+section symSound
+variable {P : List ℕ} {l m g T : ℕ} (X : Ctx P l m g T)
+include X
+lemma one_selected {M : List (ℕ × ℕ)} (hR : RR R) (hR2 : ∀ d a b, (R a = 0 ∨ R b = 0) → Al R d a b) {K : ℕ} {f : ℕ → ℕ → ℕ → List W → Bool}
+    (hF : ∀ (k t z : ℕ) (v : List W) (S : Finset ℕ), f k t z v = false → StOk P T l k z v S → (∀ w ∈ v, w.r = R w.s) →
+      ∀ k' ≤ k, Live Z0 m T k' t S → (∀ q < k', ¬ Sol Z0 m T q (C m ({x | R x ≠ 0} ∪ (S : Set ℕ)))) → False)
+    {k t z y : ℕ} {v : List W} {S : Finset ℕ} (hs : StOk P T l k z v S) (hcod : ∀ w ∈ v, w.r = R w.s) (hlen : 2 ≤ v.length)
+    {k' : ℕ} (hk : k' ≤ k) (hl : Live Z0 m T k' t S) (hmW : ∀ q < k', ¬ Sol Z0 m T q (C m ({x | R x ≠ 0} ∪ (S : Set ℕ))))
+    (selected : Selected R M m T k' t S) (hy : y = 0 ∨ (y = 1 ∧ v.length + t = k ∧ NK Z0 m T k' t S))
+    (h2 : mv (look l m g K) l m g k t z v y = false)
+    (h1 : ∀ a ∈ v, ∀ c ∈ v, a.s ≠ c.s → a.r ≠ 0 → c.r ≠ 0 → Chosen M a.s c.s → ∃ go : (L_meta_52862.X → L_meta_52862.X → Bool) → List L_meta_52862.X → Bool,
+      node (f (k - 1) t) (pos' t) l m g (k - t - y) v.length z v go = false ∧
+      ∀ h, go h (v.map (mkx (pos' t) l (wst (pos' t) l v))) = false →
+        h (mkx (pos' t) l (wst (pos' t) l v) a) (mkx (pos' t) l (wst (pos' t) l v) c) = false ∨
+        h (mkx (pos' t) l (wst (pos' t) l v) c) (mkx (pos' t) l (wst (pos' t) l v) a) = false) : False := by
+  have hmin : Min Z0 m T k' t S := ⟨hl, fun q hq hs => hmW q hq (hs.mono le_rfl (C_mono Set.subset_union_right))⟩
+  have hcard := hs.rep.card
+  rcases selected with hlR | ⟨k0, d, a, b, S1, rfl, ha, hb', hb, hl1, hc⟩
+  · exact mv_sound X hR (look_sound X hR K) hs (fun w hw => Or.inr (hcod w hw)) hlen h2 k' hk ⟨hlR, hmin.2⟩ (hy.imp id fun ⟨q1, q2, q3⟩ => ⟨q1, q2, q3.toR⟩)
+  · obtain ⟨k, rfl⟩ : ∃ j, k = j + 1 := ⟨k - 1, by omega⟩
+    obtain ⟨wa, hwa, rfl⟩ := hs.rep.mem.1 hb.sub.1
+    obtain ⟨wb, hwb, rfl⟩ := hs.rep.mem.1 hb.sub.2.1
+    obtain ⟨go, hg1, hg2⟩ := h1 wa hwa wb hwb hb.1 (by rw [hcod wa hwa]; exact ha) (by rw [hcod wb hwb]; exact hb') hc
+    obtain ⟨z', r, hf, hst, hmem⟩ := node_bi X hs hmin (by omega) rfl rfl (NK.sizeB hcard hmin hk hb hl1 hy) hb hl1 (fun h xs hp a c ha hc hax hcy hxs => by
+      subst hxs
+      rw [hs.rep.inj ha hwa hax, hs.rep.inj hc hwb hcy]
+      exact hg2 h hp) hg1
+    have hfr : R (op d wa.s wb.s) = 0 := by
+      by_contra hne
+      refine hmW k0 (by omega) (hl1.sol.mono le_rfl fun x hx => ?_)
+      have hx' := hb.sub.2.2 hx
+      simp only [Finset.mem_insert] at hx'
+      rcases hx' with rfl | hx'
+      · exact Or.inl (Or.inl hne)
+      · exact Or.inl (Or.inr hx')
+    refine hF _ _ _ _ _ hf hst ?_ k0 (by simpa using hk) hl1 ?_
+    · intro w hw
+      rcases hmem w hw with ⟨e1, e2⟩ | h
+      · rw [e1, e2, hfr]
+      · exact hcod w h
+    · intro q hq hs'
+      refine hmW (q + 1) (by omega) (.bi (d := d) (a := wa.s) (b := wb.s) (Or.inl (Or.inr hb.sub.1)) (Or.inl (Or.inr hb.sub.2.1)) (al0 _ _ _) (hs'.mono le_rfl ?_))
+      rintro x ((hx | hx) | hx)
+      · exact Or.inr (Or.inl (Or.inl hx))
+      · have hx' := hb.sub.2.2 hx
+        simp only [Finset.mem_insert] at hx'
+        rcases hx' with rfl | hx'
+        · exact Or.inl rfl
+        · exact Or.inr (Or.inl (Or.inr hx'))
+      · exact Or.inr (Or.inr hx)
+lemma topC_selected (hR : RR R) (hR2 : ∀ d a b, (R a = 0 ∨ R b = 0) → Al R d a b) {K k t z : ℕ} {v : List W} {S : Finset ℕ} {M : List (ℕ × ℕ)}
+    (hM : ∃ p ∈ M, Nat.beq p.2 1 = true) (h : ∀ p ∈ M, topC l m g K p.1 p.2 k t z v = false) (hs : StOk P T l k z v S) (hcod : ∀ w ∈ v, w.r = R w.s)
+    {k' : ℕ} (hk : k' ≤ k) (hl : Live Z0 m T k' t S) (selected : Selected R M m T k' t S) (hmW : ∀ q < k', ¬ Sol Z0 m T q (C m ({x | R x ≠ 0} ∪ (S : Set ℕ)))) : False := by
+  obtain ⟨p0, hp0, hp1⟩ := hM
+  have un : ∀ p ∈ M, 2 ≤ v.length ∧ tst (pos' t) l (k + 1 - t) v (fun y =>
+      Bool.rec (motive := fun _ => Bool) (Bool.rec (motive := fun _ => Bool) false (mv (look l m g K) l m g k t z v y) (Nat.beq p.2 1)) true
+      (node (look1 l m g K K (k - 1) t) (pos' t) l m g (k - t - y) v.length z v (fun h xs => pairsC p.1 h (fs xs)))) = false := by
+    intro p hp
+    have h := h p hp
+    change (Bool.rec (motive := fun _ => Bool) (tst (pos t) l (k + 1 - t) v (fun y =>
+      Bool.rec (motive := fun _ => Bool) (Bool.rec (motive := fun _ => Bool) false (mv (look l m g K) l m g k t z v y) (Nat.beq p.2 1)) true
+      (node (look1 l m g K K (k - 1) t) (pos t) l m g (k - t - y) v.length z v (fun h xs => pairsC p.1 h (fs xs))))) true (Nat.ble v.length 1) : Bool) = false at h
+    rw [bR, pos_eq] at h
+    cases h0 : Nat.ble v.length 1 with
+    | true => rw [h0] at h; simp at h
+    | false =>
+      rw [h0, cond_false] at h
+      refine ⟨?_, h⟩
+      by_contra hc
+      rw [Nat.ble_eq_true_of_le (by omega)] at h0; simp at h0
+  have hmin : Min Z0 m T k' t S := ⟨hl, fun q hq hs => hmW q hq (hs.mono le_rfl (C_mono Set.subset_union_right))⟩
+  obtain ⟨y, hFy, hyk⟩ := tst_sound X hs hmin hk
+  have un2 := fun p hp => (hFy _).symm.trans (un p hp).2
+  refine one_selected X hR hR2 (K := K) (f := look1 l m g K K) (look1_sound X hR hR2 (K := K) K) hs hcod (un p0 hp0).1 hk hl hmW selected hyk ?_ ?_
+  · have := (or_false' X (un2 p0 hp0)).2
+    rw [bR, hp1, cond_true] at this; exact this
+  · intro a ha c hc hne har hcr hsel
+    obtain ⟨p,hpM,hpb⟩ := hsel
+    refine ⟨_, (or_false' X (un2 p hpM)).1, fun h hp => ?_⟩
+    have hpw := pairsC_false hp
+    have : Std.Symm (fun a b : L_meta_52862.X => hb p.1 (a.s + b.s) = true → (h a b = false ∨ h b a = false)) :=
+      ⟨fun a b h e => (h (by rw [Nat.add_comm]; exact e)).symm⟩
+    exact (hpw.imp (S := fun a b => hb p.1 (a.s + b.s) = true → (h a b = false ∨ h b a = false)) fun h e => Or.inl (h e)).forall
+      (fs_mem (List.mem_map_of_mem ha) har) (fs_mem (List.mem_map_of_mem hc) hcr) (fun e => hne (congrArg L_meta_52862.X.s e)) hpb
+end symSound
+theorem imp_selected {E Q : List (ℕ × ℕ)} {Z L k t : ℕ} {S : Finset ℕ}
+    (hE : E = [] ∨ ∃ e ∈ six, E = [e] ∧ Imp [] Z L) (hp : pOk Z Q = true) (hL : L ≤ 15)
+    (hI : ∀ e ∈ Q, Imp E e.1 e.2)
+    (hk : k < L) (hS : (S : Set ℕ) ⊆ C (mz Z) (WZ E Z)) (hl : Live Z0 (mz Z) (tz Z) k t S)
+    (hmin : ∀ q < k, ¬ Sol Z0 (mz Z) (tz Z) q (C (mz Z) (WZ E Z)))
+    (hb : (∃ e ∈ Q, L ≤ e.2) ∨ ∃ M : List (ℕ × ℕ), (∃ p ∈ M, Nat.beq p.2 1 = true) ∧ Selected (RZ E Z) M (mz Z) (tz Z) k t S ∧ ∀ p ∈ M, chk E Q Z (L - 1) t p.1 p.2 = false) : False := by
+  simp only [pOk, Bool.and_eq_true, Bool.not_eq_true', List.all_eq_true] at hp
+  obtain ⟨⟨hp0, hp1⟩, hp2⟩ := hp
+  have nb : ∀ {x y : ℕ}, Nat.beq x y = false → x ≠ y := fun h e => by rw [e, Nat.beq_refl] at h; simp at h
+  have hT : tz Z &&& mz Z = tz Z := by simp only [tz, nl, Nat.and_assoc, Nat.and_self]
+  have hE6 : ∀ e ∈ E, e ∈ six := by
+    rcases hE with rfl | ⟨e, he, rfl, _⟩
+    · simp
+    · intro e' he'; simp only [List.mem_singleton] at he'; rw [he']; exact he
+  classical
+  have hCS : C (mz Z) (S : Set ℕ) ⊆ C (mz Z) (WZ E Z) := by
+    rintro x (hx | hx)
+    · exact hS hx
+    · exact Or.inr hx
+  have hm : Min Z0 (mz Z) (tz Z) k t S := ⟨hl, fun q' hq' hs => hmin q' hq' (hs.mono le_rfl hCS)⟩
+  have hbd : ∀ x ∈ S, x &&& mz Z = x := by
+    intro x hx
+    rcases hS hx with ⟨w, _, rfl⟩ | h
+    · rw [Nat.and_assoc, Nat.and_self]
+    · simp at h; rcases h with rfl | rfl <;> simp
+  obtain ⟨h0, h1⟩ := hm.proper hT (nb hp0) (nb hp1) hbd
+  have hSW : (S : Set ℕ) ⊆ WZ E Z := by
+    intro x hx
+    rcases hS hx with h | h
+    · exact h
+    · simp at h; rcases h with rfl | rfl
+      · exact absurd hx h0
+      · exact absurd hx h1
+  have hproj : ∀ e ∈ Q, mz e.1 &&& mz Z = mz e.1 ∧ tz e.1 ≠ 0 ∧ tz e.1 ≠ mz e.1 := by
+    intro e he
+    obtain ⟨⟨a, b⟩, c⟩ := hp2 e he
+    exact ⟨Nat.eq_of_beq_eq_true a, nb b, nb c⟩
+  have hno : ∀ e ∈ Q, ∀ q < e.2, ¬ Sol Z0 (mz e.1) (tz Z &&& mz e.1) q (C (mz e.1) (Im (mz e.1) S)) := by
+    intro e he q hq hs
+    have h3 := (hproj e he).1
+    rw [tz_sub h3] at hs
+    exact hI e he q hq (hs.mono le_rfl (C_mono (Im_WZ h3 hSW)))
+  have htk := hm.size.2
+  rcases hb with ⟨e, he, hle⟩ | hb
+  · have h3 := hproj e he
+    obtain ⟨q', hq', hs'⟩ := hm.const h3.1 (by rw [tz_sub h3.1]; exact h3.2.1) (by rw [tz_sub h3.1]; exact h3.2.2)
+    exact hno e he q' (by omega) hs'
+  have hpw : pwr E Z = 0 ∨ pwr E Z ∈ S := by
+    rcases hE with rfl | ⟨e, he, rfl, hraw⟩
+    · exact Or.inl rfl
+    · by_contra hc
+      push Not at hc
+      refine hraw k (by omega) (hl.sol.mono le_rfl ?_)
+      intro x hx
+      obtain ⟨w, hw, rfl⟩ := hSW hx
+      simp only [rawL, List.mem_append, List.map_cons, List.map_nil, List.mem_singleton] at hw
+      rcases hw with hw | rfl
+      · exact Or.inl ⟨w, by simp [rawL, hw], rfl⟩
+      · have hx : xw e &&& mz Z ∈ S := by simpa using hx
+        exact absurd (show pwr [e] Z ∈ S from hx) hc.2
+  obtain ⟨M, hMf, hsel, hchk⟩ := hb
+  obtain ⟨a1, a2, a3⟩ := avl_spec (PZ Q) (mz Z) (rawL E)
+  set v := (avl (PZ Q) (mz Z) (rawL E)).filter (fun w => decide (w.s ∈ S)) with hv
+  have hsub : v.Sublist (avl (PZ Q) (mz Z) (rawL E)) := List.filter_sublist
+  have hnd : (v.map W.s).Nodup := by
+    rw [List.Nodup, List.pairwise_map]
+    exact (a1.sublist hsub).imp fun h => Nat.ne_of_gt h
+  have hrep : Rep v S := by
+    refine ⟨hnd, Finset.ext fun x => ?_⟩
+    rw [List.mem_toFinset, List.mem_map]
+    constructor
+    · rintro ⟨w, hw, rfl⟩
+      rw [hv, List.mem_filter] at hw; simpa using hw.2
+    · intro hx
+      obtain ⟨w, hw, rfl⟩ := hSW hx
+      obtain ⟨w', hw', e⟩ := a3 w hw (fun e => h0 (e ▸ hx)) (fun e => h1 (e ▸ hx))
+      exact ⟨w', by rw [hv, List.mem_filter]; exact ⟨hw', by simpa [e] using hx⟩, e⟩
+  have hwok : ∀ w ∈ v, WOk (PZ Q) w := by
+    intro w hw
+    obtain ⟨x, _, rfl⟩ := a2 w (hsub.subset hw); exact mkW_ok _ _
+  have hcod : ∀ w ∈ v, w.r = RZ E Z w.s := by
+    intro w hw
+    obtain ⟨x, hx, rfl⟩ := a2 w (hsub.subset hw)
+    have : x &&& mz Z ∈ WZ E Z := ⟨x, hx, rfl⟩
+    change 3 = RZ E Z (x &&& mz Z)
+    rw [RZ, if_pos this]
+  have hgood : ∀ w ∈ v, Good (lz Z) w.s := by
+    intro w hw
+    obtain ⟨x, hx, rfl⟩ := a2 w (hsub.subset hw); exact wire_good (rawL_sub hE6 hx) Z
+  have hPlen : (PZ Q).length = Q.length := by simp [PZ]
+  have hPget : ∀ j < (PZ Q).length, (PZ Q).getD j 0 = mz (Q.getD j (0, L - 1)).1 ∧ Q.getD j (0, L - 1) ∈ Q := by
+    intro j hj
+    rw [hPlen] at hj
+    simp [PZ, List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_eq_getElem hj]
+  have X : Ctx (PZ Q) (lz Z) (mz Z) (pL (Q.map fun _ => 16)) (tz Z) := by
+    refine ⟨fun i hi => lz_lg Z i hi, fun j hj => ?_, ?_⟩
+    · obtain ⟨e1, e2⟩ := hPget j hj
+      have h3 := hproj _ e2
+      rw [e1, tz_sub h3.1]; exact h3
+    · rw [pL_pk, List.length_map, hPlen]
+      refine pk_congr fun j hj => ?_
+      rw [List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_eq_getElem hj]; rfl
+  have hcl : Cl (PZ Q) (tz Z) (L - 1) (fun j => L - 1 - (Q.getD j (0, L - 1)).2) S := by
+    intro j hj q hq
+    obtain ⟨e1, e2⟩ := hPget j hj
+    have hq' : q + (L - 1 - (Q.getD j (0, L - 1)).2) < L - 1 := hq
+    rw [e1]; exact hno _ e2 q (by omega)
+  have hle := cnt_le X hrep hwok hcl hm (by omega)
+  have hst : StOk (PZ Q) (tz Z) (lz Z) (L - 1) (pL (Q.map fun e => 16 + (L - 1 - e.2)) - sumc v) v S := by
+    refine ⟨hrep, hwok, hgood, _, fun j _ => by omega, hcl, ?_⟩
+    rw [sumc_eq hwok, pk16, pk_sub]
+    intro j hj; have := hle j hj; omega
+  have hcov : ∀ i, (lz Z).testBit i = true → (0 : ℕ).testBit i = true ∨ (cov (pos t) (lz Z) v).testBit i = true := by
+    intro i hli
+    right
+    rw [cov_bit]
+    obtain ⟨⟨m1, m2, t1, t2⟩, _⟩ := lz_lg Z i hli
+    obtain ⟨w, hw, hs⟩ := hl.cov m1 m2 t1 t2
+    obtain ⟨w', hw', rfl⟩ := hrep.mem.1 hw
+    exact ⟨w', hw', by rw [sp_bit, hli, pos_eq, hs]; rfl⟩
+  have hsz := hm.size.1
+  have hcard := hrep.card
+  have hble : Nat.ble v.length (Nat.sub (Nat.succ (L - 1)) t) = true := Nat.ble_eq_true_of_le (by
+    change v.length ≤ L - 1 + 1 - t; omega)
+  have hhas : hasP (pwr E Z) v = true := hasP_ok (hpw.imp id fun h => hrep.mem.1 h)
+  have all : ∀ p ∈ M, topC (lz Z) (mz Z) (pL (Q.map fun _ => 16)) (L - 1) p.1 p.2 (L - 1) t (pL (Q.map fun e => 16 + (L - 1 - e.2)) - sumc v) v = false := by
+    intro p hpM
+    have h2 := hchk p hpM
+    simp only [chk, frc_eq, st_eq] at h2
+    have h3 := anySub_false (by simp) h2 v hsub hcov
+    simp only [startv, bR, hhas, hble, Bool.cond_true] at h3
+    exact child_sound X (f := fun z r => topC (lz Z) (mz Z) _ (L - 1) p.1 p.2 (L - 1) t z r) (fun h => rfl) hst hm (by omega) h3
+  refine topC_selected X (RZ_R E Z) (RZ_R2 E Z) hMf all hst hcod (by omega) hl hsel ?_
+  intro q hq hs
+  rw [RZ_set] at hs
+  refine hmin q hq (hs.mono le_rfl ?_)
+  rintro x ((hx | hx) | hx)
+  · exact Or.inl hx
+  · exact Or.inl (hSW hx)
+  · exact Or.inr hx
+
+lemma Live.neg_le {m T k t : ℕ} {S : Finset ℕ} (run : Live Z0 m T k t S) : t ≤ k := by
+  induction run <;> omega
+
+lemma routed.op {ps m a b x y} (d : Bool) (hx : routed ps m a x) (hy : routed ps m b y) :
+    routed ps m (op d a b) (op d x y) := by
+  refine ⟨by rw [and_op, hx.1, hy.1], ?_⟩
+  intro p hp
+  rw [op_bit, op_bit, hx.2 p hp, hy.2 p hp]
+
+lemma Live.routeBudget {ps : List (ℕ × ℕ)} {m T k t : ℕ} {S : Finset ℕ}
+    (cover : routeMask ps = m) (hm : routed ps m m m) (ht : routed ps m T T)
+    (run : Live Z0 m T k t S) {D : Set ℕ} (supply : ∀ a ∈ S, ∃ b ∈ D, routed ps m a b) :
+    GateBudget m T (k-t) t D := by
+  induction run generalizing D with
+  | stop =>
+    obtain ⟨b,hb,hr⟩ := supply T (by simp)
+    refine ⟨0,0,by omega,by omega,{T},?_,.stop⟩
+    simpa only [Finset.coe_singleton, Set.singleton_subset_iff, hr.unique cover ht] using hb
+  | @un k t a U tail ih =>
+    obtain ⟨b,hb,hr⟩ := supply a (by simp)
+    have hn : routed ps m (a ^^^ m) (b ^^^ m) := by
+      refine ⟨by rw [and_neg (Nat.and_self m),hr.1], ?_⟩
+      intro p hp
+      rw [Nat.testBit_xor,Nat.testBit_xor,hr.2 p hp,hm.2 p hp]
+    have next : GateBudget m T (k-t) t (insert (b ^^^ m) D) := by
+      apply ih
+      intro x hx
+      rcases Finset.mem_insert.mp hx with rfl | hu
+      · exact ⟨_,Or.inl rfl,hn⟩
+      obtain ⟨y,hy,hxy⟩ := supply x (Finset.mem_insert_of_mem hu)
+      exact ⟨y,Or.inr hy,hxy⟩
+    exact (next.un hb).mono (by omega) le_rfl (fun _ h => h)
+  | @bi k t d a b U _ _ tail ih =>
+    obtain ⟨a',ha,ra⟩ := supply a (by simp)
+    obtain ⟨b',hb,rb⟩ := supply b (by simp)
+    have next : GateBudget m T (k-t) t (insert (op d a' b') D) := by
+      apply ih
+      intro x hx
+      rcases Finset.mem_insert.mp hx with rfl | hu
+      · exact ⟨_,Or.inl rfl,ra.op d rb⟩
+      obtain ⟨y,hy,hxy⟩ := supply x (Finset.mem_insert_of_mem (Finset.mem_insert_of_mem hu))
+      exact ⟨y,Or.inr hy,hxy⟩
+    have htk := tail.neg_le
+    exact (next.bi ha hb).mono (by omega) le_rfl (fun _ h => h)
+
+def stock (z i : ℕ) := rawP.getD i 0 &&& mz z
+
+lemma mem_stock {x z} (hx : x ∈ WZ [] z) : ∃ i : Fin 8, x = stock z i.val := by
+  obtain ⟨w,hw,rfl⟩ := hx
+  have hw' : w ∈ rawP := by simpa [rawL] using hw
+  obtain ⟨i,hi,h⟩ := List.mem_iff_getElem.mp hw'
+  refine ⟨⟨i, by simpa [rawP] using hi⟩, ?_⟩
+  simp [stock, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi,h]
+
+lemma stock_mem {z i} (hi : i < 8) : stock z i ∈ WZ [] z := by
+  refine ⟨rawP.getD i 0,?_,rfl⟩
+  have h : i < rawP.length := by simpa [rawP] using hi
+  simp only [rawL, List.map_nil, List.append_nil]
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem h, Option.getD_some]
+  exact List.getElem_mem h
+
+def Rotates (z : ℕ) (p : List ℕ) : Prop :=
+  ∃ rs : List (ℕ × ℕ), routeMask rs = mz z ∧ routed rs (mz z) (mz z) (mz z) ∧
+    routed rs (mz z) (tz z) (tz z) ∧ ∀ i : Fin 8, p.getD i.val 0 < 8 ∧ routed rs (mz z) (stock z i.val) (stock z (p.getD i.val 0))
+
+def representatives (z : ℕ) (M : List (ℕ × ℕ)) (ps : List (List ℕ)) : Bool :=
+  (List.range 8).all fun i => (List.range 8).all fun j => stock z i == stock z j || ps.any fun p =>
+    let x := stock z (p.getD i 0)
+    let y := stock z (p.getD j 0)
+    !(x == y) && M.any fun u => hb u.1 (x + y)
+
+lemma chooseFront {z k t} {S : Finset ℕ} {M : List (ℕ × ℕ)} {ps : List (List ℕ)}
+    (rots : ∀ p ∈ ps, Rotates z p) (reps : representatives z M ps = true)
+    (small : Imp [] z k) (supply : (S : Set ℕ) ⊆ C (mz z) (WZ [] z))
+    (run : Live Z0 (mz z) (tz z) k t S) :
+    ∃ A : Finset ℕ, (A : Set ℕ) ⊆ C (mz z) (WZ [] z) ∧ Live Z0 (mz z) (tz z) k t A ∧ Selected (RZ [] z) M (mz z) (tz z) k t A := by
+  let D := C (mz z) (WZ [] z)
+  have min : ∀ q < k, ¬ Sol Z0 (mz z) (tz z) q (C (mz z) ({x | RZ [] z x ≠ 0} ∪ (S : Set ℕ))) := by
+    intro q hq h
+    apply small q hq
+    apply h.mono le_rfl
+    rw [RZ_set]
+    rintro x ((hx | hx) | hx)
+    · exact Or.inl hx
+    · exact supply hx
+    · exact Or.inr hx
+  rcases front (RZ_R2 [] z) run min with h | ⟨k0,d,a,b,B,rfl,am,bm,gate,tail⟩
+  · exact ⟨S,supply,run,Or.inl h⟩
+  have memR (x : ℕ) : RZ [] z x ≠ 0 ↔ x ∈ WZ [] z := by
+    change x ∈ {y | RZ [] z y ≠ 0} ↔ _
+    rw [RZ_set]
+  obtain ⟨i,rfl⟩ := mem_stock ((memR _).mp am)
+  obtain ⟨j,rfl⟩ := mem_stock ((memR _).mp bm)
+  simp only [representatives,List.all_eq_true,List.mem_range,Bool.or_eq_true,List.any_eq_true,Bool.and_eq_true,Bool.not_eq_true',beq_iff_eq] at reps
+  rcases reps i i.isLt j j.isLt with h | ⟨p,hp,hxy,hm⟩
+  · exact False.elim (gate.1 h)
+  have ne : stock z (p.getD i.val 0) ≠ stock z (p.getD j.val 0) := fun h => by
+    have bad : (stock z (p.getD i.val 0) == stock z (p.getD j.val 0)) = true := beq_iff_eq.mpr h
+    exact Bool.noConfusion (bad.symm.trans hxy)
+  obtain ⟨rs,cover,mr,tr,perm⟩ := rots p hp
+  let x := stock z (p.getD i.val 0)
+  let y := stock z (p.getD j.val 0)
+  have xm := stock_mem (z := z) (perm i).1
+  have ym := stock_mem (z := z) (perm j).1
+  have transported : GateBudget (mz z) (tz z) (k0-t) t (insert (op d x y) D) := by
+    apply tail.routeBudget cover mr tr
+    intro w hw
+    rcases Finset.mem_insert.mp (gate.sub.2.2 hw) with rfl | old
+    · exact ⟨_,Or.inl rfl,((perm i).2).op d ((perm j).2)⟩
+    rcases supply old with raw | cn
+    · obtain ⟨a,rfl⟩ := mem_stock raw
+      exact ⟨_,Or.inr (Or.inl (stock_mem (perm a).1)),(perm a).2⟩
+    rcases cn with zero | full
+    · change w = 0 at zero
+      subst w
+      exact ⟨0,Or.inr (Or.inr (Or.inl rfl)),by simp [routed]⟩
+    · change w = mz z at full
+      subst w
+      exact ⟨mz z,Or.inr (Or.inr (Or.inr rfl)),mr⟩
+  obtain ⟨q,n,hq,hn,V,hV,hv⟩ := transported
+  have htk := tail.neg_le
+  have vs : ∀ w ∈ V.erase (op d x y), w ∈ D := by
+    intro w hw
+    exact (hV (Finset.mem_erase.mp hw).2).resolve_left (Finset.mem_erase.mp hw).1
+  have used : op d x y ∈ V := by
+    by_contra h
+    exact small q (by omega) (hv.sol.mono le_rfl (fun w hw => (hV hw).resolve_left (fun e => h (e ▸ hw))))
+  let U := V.erase (op d x y)
+  let A := insert x (insert y U)
+  have hA : (A : Set ℕ) ⊆ D := by
+    intro w hw
+    rcases Finset.mem_insert.mp hw with rfl | hy
+    · exact Or.inl xm
+    rcases Finset.mem_insert.mp hy with rfl | hu
+    · exact Or.inl ym
+    exact vs w hu
+  have bi : Bi Z0 d x y A V := ⟨ne,U,rfl,(Finset.insert_erase used).symm,al0 d x y⟩
+  have step := bi.live hv
+  have lower : k0 ≤ q := by
+    by_contra h
+    exact small (q+1) (by omega) (step.sol.mono le_rfl hA)
+  have eq1 : q = k0 := by omega
+  have eq2 : n = t := by omega
+  subst q n
+  exact ⟨A,hA,step,Or.inr ⟨_,d,x,y,V,rfl,(memR _).mpr xm,(memR _).mpr ym,bi,hv,hm⟩⟩
+
+lemma rotateChecked {z p rs}
+    (cover : routeMask rs = mz z) (ms : maskRows rs (mz z) (mz z) = true)
+    (gt : agreeRows rs (tz z) (tz z) = true)
+    (hs : ∀ i : Fin 8, p.getD i.val 0 < 8 ∧ agreeRows rs (stock z i.val) (stock z (p.getD i.val 0)) = true) : Rotates z p := by
+  refine ⟨rs,cover,⟨Nat.and_self _,?_⟩,⟨by simp [tz,Nat.and_assoc],agreeRows_ok gt⟩,?_⟩
+  · intro x hx
+    have h := List.all_eq_true.mp ms x hx
+    simp only [Bool.and_eq_true] at h
+    exact h.1.trans h.2.symm
+  · intro i
+    exact ⟨(hs i).1,⟨by simp [stock,Nat.and_assoc],agreeRows_ok (hs i).2⟩⟩
+
+lemma imp_rotations {z L} {Q M : List (ℕ × ℕ)} {ps : List (List ℕ)}
+    (hp : pOk z Q = true) (hL : L ≤ 15) (sound : ∀ e ∈ Q, Imp [] e.1 e.2)
+    (phase : ∃ p ∈ M, Nat.beq p.2 1 = true)
+    (rotations : ∀ p ∈ ps, Rotates z p) (rep : representatives z M ps = true)
+    (cases : ∀ t < L, (∀ u ∈ M, chk [] Q z (L-1) t u.1 u.2 = false) ∨ chk [] Q z (L-1) t FF 1 = false) : Imp [] z L := by
+  intro q hq h
+  classical
+  let F := fun a => Sol Z0 (mz z) (tz z) a (C (mz z) (WZ [] z))
+  have any : ∃ a, F a := ⟨q,h⟩
+  let k := Nat.find any
+  have good : F k := Nat.find_spec any
+  have low : Imp [] z k := fun a ha => Nat.find_min any ha
+  have bound : k < L := lt_of_le_of_lt (Nat.find_min' any h) hq
+  obtain ⟨w,hw,t,V,hV,hv⟩ := good.live
+  have eqw : w = k := le_antisymm hw (Nat.find_min' any (hv.sol.mono le_rfl hV))
+  subst w
+  have ht := hv.neg_le
+  rcases cases t (by omega) with selected | all
+  · obtain ⟨A,hA,ha,fits⟩ := chooseFront rotations rep low hV hv
+    exact imp_selected (L:=L) (Or.inl rfl) hp hL sound bound hA ha low (Or.inr ⟨M,phase,fits,selected⟩)
+  · apply imp_of_live (L:=L) (Or.inl rfl) hp hL sound bound hV hv low
+    exact Or.inr ⟨[(FF,1)],ffull,fun p hp => by simp only [List.mem_singleton] at hp; subst p; exact all⟩
+
+def allPerms : List (List ℕ) := [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5, 7, 6], [0, 2, 1, 5, 4, 3, 6, 7], [0, 2, 1, 5, 4, 3, 7, 6]]
+def expandRowWords (ws : List ℕ) : List (ℕ × ℕ) :=
+  ws.zipIdx.flatMap fun item => (List.range 5).filterMap fun i =>
+    let e := (item.1 >>> (12*i)) &&& 4095
+    if e = 0 then none else some (5*item.2+i,e-1)
+def perm0 : List ℕ := [0, 1, 2, 3, 4, 5, 6, 7]
+def rowMap0 : List (ℕ × ℕ) := expandRowWords [0x5004003002001, 0xa009008007006, 0xf00e00d00c00b, 0x14013012011010, 0x19018017016015, 0x1e01d01c01b01a, 0x2302202102001f, 0x28027026025024, 0x2d02c02b02a029, 0x3203103002f02e, 0x37036035034033, 0x3c03b03a039038, 0x4104003f03e03d, 0x46045044043042, 0x4b04a049048047, 0x5004f04e04d04c, 0x55054053052051, 0x5a059058057056, 0x5f05e05d05c05b, 0x64063062061060, 0x69068067066065, 0x6e06d06c06b06a, 0x7307207107006f, 0x78077076075074, 0x7d07c07b07a079, 0x8208108007f07e, 0x87086085084083, 0x8c08b08a089088, 0x9109008f08e08d, 0x96095094093092, 0x9b09a099098097, 0xa009f09e09d09c, 0xa50a40a30a20a1, 0xaa0a90a80a70a6, 0x2d30ae0ad0ac0ab, 0x2d32d32d32d32d3, 0x2d32d32d32d3, 0x2d42d42d42d42d4, 0x2d42d42d42d42d4, 0x23b23b000203000, 0x21c00023c23c000, 0x2d52d52d52d5000, 0x2d52d52d52d52d5, 0x2d62d62d60002d5, 0x2d62d62d62d62d6, 0x2040002d62d6, 0x2d72d72d72d72d7, 0x2d72d72d72d72d7, 0x21500020f000, 0x25d00025c000220, 0x2d800025e25e000, 0x2d82d82d82d82d8, 0x2d82d82d82d8, 0x2d92d900027d27d, 0x2d92d92d92d92d9, 0x2100002d92d92d9, 0x22300027f27f000, 0x2da2da2da2da000, 0x2da2da2da2da2da, 0x2440002810002da, 0x29a29a000299000, 0x29c29c00029b000, 0x2db2db2db2db000, 0x2db2db2db2db2db, 0x2dc2dc2dc0002db, 0x2dc2dc2dc2dc2dc, 0x2060002dc2dc, 0x2dd2dd2dd2dd2dd, 0x2dd2dd2dd2dd2dd, 0x217000211000, 0x2de2de2de000228, 0x2de2de2de2de2de, 0x2490002de2de, 0x2c00002bf0002be, 0x2df0002c12c1000, 0x2df2df2df2df2df, 0x2df2df2df2df, 0x2c32c3000288, 0x2e02e02e02e02e0, 0x2e02e02e02e02e0, 0x2e12e12e12e1000, 0x2e12e12e12e12e1, 0x2e20002070002e1, 0x2e22e22e22e22e2, 0x2e22e22e22e2, 0x22e000218000212, 0x2e32e32e32e3000, 0x2e32e32e32e32e3, 0x2e400024f0002e3, 0x2e60002e5000, 0x2e82e80002e72e7, 0x2e82e82e82e82e8, 0x28e0002e82e82e8, 0x2ea0002e92e9000, 0x2ea2ea2ea2ea2ea, 0x2ea2ea2ea2ea, 0x2d42d30002eb2eb, 0x2d92d82d72d62d5, 0x2de2dd2dc2db2da, 0x2e32e22e12e02df, 0x2d52d30002ea2e8, 0x2d40002e02db2d8, 0x2030002e12dc2d6, 0x20720627d204, 0x2e22dd2d92d7, 0x21221121020f23b, 0x21727f21523c000, 0x21c2d42d3000218, 0x2d82202d72d62d5, 0x2dc2db2da2232d9, 0x2e02df2de2282dd, 0x2e82e322e2e22e1, 0x2da2d42d30002ea, 0x2d42d30002e32de, 0x2d72d62d523c23b, 0x2442da2d92d825e, 0x2492de2dd2dc2db, 0x2e32e22e12e02df, 0x2d50002ea2e824f, 0x2d42d30002d72d6, 0x25d25c2d72d62d5, 0x29c2da2d92d825e, 0x2c12de2dd2dc2db, 0x2e32e22e12e02df, 0x2d80002ea2e82e7, 0x2e82df2da2d9, 0x2d72d62d52d42d3, 0x2da27f2d927d2d8, 0x2dd2dc2db29a281, 0x2e12e02882df2de, 0x2ea28e2e82e32e2, 0x2d62d52d42d3000, 0x2992da2d92d82d7, 0x2dc2db29c29b29a, 0x2e02c32df2de2dd, 0x2e92e82e32e22e1, 0x2dd2dc2db0002ea, 0x2d30002ea2df2de, 0x2d82d72d62d52d4, 0x2dd2dc2db2da2d9, 0x2c12c02bf2be2de, 0x2e22e12e02c32df, 0x2eb2ea2e82e3, 0x2e82e32e22e12e0, 0x2d52d42d30002ea, 0x2da2d92d82d72d6, 0x2df2de2dd2dc2db, 0x2e42e32e22e12e0, 0x2e92e82e72e62e5, 0x2eb2ea, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x51d4e84e2000000, 0x59557b55b53d523, 0x4ed4e20005d75b6, 0x57b55b53d52351d, 0x4f30005d75b6595, 0x50400053d4fe000, 0x4e200051d00053d, 0x55b54153d51d4e8, 0x5d75b659557b, 0x54153d51d4ed4e2, 0x5d75b659557b55b, 0x4f84e20004f3000, 0x57b55b54153d51d, 0x4fe0005d75b6595, 0x51d000504000, 0x53d00055b00055b, 0x51d4e84e200055b, 0x59557b56155b53d, 0x57b4f30005d75b6, 0x53d51d4f84e2000, 0x5b659557b56155b, 0x5040004fe0005d7, 0x4e200051d00057b, 0x56155b53d52351d, 0x5d75b659557b, 0x59500053d00057b, 0x59500059557b000, 0x4e200059555b000, 0x57b55b53d51d4e8, 0x5d75b659c595, 0x55b53d51d4ed4e2, 0x5d75b659c59557b, 0x4f84e20004f3000, 0x59557b55b53d51d, 0x4fe0005d75b659c, 0x51d000504000, 0x55b53d52351d4e2, 0x5d75b659c59557b, 0x5b600053d000, 0x55b0005b60005b6, 0x53d51d4e20005b6, 0x59c59557b56155b, 0x57b0005d75b6, 0x4e84e20005b6595, 0x59557b55b53d51d, 0x4e20005d75bd5b6, 0x57b55b53d51d4ed, 0x5d75bd5b6595, 0x51d4f84e20004f3, 0x5b659557b55b53d, 0x4fe0005d75bd, 0x4e200051d000504, 0x57b55b53d52351d, 0x5d75bd5b6595, 0x5d70005d700053d, 0x5d755b0005d7000, 0x55b53d51d4e2000, 0x5bd5b659557b561, 0x59500057b0005d7, 0x53d51d4e20005d7, 0x5b659c59557b55b, 0x5d75b60005d75bd, 0x4e24e24e24e2000, 0x4e24e24e24e24e2, 0x4e24e24e24e24e2, 0x4e24e24e24e24e2, 0x4e84e84e84e8000, 0x4ed4ed4ed0004e8, 0x4f34f34f30004ed, 0x4f84f80004f34f3, 0x4fe4fe0004f84f8, 0x5040004fe4fe4fe, 0x504504504504, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d, 0x523523523523523, 0x53d53d53d53d000, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x54154154100053d, 0x55b55b55b55b000, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x56156156100055b, 0x57b57b000561561, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x59500057b57b57b, 0x595595595595595, 0x595595595595595, 0x595595595595595, 0x595595595595595, 0x595595595595, 0x59c59c59c59c59c, 0x5b65b65b600059c, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5bd5bd0005b65b6, 0x5bd5bd5bd5bd, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7]
+def perm1 : List ℕ := [0, 1, 2, 3, 4, 5, 7, 6]
+def rowMap1 : List (ℕ × ℕ) := expandRowWords [0x5004003002001, 0xa009008007006, 0xf00e00d00c00b, 0x14013012011010, 0x47046045044043, 0x4c04b04a049048, 0x5105004f04e04d, 0x56055054053052, 0x5b05a059058057, 0x6005f05e05d05c, 0x65064063062061, 0x6a069068067066, 0x6f06e06d06c06b, 0x18017016015070, 0x1d01c01b01a019, 0x2202102001f01e, 0x27026025024023, 0x2c02b02a029028, 0x3103002f02e02d, 0x36035034033032, 0x3b03a039038037, 0x4003f03e03d03c, 0x73072071042041, 0x78077076075074, 0x7d07c07b07a079, 0x8208108007f07e, 0x87086085084083, 0x8c08b08a089088, 0x9109008f08e08d, 0x96095094093092, 0x9b09a099098097, 0xa009f09e09d09c, 0xa50a40a30a20a1, 0xaa0a90a80a70a6, 0x2d30ae0ad0ac0ab, 0x2d32d32d32d32d3, 0x2d32d32d32d3, 0x2d42d42d42d42d4, 0x2d42d42d42d42d4, 0x23b23b000203000, 0x21c00023c23c000, 0x2d52d52d52d5000, 0x2d52d52d52d52d5, 0x2d62d62d60002d5, 0x2d62d62d62d62d6, 0x2040002d62d6, 0x2d72d72d72d72d7, 0x2d72d72d72d72d7, 0x21500020f000, 0x25d00025c000220, 0x2d800025e25e000, 0x2d82d82d82d82d8, 0x2d82d82d82d8, 0x2d92d900027d27d, 0x2d92d92d92d92d9, 0x2100002d92d92d9, 0x22300027f27f000, 0x2da2da2da2da000, 0x2da2da2da2da2da, 0x2440002810002da, 0x29a29a000299000, 0x29c29c00029b000, 0x2e02e02e02e0000, 0x2e02e02e02e02e0, 0x2e12e12e10002e0, 0x2e12e12e12e12e1, 0x2070002e12e1, 0x2e22e22e22e22e2, 0x2e22e22e22e22e2, 0x218000212000, 0x2e32e32e300022e, 0x2e32e32e32e32e3, 0x24f0002e32e3, 0x2e60002e50002e4, 0x2e80002e72e7000, 0x2e82e82e82e82e8, 0x2e82e82e82e8, 0x2e92e900028e, 0x2db2db2db2db2db, 0x2db2db2db2db2db, 0x2dc2dc2dc2dc000, 0x2dc2dc2dc2dc2dc, 0x2dd0002060002dc, 0x2dd2dd2dd2dd2dd, 0x2dd2dd2dd2dd, 0x228000217000211, 0x2de2de2de2de000, 0x2de2de2de2de2de, 0x2be0002490002de, 0x2c00002bf000, 0x2df2df0002c12c1, 0x2df2df2df2df2df, 0x2880002df2df2df, 0x2ea0002c32c3000, 0x2ea2ea2ea2ea2ea, 0x2ea2ea2ea2ea, 0x2d42d30002eb2eb, 0x2d92d82d72d62d5, 0x2e32e22e12e02da, 0x2de2dd2dc2db2e8, 0x2d52d30002ea2df, 0x2d40002db2e02d8, 0x2030002dc2e12d6, 0x20620727d204, 0x2dd2e22d92d7, 0x21121221020f23b, 0x21827f21523c000, 0x21c2d42d3000217, 0x2d82202d72d62d5, 0x2e12e02da2232d9, 0x2db2e82e322e2e2, 0x2df2de2282dd2dc, 0x2da2d42d30002ea, 0x2d42d30002de2e3, 0x2d72d62d523c23b, 0x2442da2d92d825e, 0x24f2e32e22e12e0, 0x2de2dd2dc2db2e8, 0x2d50002ea2df249, 0x2d42d30002d72d6, 0x25d25c2d72d62d5, 0x29c2da2d92d825e, 0x2e72e32e22e12e0, 0x2de2dd2dc2db2e8, 0x2d80002ea2df2c1, 0x2df2e82da2d9, 0x2d72d62d52d42d3, 0x2da27f2d927d2d8, 0x2e22e12e029a281, 0x2dc2db28e2e82e3, 0x2ea2882df2de2dd, 0x2d62d52d42d3000, 0x2992da2d92d82d7, 0x2e12e029c29b29a, 0x2db2e92e82e32e2, 0x2c32df2de2dd2dc, 0x2e22e12e00002ea, 0x2d30002ea2e82e3, 0x2d82d72d62d52d4, 0x2e22e12e02da2d9, 0x2e72e62e52e42e3, 0x2dd2dc2db2e92e8, 0x2eb2ea2df2de, 0x2df2de2dd2dc2db, 0x2d52d42d30002ea, 0x2da2d92d82d72d6, 0x2e82e32e22e12e0, 0x2be2de2dd2dc2db, 0x2c32df2c12c02bf, 0x2eb2ea, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x51d4e84e2000000, 0x59557b55b53d523, 0x4ed4e20005b65d7, 0x57b55b53d52351d, 0x4f30005b65d7595, 0x50400053d4fe000, 0x4e200051d00053d, 0x55b54153d51d4e8, 0x5b65d759557b, 0x54153d51d4ed4e2, 0x5b65d759557b55b, 0x4f84e20004f3000, 0x57b55b54153d51d, 0x4fe0005b65d7595, 0x51d000504000, 0x53d00055b00055b, 0x51d4e84e200055b, 0x59557b56155b53d, 0x57b4f30005b65d7, 0x53d51d4f84e2000, 0x5d759557b56155b, 0x5040004fe0005b6, 0x4e200051d00057b, 0x56155b53d52351d, 0x5b65d759557b, 0x59500053d00057b, 0x59500059557b000, 0x4e200059555b000, 0x57b55b53d51d4e8, 0x5b65d75bd595, 0x55b53d51d4ed4e2, 0x5b65d75bd59557b, 0x4f84e20004f3000, 0x59557b55b53d51d, 0x4fe0005b65d75bd, 0x51d000504000, 0x55b53d52351d4e2, 0x5b65d75bd59557b, 0x5d700053d000, 0x55b0005d70005d7, 0x53d51d4e20005d7, 0x5bd59557b56155b, 0x57b0005b65d7, 0x4e84e20005d7595, 0x59557b55b53d51d, 0x4e20005b659c5d7, 0x57b55b53d51d4ed, 0x5b659c5d7595, 0x51d4f84e20004f3, 0x5d759557b55b53d, 0x4fe0005b659c, 0x4e200051d000504, 0x57b55b53d52351d, 0x5b659c5d7595, 0x5b60005b600053d, 0x5b655b0005b6000, 0x55b53d51d4e2000, 0x59c5d759557b561, 0x59500057b0005b6, 0x53d51d4e20005b6, 0x5d75bd59557b55b, 0x5b65d70005b659c, 0x4e24e24e24e2000, 0x4e24e24e24e24e2, 0x4e24e24e24e24e2, 0x4e24e24e24e24e2, 0x4e84e84e84e8000, 0x4ed4ed4ed0004e8, 0x4f34f34f30004ed, 0x4f84f80004f34f3, 0x4fe4fe0004f84f8, 0x5040004fe4fe4fe, 0x504504504504, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d, 0x523523523523523, 0x53d53d53d53d000, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x54154154100053d, 0x55b55b55b55b000, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x56156156100055b, 0x57b57b000561561, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x59500057b57b57b, 0x595595595595595, 0x595595595595595, 0x595595595595595, 0x595595595595595, 0x595595595595, 0x5bd5bd5bd5bd5bd, 0x5d75d75d70005bd, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x59c59c0005d75d7, 0x59c59c59c59c, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6]
+def perm2 : List ℕ := [0, 2, 1, 5, 4, 3, 6, 7]
+def rowMap2 : List (ℕ × ℕ) := expandRowWords [0x500d00c00a00b, 0x2009008006007, 0x1100e004003001, 0x1401301000f012, 0x2a027029028026, 0x1e01d01b01c02b, 0x36035038037034, 0x1601801503a039, 0x2d02c01a019017, 0x3202f02e031030, 0x2002302201f033, 0x3c03b025024021, 0x4103e03d04003f, 0x55057056054042, 0x4b04904a059058, 0x6306606506204c, 0x46043068067064, 0x5a048047045044, 0x5d05c05f05e05b, 0x5105004d061060, 0x6905305204f04e, 0x6c06b06e06d06a, 0x7507407107006f, 0x8f077076073072, 0x92091094093090, 0x84083080096095, 0x9f086085082081, 0xa20a10a40a30a0, 0x7c0790780a60a5, 0x7f07e07b07a07d, 0x9909c09b098097, 0x8808709e09d09a, 0x8d08a08908c08b, 0xac0ab0a80a708e, 0x2d80ae0ad0aa0a9, 0x2d82d82d82d82d8, 0x2d82d82d82d8, 0x2d92d92d92d92d9, 0x2d92d92d92d92d9, 0x27d27d000210000, 0x22300027f27f000, 0x2d52d52d52d5000, 0x2d52d52d52d52d5, 0x2d72d72d70002d5, 0x2d72d72d72d72d7, 0x20f0002d72d7, 0x2d62d62d62d62d6, 0x2d62d62d62d62d6, 0x215000204000, 0x29b000299000220, 0x2d300029a29a000, 0x2d32d32d32d32d3, 0x2d32d32d32d3, 0x2d42d400023b23b, 0x2d42d42d42d42d4, 0x2030002d42d42d4, 0x21c00023c23c000, 0x2da2da2da2da000, 0x2da2da2da2da2da, 0x2810002440002da, 0x25e25e00025c000, 0x29c29c00025d000, 0x2db2db2db2db000, 0x2db2db2db2db2db, 0x2dd2dd2dd0002db, 0x2dd2dd2dd2dd2dd, 0x2110002dd2dd, 0x2dc2dc2dc2dc2dc, 0x2dc2dc2dc2dc2dc, 0x217000206000, 0x2df2df2df000228, 0x2df2df2df2df2df, 0x2880002df2df, 0x2bf0002c00002be, 0x2de0002c32c3000, 0x2de2de2de2de2de, 0x2de2de2de2de, 0x2c12c1000249, 0x2e02e02e02e02e0, 0x2e02e02e02e02e0, 0x2e22e22e22e2000, 0x2e22e22e22e22e2, 0x2e10002120002e2, 0x2e12e12e12e12e1, 0x2e12e12e12e1, 0x22e000218000207, 0x2e82e82e82e8000, 0x2e82e82e82e82e8, 0x2e400028e0002e8, 0x2e50002e6000, 0x2e32e30002e92e9, 0x2e32e32e32e32e3, 0x24f0002e32e32e3, 0x2ea0002e72e7000, 0x2ea2ea2ea2ea2ea, 0x2ea2ea2ea2ea, 0x2d92d80002eb2eb, 0x2d42d32d62d72d5, 0x2df2dc2dd2db2da, 0x2e82e12e22e02de, 0x2d52d80002ea2e3, 0x2d90002e02db2d3, 0x2100002e22dd2d7, 0x21221123b20f, 0x2e12dc2d42d6, 0x20720620320427d, 0x21723c21527f000, 0x2232d92d8000218, 0x2d32202d62d72d5, 0x2dd2db2da21c2d4, 0x2e02de2df2282dc, 0x2e32e822e2e12e2, 0x2da2d92d80002ea, 0x2d92d80002e82df, 0x2d62d72d527f27d, 0x2812da2d42d329a, 0x2882df2dc2dd2db, 0x2e82e12e22e02de, 0x2d50002ea2e328e, 0x2d92d80002d62d7, 0x29b2992d62d72d5, 0x29c2da2d42d329a, 0x2c32df2dc2dd2db, 0x2e82e12e22e02de, 0x2d30002ea2e32e9, 0x2e32de2da2d4, 0x2d62d72d52d92d8, 0x2da23c2d423b2d3, 0x2dc2dd2db25e244, 0x2e22e02492de2df, 0x2ea24f2e32e82e1, 0x2d72d52d92d8000, 0x25c2da2d42d32d6, 0x2dd2db29c25d25e, 0x2e02c12de2df2dc, 0x2e72e32e82e12e2, 0x2dc2dd2db0002ea, 0x2d80002ea2de2df, 0x2d32d62d72d52d9, 0x2dc2dd2db2da2d4, 0x2c32bf2c02be2df, 0x2e12e22e02c12de, 0x2eb2ea2e32e8, 0x2e32e82e12e22e0, 0x2d52d92d80002ea, 0x2da2d42d32d62d7, 0x2de2df2dc2dd2db, 0x2e42e82e12e22e0, 0x2e72e32e92e52e6, 0x2eb2ea, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x51d4e84e2000000, 0x55b53d59557b561, 0x4f84e20005d75b6, 0x53d59557b56151d, 0x4fe0005d75b655b, 0x50400057b4f3000, 0x4e200051d00057b, 0x59554157b51d4e8, 0x5d75b655b53d, 0x54157b51d4f84e2, 0x5d75b655b53d595, 0x4ed4e20004fe000, 0x53d59554157b51d, 0x4f30005d75b655b, 0x51d000504000, 0x57b000595000595, 0x51d4e84e2000595, 0x55b53d52359557b, 0x53d4fe0005d75b6, 0x57b51d4ed4e2000, 0x5b655b53d523595, 0x5040004f30005d7, 0x4e200051d00053d, 0x52359557b56151d, 0x5d75b655b53d, 0x55b00057b00053d, 0x55b00055b53d000, 0x4e200055b595000, 0x53d59557b51d4e8, 0x5d75b659c55b, 0x59557b51d4f84e2, 0x5d75b659c55b53d, 0x4ed4e20004fe000, 0x55b53d59557b51d, 0x4f30005d75b659c, 0x51d000504000, 0x59557b56151d4e2, 0x5d75b659c55b53d, 0x5b600057b000, 0x5950005b60005b6, 0x57b51d4e20005b6, 0x59c55b53d523595, 0x53d0005d75b6, 0x4e84e20005b655b, 0x55b53d59557b51d, 0x4e20005d75bd5b6, 0x53d59557b51d4f8, 0x5d75bd5b655b, 0x51d4ed4e20004fe, 0x5b655b53d59557b, 0x4f30005d75bd, 0x4e200051d000504, 0x53d59557b56151d, 0x5d75bd5b655b, 0x5d70005d700057b, 0x5d75950005d7000, 0x59557b51d4e2000, 0x5bd5b655b53d523, 0x55b00053d0005d7, 0x57b51d4e20005d7, 0x5b659c55b53d595, 0x5d75b60005d75bd, 0x4e24e24e24e2000, 0x4e24e24e24e24e2, 0x4e24e24e24e24e2, 0x4e24e24e24e24e2, 0x4e84e84e84e8000, 0x4f84f84f80004e8, 0x4fe4fe4fe0004f8, 0x4ed4ed0004fe4fe, 0x4f34f30004ed4ed, 0x5040004f34f34f3, 0x504504504504, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d, 0x561561561561561, 0x57b57b57b57b000, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x54154154100057b, 0x595595595595000, 0x595595595595595, 0x595595595595595, 0x595595595595595, 0x595595595595595, 0x523523523000595, 0x53d53d000523523, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x55b00053d53d53d, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b, 0x59c59c59c59c59c, 0x5b65b65b600059c, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5bd5bd0005b65b6, 0x5bd5bd5bd5bd, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7]
+def perm3 : List ℕ := [0, 2, 1, 5, 4, 3, 7, 6]
+def rowMap3 : List (ℕ × ℕ) := expandRowWords [0x500d00c00a00b, 0x2009008006007, 0x1100e004003001, 0x1401301000f012, 0x58055057056054, 0x4c04b04904a059, 0x64063066065062, 0x44046043068067, 0x5b05a048047045, 0x6005d05c05f05e, 0x4e05105004d061, 0x6a06905305204f, 0x6f06c06b06e06d, 0x27029028026070, 0x1d01b01c02b02a, 0x3503803703401e, 0x1801503a039036, 0x2c01a019017016, 0x2f02e03103002d, 0x2302201f033032, 0x3b025024021020, 0x3e03d04003f03c, 0x75074071042041, 0x8f077076073072, 0x92091094093090, 0x84083080096095, 0x9f086085082081, 0xa20a10a40a30a0, 0x7c0790780a60a5, 0x7f07e07b07a07d, 0x9909c09b098097, 0x8808709e09d09a, 0x8d08a08908c08b, 0xac0ab0a80a708e, 0x2d80ae0ad0aa0a9, 0x2d82d82d82d82d8, 0x2d82d82d82d8, 0x2d92d92d92d92d9, 0x2d92d92d92d92d9, 0x27d27d000210000, 0x22300027f27f000, 0x2d52d52d52d5000, 0x2d52d52d52d52d5, 0x2d72d72d70002d5, 0x2d72d72d72d72d7, 0x20f0002d72d7, 0x2d62d62d62d62d6, 0x2d62d62d62d62d6, 0x215000204000, 0x29b000299000220, 0x2d300029a29a000, 0x2d32d32d32d32d3, 0x2d32d32d32d3, 0x2d42d400023b23b, 0x2d42d42d42d42d4, 0x2030002d42d42d4, 0x21c00023c23c000, 0x2da2da2da2da000, 0x2da2da2da2da2da, 0x2810002440002da, 0x25e25e00025c000, 0x29c29c00025d000, 0x2e02e02e02e0000, 0x2e02e02e02e02e0, 0x2e22e22e20002e0, 0x2e22e22e22e22e2, 0x2120002e22e2, 0x2e12e12e12e12e1, 0x2e12e12e12e12e1, 0x218000207000, 0x2e82e82e800022e, 0x2e82e82e82e82e8, 0x28e0002e82e8, 0x2e50002e60002e4, 0x2e30002e92e9000, 0x2e32e32e32e32e3, 0x2e32e32e32e3, 0x2e72e700024f, 0x2db2db2db2db2db, 0x2db2db2db2db2db, 0x2dd2dd2dd2dd000, 0x2dd2dd2dd2dd2dd, 0x2dc0002110002dd, 0x2dc2dc2dc2dc2dc, 0x2dc2dc2dc2dc, 0x228000217000206, 0x2df2df2df2df000, 0x2df2df2df2df2df, 0x2be0002880002df, 0x2bf0002c0000, 0x2de2de0002c32c3, 0x2de2de2de2de2de, 0x2490002de2de2de, 0x2ea0002c12c1000, 0x2ea2ea2ea2ea2ea, 0x2ea2ea2ea2ea, 0x2d92d80002eb2eb, 0x2d42d32d62d72d5, 0x2e82e12e22e02da, 0x2df2dc2dd2db2e3, 0x2d52d80002ea2de, 0x2d90002db2e02d3, 0x2100002dd2e22d7, 0x21121223b20f, 0x2dc2e12d42d6, 0x20620720320427d, 0x21823c21527f000, 0x2232d92d8000217, 0x2d32202d62d72d5, 0x2e22e02da21c2d4, 0x2db2e32e822e2e1, 0x2de2df2282dc2dd, 0x2da2d92d80002ea, 0x2d92d80002df2e8, 0x2d62d72d527f27d, 0x2812da2d42d329a, 0x28e2e82e12e22e0, 0x2df2dc2dd2db2e3, 0x2d50002ea2de288, 0x2d92d80002d62d7, 0x29b2992d62d72d5, 0x29c2da2d42d329a, 0x2e92e82e12e22e0, 0x2df2dc2dd2db2e3, 0x2d30002ea2de2c3, 0x2de2e32da2d4, 0x2d62d72d52d92d8, 0x2da23c2d423b2d3, 0x2e12e22e025e244, 0x2dd2db24f2e32e8, 0x2ea2492de2df2dc, 0x2d72d52d92d8000, 0x25c2da2d42d32d6, 0x2e22e029c25d25e, 0x2db2e72e32e82e1, 0x2c12de2df2dc2dd, 0x2e12e22e00002ea, 0x2d80002ea2e32e8, 0x2d32d62d72d52d9, 0x2e12e22e02da2d4, 0x2e92e52e62e42e8, 0x2dc2dd2db2e72e3, 0x2eb2ea2de2df, 0x2de2df2dc2dd2db, 0x2d52d92d80002ea, 0x2da2d42d32d62d7, 0x2e32e82e12e22e0, 0x2be2df2dc2dd2db, 0x2c12de2c32bf2c0, 0x2eb2ea, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x51d4e84e2000000, 0x55b53d59557b561, 0x4f84e20005b65d7, 0x53d59557b56151d, 0x4fe0005b65d755b, 0x50400057b4f3000, 0x4e200051d00057b, 0x59554157b51d4e8, 0x5b65d755b53d, 0x54157b51d4f84e2, 0x5b65d755b53d595, 0x4ed4e20004fe000, 0x53d59554157b51d, 0x4f30005b65d755b, 0x51d000504000, 0x57b000595000595, 0x51d4e84e2000595, 0x55b53d52359557b, 0x53d4fe0005b65d7, 0x57b51d4ed4e2000, 0x5d755b53d523595, 0x5040004f30005b6, 0x4e200051d00053d, 0x52359557b56151d, 0x5b65d755b53d, 0x55b00057b00053d, 0x55b00055b53d000, 0x4e200055b595000, 0x53d59557b51d4e8, 0x5b65d75bd55b, 0x59557b51d4f84e2, 0x5b65d75bd55b53d, 0x4ed4e20004fe000, 0x55b53d59557b51d, 0x4f30005b65d75bd, 0x51d000504000, 0x59557b56151d4e2, 0x5b65d75bd55b53d, 0x5d700057b000, 0x5950005d70005d7, 0x57b51d4e20005d7, 0x5bd55b53d523595, 0x53d0005b65d7, 0x4e84e20005d755b, 0x55b53d59557b51d, 0x4e20005b659c5d7, 0x53d59557b51d4f8, 0x5b659c5d755b, 0x51d4ed4e20004fe, 0x5d755b53d59557b, 0x4f30005b659c, 0x4e200051d000504, 0x53d59557b56151d, 0x5b659c5d755b, 0x5b60005b600057b, 0x5b65950005b6000, 0x59557b51d4e2000, 0x59c5d755b53d523, 0x55b00053d0005b6, 0x57b51d4e20005b6, 0x5d75bd55b53d595, 0x5b65d70005b659c, 0x4e24e24e24e2000, 0x4e24e24e24e24e2, 0x4e24e24e24e24e2, 0x4e24e24e24e24e2, 0x4e84e84e84e8000, 0x4f84f84f80004e8, 0x4fe4fe4fe0004f8, 0x4ed4ed0004fe4fe, 0x4f34f30004ed4ed, 0x5040004f34f34f3, 0x504504504504, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d51d, 0x51d51d51d51d, 0x561561561561561, 0x57b57b57b57b000, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x57b57b57b57b57b, 0x54154154100057b, 0x595595595595000, 0x595595595595595, 0x595595595595595, 0x595595595595595, 0x595595595595595, 0x523523523000595, 0x53d53d000523523, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x53d53d53d53d53d, 0x55b00053d53d53d, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b55b, 0x55b55b55b55b, 0x5bd5bd5bd5bd5bd, 0x5d75d75d70005bd, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x5d75d75d75d75d7, 0x59c59c0005d75d7, 0x59c59c59c59c, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6, 0x5b65b65b65b65b6]
+def permutationParts0 : List (ℕ × ℕ) := (FF ^^^ [6, 10, 38, 42, 45, 57, 61, 75, 90, 97, 109, 113, 116, 123, 127, 135, 139, 153, 171, 178, 183, 187, 190, 194, 201, 204, 206, 208].foldr (fun i m => (2^i) ||| m) 0, 1) :: [6, 38, 45, 57, 90, 97, 113, 123, 127, 135, 139, 201, 206, 208].map (fun r => (2^r,0))
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rotates0_0 : Rotates 0 perm0 := by
+  apply rotateChecked (rs := rowMap0.filter (fun r => (mz 0).testBit r.1)) <;> decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rotates0_1 : Rotates 0 perm1 := by
+  apply rotateChecked (rs := rowMap1.filter (fun r => (mz 0).testBit r.1)) <;> decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rotates0_2 : Rotates 0 perm2 := by
+  apply rotateChecked (rs := rowMap2.filter (fun r => (mz 0).testBit r.1)) <;> decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rotates0_3 : Rotates 0 perm3 := by
+  apply rotateChecked (rs := rowMap3.filter (fun r => (mz 0).testBit r.1)) <;> decide +kernel
+lemma everyRotation0 : ∀ p ∈ allPerms, Rotates 0 p := by
+  intro p hp
+  simp only [allPerms,List.mem_cons,List.not_mem_nil,or_false] at hp
+  rcases hp with rfl | rfl | rfl | rfl
+  · exact rotates0_0
+  · exact rotates0_1
+  · exact rotates0_2
+  · exact rotates0_3
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma everyPair0 : representatives 0 permutationParts0 allPerms = true := by decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma phase0 : ∃ p ∈ permutationParts0, Nat.beq p.2 1 = true := ⟨_, List.mem_cons_self, rfl⟩
+def permutationParts1 : List (ℕ × ℕ) := (FF ^^^ [4, 6, 18, 32, 34, 52, 54, 62, 90, 110, 118, 138, 146, 148, 162, 174, 176, 182, 210].foldr (fun i m => (2^i) ||| m) 0, 1) :: [18, 32, 34, 52, 62, 110, 118, 138, 146, 162].map (fun r => (2^r,0))
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rotates1_0 : Rotates 1 perm0 := by
+  apply rotateChecked (rs := rowMap0.filter (fun r => (mz 1).testBit r.1)) <;> decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rotates1_1 : Rotates 1 perm1 := by
+  apply rotateChecked (rs := rowMap1.filter (fun r => (mz 1).testBit r.1)) <;> decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rotates1_2 : Rotates 1 perm2 := by
+  apply rotateChecked (rs := rowMap2.filter (fun r => (mz 1).testBit r.1)) <;> decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma rotates1_3 : Rotates 1 perm3 := by
+  apply rotateChecked (rs := rowMap3.filter (fun r => (mz 1).testBit r.1)) <;> decide +kernel
+lemma everyRotation1 : ∀ p ∈ allPerms, Rotates 1 p := by
+  intro p hp
+  simp only [allPerms,List.mem_cons,List.not_mem_nil,or_false] at hp
+  rcases hp with rfl | rfl | rfl | rfl
+  · exact rotates1_0
+  · exact rotates1_1
+  · exact rotates1_2
+  · exact rotates1_3
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma everyPair1 : representatives 1 permutationParts1 allPerms = true := by decide +kernel
+set_option maxRecDepth 100000 in
+set_option maxHeartbeats 0 in
+lemma phase1 : ∃ p ∈ permutationParts1, Nat.beq p.2 1 = true := ⟨_, List.mem_cons_self, rfl⟩
+
 def cuts0 : List ℕ := [6, 10, 38, 42, 45, 57, 61, 75, 90, 97, 109, 113, 116, 123, 127, 135, 139, 153, 171, 178, 183, 187, 190, 194, 201, 204, 206, 208]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
@@ -4750,12 +5346,6 @@ set_option maxHeartbeats 0 in
 lemma h_1_12_0_0 : chk [] proj1 1 12 0 (remainder cuts1) 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_1_12_0_1 : chk [] proj1 1 12 0 (2 ^ 4) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_0_2 : chk [] proj1 1 12 0 (2 ^ 6) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_1_12_0_3 : chk [] proj1 1 12 0 (2 ^ 18) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
@@ -4768,13 +5358,7 @@ set_option maxHeartbeats 0 in
 lemma h_1_12_0_6 : chk [] proj1 1 12 0 (2 ^ 52) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_1_12_0_7 : chk [] proj1 1 12 0 (2 ^ 54) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_1_12_0_8 : chk [] proj1 1 12 0 (2 ^ 62) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_0_9 : chk [] proj1 1 12 0 (2 ^ 90) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_1_12_0_10 : chk [] proj1 1 12 0 (2 ^ 110) 0 = false := by decide +kernel
@@ -4789,58 +5373,27 @@ set_option maxHeartbeats 0 in
 lemma h_1_12_0_13 : chk [] proj1 1 12 0 (2 ^ 146) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_1_12_0_14 : chk [] proj1 1 12 0 (2 ^ 148) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_1_12_0_15 : chk [] proj1 1 12 0 (2 ^ 162) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_0_16 : chk [] proj1 1 12 0 (2 ^ 174) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_0_17 : chk [] proj1 1 12 0 (2 ^ 176) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_0_18 : chk [] proj1 1 12 0 (2 ^ 182) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_0_19 : chk [] proj1 1 12 0 (2 ^ 210) 0 = false := by decide +kernel
-lemma split_1_12_0 : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] proj1 1 12 0 p.1 p.2 = false := by
-  refine ⟨bucketList cuts1, cover1, ?_⟩
+lemma split_1_12_0 : ∀ p ∈ permutationParts1, chk [] proj1 1 12 0 p.1 p.2 = false := by
   intro p hp
-  simp only [bucketList, List.mem_cons, List.mem_map] at hp
-  rcases hp with rfl | ⟨r, hr, rfl⟩
+  simp only [permutationParts1,List.mem_cons,List.mem_map] at hp
+  rcases hp with rfl | ⟨r,hr,rfl⟩
   · exact h_1_12_0_0
-  simp only [cuts1, List.mem_cons, List.not_mem_nil, or_false] at hr
-  rcases hr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-  · exact h_1_12_0_1
-  · exact h_1_12_0_2
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at hr
+  rcases hr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact h_1_12_0_3
   · exact h_1_12_0_4
   · exact h_1_12_0_5
   · exact h_1_12_0_6
-  · exact h_1_12_0_7
   · exact h_1_12_0_8
-  · exact h_1_12_0_9
   · exact h_1_12_0_10
   · exact h_1_12_0_11
   · exact h_1_12_0_12
   · exact h_1_12_0_13
-  · exact h_1_12_0_14
   · exact h_1_12_0_15
-  · exact h_1_12_0_16
-  · exact h_1_12_0_17
-  · exact h_1_12_0_18
-  · exact h_1_12_0_19
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_1_12_1_0 : chk [] proj1 1 12 1 (remainder cuts1) 1 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_1_1 : chk [] proj1 1 12 1 (2 ^ 4) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_1_2 : chk [] proj1 1 12 1 (2 ^ 6) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_1_12_1_3 : chk [] proj1 1 12 1 (2 ^ 18) 0 = false := by decide +kernel
@@ -4855,13 +5408,7 @@ set_option maxHeartbeats 0 in
 lemma h_1_12_1_6 : chk [] proj1 1 12 1 (2 ^ 52) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_1_12_1_7 : chk [] proj1 1 12 1 (2 ^ 54) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_1_12_1_8 : chk [] proj1 1 12 1 (2 ^ 62) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_1_9 : chk [] proj1 1 12 1 (2 ^ 90) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_1_12_1_10 : chk [] proj1 1 12 1 (2 ^ 110) 0 = false := by decide +kernel
@@ -4876,49 +5423,24 @@ set_option maxHeartbeats 0 in
 lemma h_1_12_1_13 : chk [] proj1 1 12 1 (2 ^ 146) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_1_12_1_14 : chk [] proj1 1 12 1 (2 ^ 148) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_1_12_1_15 : chk [] proj1 1 12 1 (2 ^ 162) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_1_16 : chk [] proj1 1 12 1 (2 ^ 174) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_1_17 : chk [] proj1 1 12 1 (2 ^ 176) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_1_18 : chk [] proj1 1 12 1 (2 ^ 182) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_1_12_1_19 : chk [] proj1 1 12 1 (2 ^ 210) 0 = false := by decide +kernel
-lemma split_1_12_1 : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] proj1 1 12 1 p.1 p.2 = false := by
-  refine ⟨bucketList cuts1, cover1, ?_⟩
+lemma split_1_12_1 : ∀ p ∈ permutationParts1, chk [] proj1 1 12 1 p.1 p.2 = false := by
   intro p hp
-  simp only [bucketList, List.mem_cons, List.mem_map] at hp
-  rcases hp with rfl | ⟨r, hr, rfl⟩
+  simp only [permutationParts1,List.mem_cons,List.mem_map] at hp
+  rcases hp with rfl | ⟨r,hr,rfl⟩
   · exact h_1_12_1_0
-  simp only [cuts1, List.mem_cons, List.not_mem_nil, or_false] at hr
-  rcases hr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
-  · exact h_1_12_1_1
-  · exact h_1_12_1_2
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at hr
+  rcases hr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact h_1_12_1_3
   · exact h_1_12_1_4
   · exact h_1_12_1_5
   · exact h_1_12_1_6
-  · exact h_1_12_1_7
   · exact h_1_12_1_8
-  · exact h_1_12_1_9
   · exact h_1_12_1_10
   · exact h_1_12_1_11
   · exact h_1_12_1_12
   · exact h_1_12_1_13
-  · exact h_1_12_1_14
   · exact h_1_12_1_15
-  · exact h_1_12_1_16
-  · exact h_1_12_1_17
-  · exact h_1_12_1_18
-  · exact h_1_12_1_19
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma fast_1_12_2 : chk [] proj1 1 12 2 FF 1 = false := by decide +kernel
@@ -4955,23 +5477,22 @@ lemma fast_1_12_12 : chk [] proj1 1 12 12 FF 1 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma lower1 : Imp [] 1 13 := by
-  apply imp_of (Q := proj1) (Or.inl rfl) (by decide +kernel) (by decide) (fun p hp => beforeSound p (pr_subset hp))
-  right
+  apply imp_rotations (Q:=proj1) (by decide +kernel) (by decide) (fun p hp => beforeSound p (pr_subset hp)) phase1 everyRotation1 everyPair1
   intro t ht
   interval_cases t
-  · exact split_1_12_0
-  · exact split_1_12_1
-  · exact oneBucket fast_1_12_2
-  · exact oneBucket fast_1_12_3
-  · exact oneBucket fast_1_12_4
-  · exact oneBucket fast_1_12_5
-  · exact oneBucket fast_1_12_6
-  · exact oneBucket fast_1_12_7
-  · exact oneBucket fast_1_12_8
-  · exact oneBucket fast_1_12_9
-  · exact oneBucket fast_1_12_10
-  · exact oneBucket fast_1_12_11
-  · exact oneBucket fast_1_12_12
+  · exact Or.inl split_1_12_0
+  · exact Or.inl split_1_12_1
+  · exact Or.inr fast_1_12_2
+  · exact Or.inr fast_1_12_3
+  · exact Or.inr fast_1_12_4
+  · exact Or.inr fast_1_12_5
+  · exact Or.inr fast_1_12_6
+  · exact Or.inr fast_1_12_7
+  · exact Or.inr fast_1_12_8
+  · exact Or.inr fast_1_12_9
+  · exact Or.inr fast_1_12_10
+  · exact Or.inr fast_1_12_11
+  · exact Or.inr fast_1_12_12
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma lower2 : Imp [] 2 12 :=
@@ -5229,113 +5750,6 @@ lemma lower64 : Imp [] 64 12 := by
   · exact oneBucket fast_64_11_9
   · exact oneBucket fast_64_11_10
   · exact oneBucket fast_64_11_11
-
-def routed (ps : List (ℕ × ℕ)) (mask a b : ℕ) : Prop :=
-  b &&& mask = b ∧ ∀ p ∈ ps, a.testBit p.2 = b.testBit p.1
-
-def routeMask (ps : List (ℕ × ℕ)) : ℕ :=
-  ps.foldr (fun p b => (1 <<< p.1) ||| b) 0
-
-lemma routeMask_mem (ps : List (ℕ × ℕ)) (i : ℕ)
-    (hi : (routeMask ps).testBit i = true) : ∃ p ∈ ps, p.1 = i := by
-  induction ps with
-  | nil => simp [routeMask] at hi
-  | cons p ps ih =>
-    change (((1 <<< p.1) ||| routeMask ps : ℕ).testBit i = true) at hi
-    rw [Nat.testBit_or, Bool.or_eq_true] at hi
-    rcases hi with hp | hs
-    · have e : p.1 = i := by simpa [Nat.one_shiftLeft, Nat.testBit_two_pow] using hp
-      exact ⟨p, by simp, e⟩
-    · obtain ⟨q,hq,e⟩ := ih hs
-      exact ⟨q, List.mem_cons_of_mem _ hq,e⟩
-
-lemma routed.unique {ps : List (ℕ × ℕ)} {m a b c : ℕ} (cover : routeMask ps = m)
-    (hb : routed ps m a b) (hc : routed ps m a c) : b = c := by
-  apply Nat.eq_of_testBit_eq
-  intro i
-  cases h : m.testBit i with
-  | true =>
-    obtain ⟨p,hp,e⟩ := routeMask_mem ps i (cover ▸ h)
-    exact e ▸ ((hb.2 p hp).symm.trans (hc.2 p hp))
-  | false =>
-    have f (x : ℕ) (he : x &&& m = x) : x.testBit i = false := by
-      have := congrArg (fun v : ℕ => v.testBit i) he
-      simpa [Nat.testBit_and, h] using this.symm
-    exact (f b hb.1).trans (f c hc.1).symm
-
-lemma Sol.routed {ps : List (ℕ × ℕ)} {m n T V q : ℕ} {S : Set ℕ}
-    (cover : routeMask ps = n) (hm : routed ps n m n) (hV : routed ps n T V)
-    (run : Sol Z0 m T q S) {D : Set ℕ} (hD : ∀ a ∈ S, ∃ b ∈ D, routed ps n a b) :
-    Sol Z0 n V q D := by
-  induction run generalizing D with
-  | done h =>
-    obtain ⟨b,hb,hr⟩ := hD _ h
-    exact .done ((hr.unique cover hV) ▸ hb)
-  | @un q S a ha _ ih =>
-    obtain ⟨b,hb,hr⟩ := hD _ ha
-    apply Sol.un hb
-    apply ih
-    intro x hx
-    rcases hx with rfl | hx
-    · refine ⟨b ^^^ n, Or.inl rfl, ?_, ?_⟩
-      · rw [and_neg (Nat.and_self n), hr.1]
-      · intro p hp
-        rw [Nat.testBit_xor, Nat.testBit_xor, hr.2 p hp, hm.2 p hp]
-    · obtain ⟨y,hy,hr⟩ := hD x hx
-      exact ⟨y,Or.inr hy,hr⟩
-  | @bi q S d a a' ha ha' _ _ ih =>
-    obtain ⟨b,hb,hr⟩ := hD _ ha
-    obtain ⟨b',hb',hr'⟩ := hD _ ha'
-    apply Sol.bi (d := d) hb hb' (al0 _ _ _)
-    apply ih
-    intro x hx
-    rcases hx with rfl | hx
-    · refine ⟨op d b b', Or.inl rfl, ?_, ?_⟩
-      · rw [and_op, hr.1, hr'.1]
-      · intro p hp
-        rw [op_bit, op_bit, hr.2 p hp, hr'.2 p hp]
-    · obtain ⟨y,hy,hr⟩ := hD x hx
-      exact ⟨y,Or.inr hy,hr⟩
-
-def maskRows (ps : List (ℕ × ℕ)) (m n : ℕ) : Bool :=
-  ps.all fun p => m.testBit p.2 && n.testBit p.1
-
-def agreeRows (ps : List (ℕ × ℕ)) (a b : ℕ) : Bool :=
-  ps.all fun p => a.testBit p.2 == b.testBit p.1
-
-lemma agreeRows_ok {ps a b} (h : agreeRows ps a b = true) : ∀ p ∈ ps, a.testBit p.2 = b.testBit p.1 :=
-  fun p hp => beq_iff_eq.mp (List.all_eq_true.mp h p hp)
-
-def inputRows (ps : List (ℕ × ℕ)) : Bool :=
-  rawP.all fun a => rawP.any fun b => agreeRows ps a b
-
-lemma transferBound {z d L : ℕ} (ps : List (ℕ × ℕ))
-    (cover : routeMask ps = mz d) (hm : maskRows ps (mz z) (mz d) = true)
-    (ht : agreeRows ps (tz z) (tz d) = true) (hw : inputRows ps = true)
-    (low : Imp [] d L) : Imp [] z L := by
-  intro q hq run
-  have masks (p : ℕ × ℕ) (hp : p ∈ ps) : (mz z).testBit p.2 = true ∧ (mz d).testBit p.1 = true := by
-    simpa only [Bool.and_eq_true] using (List.all_eq_true.mp hm p hp)
-  have mr : routed ps (mz d) (mz z) (mz d) :=
-    ⟨Nat.and_self _, fun p hp => (masks p hp).1.trans (masks p hp).2.symm⟩
-  have tr : routed ps (mz d) (tz z) (tz d) := ⟨by simp [tz, Nat.and_assoc], agreeRows_ok ht⟩
-  apply low q hq
-  apply run.routed cover mr tr
-  intro a ha
-  rcases ha with ⟨w,hw',rfl⟩ | ha
-  · have hwp : w ∈ rawP := by simpa [rawL] using hw'
-    obtain ⟨v,hv,hagree⟩ := List.any_eq_true.mp (List.all_eq_true.mp hw w hwp)
-    refine ⟨v &&& mz d, Or.inl ⟨v,by simpa [rawL] using hv,rfl⟩, by simp [Nat.and_assoc], ?_⟩
-    intro p hp
-    simp only [Nat.testBit_and, (masks p hp).1, (masks p hp).2, Bool.and_true]
-    exact agreeRows_ok hagree p hp
-  · rcases ha with ha | ha
-    · change a = 0 at ha
-      subst a
-      exact ⟨0, Or.inr (Or.inl rfl), Nat.zero_and _, fun _ _ => by simp⟩
-    · change a = mz z at ha
-      subst a
-      exact ⟨mz d, Or.inr (Or.inr rfl), mr⟩
 def twinRows : List (ℕ × ℕ) := [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10), (11, 11), (12, 12), (13, 13), (14, 14), (15, 15), (16, 16), (17, 17), (18, 18), (19, 19), (66, 20), (67, 21), (68, 22), (69, 23), (70, 24), (71, 25), (72, 26), (73, 27), (74, 28), (75, 29), (76, 30), (77, 31), (78, 32), (79, 33), (80, 34), (81, 35), (82, 36), (83, 37), (84, 38), (85, 39), (86, 40), (87, 41), (88, 42), (89, 43), (90, 44), (91, 45), (92, 46), (93, 47), (94, 48), (95, 49), (96, 50), (97, 51), (98, 52), (99, 53), (100, 54), (101, 55), (102, 56), (103, 57), (104, 58), (105, 59), (106, 60), (107, 61), (108, 62), (109, 63), (110, 64), (111, 65), (174, 689), (175, 689), (176, 689), (177, 689), (178, 689), (179, 689), (180, 689), (181, 689), (183, 689), (185, 690), (186, 690), (187, 690), (188, 690), (189, 690), (190, 690), (191, 690), (192, 690), (194, 690), (196, 514), (198, 570), (199, 570), (201, 571), (202, 571), (204, 539), (206, 691), (207, 691), (208, 691), (209, 691), (210, 691), (211, 691), (212, 691), (213, 691), (215, 691), (217, 692), (218, 692), (219, 692), (220, 692), (221, 692), (222, 692), (223, 692), (224, 692), (226, 692), (228, 515), (230, 693), (231, 693), (232, 693), (233, 693), (234, 693), (235, 693), (236, 693), (237, 693), (239, 693), (241, 526), (243, 532), (245, 543), (247, 603), (249, 604), (251, 605), (252, 605), (254, 694), (255, 694), (256, 694), (257, 694), (258, 694), (259, 694), (260, 694), (261, 694), (263, 694), (265, 636), (266, 636), (268, 695), (269, 695), (270, 695), (271, 695), (272, 695), (273, 695), (274, 695), (275, 695), (277, 695), (279, 527), (281, 638), (282, 638), (284, 546), (286, 696), (287, 696), (288, 696), (289, 696), (290, 696), (291, 696), (292, 696), (293, 696), (295, 696), (297, 640), (299, 579), (301, 664), (303, 665), (304, 665), (306, 666), (308, 667), (309, 667), (390, 697), (391, 697), (392, 697), (393, 697), (394, 697), (395, 697), (396, 697), (398, 697), (399, 697), (401, 698), (402, 698), (403, 698), (404, 698), (405, 698), (406, 698), (407, 698), (409, 698), (410, 698), (412, 517), (414, 699), (415, 699), (416, 699), (417, 699), (418, 699), (419, 699), (420, 699), (422, 699), (423, 699), (425, 528), (427, 534), (429, 551), (431, 700), (432, 700), (433, 700), (434, 700), (435, 700), (436, 700), (437, 700), (439, 700), (440, 700), (442, 584), (444, 701), (446, 702), (448, 703), (450, 704), (451, 704), (453, 705), (454, 705), (455, 705), (456, 705), (457, 705), (458, 705), (459, 705), (461, 705), (462, 705), (464, 647), (466, 706), (467, 706), (483, 689), (484, 690), (485, 691), (486, 692), (487, 693), (488, 694), (489, 695), (490, 696), (496, 697), (497, 698), (498, 699), (499, 700), (500, 705), (503, 689), (504, 691), (505, 694), (507, 697), (509, 690), (510, 692), (512, 698), (514, 514), (515, 515), (516, 636), (518, 517), (520, 693), (521, 695), (523, 699), (525, 570), (526, 526), (527, 527), (529, 528), (531, 571), (532, 532), (533, 638), (535, 534), (537, 689), (538, 690), (539, 539), (540, 691), (541, 692), (542, 693), (543, 543), (544, 694), (545, 695), (546, 546), (547, 696), (554, 697), (555, 698), (556, 699), (557, 551), (558, 700), (559, 705), (562, 689), (563, 690), (564, 696), (566, 700), (568, 689), (569, 690), (570, 570), (571, 571), (572, 691), (573, 692), (574, 693), (575, 605), (576, 694), (577, 695), (578, 696), (579, 579), (586, 697), (587, 698), (588, 699), (589, 700), (590, 584), (591, 705), (594, 691), (595, 692), (596, 693), (598, 689), (599, 690), (600, 691), (601, 692), (602, 693), (603, 603), (604, 604), (605, 605), (606, 694), (607, 695), (608, 696), (609, 667), (616, 697), (617, 698), (618, 699), (619, 700), (620, 704), (621, 705), (624, 694), (625, 695), (626, 696), (628, 705), (630, 689), (631, 690), (632, 691), (633, 692), (634, 693), (635, 694), (636, 636), (637, 695), (638, 638), (639, 696), (640, 640), (641, 665), (648, 697), (649, 698), (650, 699), (651, 700), (652, 705), (653, 647), (656, 689), (657, 690), (658, 691), (659, 692), (660, 693), (661, 694), (662, 695), (663, 696), (664, 664), (665, 665), (666, 666), (667, 667), (674, 697), (675, 698), (676, 699), (677, 700), (678, 705), (679, 706), (715, 697), (716, 698), (717, 699), (718, 700), (719, 705), (722, 689), (723, 690), (724, 691), (725, 692), (726, 693), (727, 694), (728, 695), (729, 696), (735, 697), (736, 698), (737, 699), (738, 700), (739, 701), (740, 702), (741, 703), (742, 704), (743, 705), (744, 706), (922, 1243), (923, 1254), (924, 1301), (925, 1313), (926, 1333), (927, 1363), (928, 1395), (929, 1421), (931, 1454), (933, 1243), (934, 1259), (935, 1301), (936, 1313), (937, 1333), (938, 1363), (939, 1395), (940, 1421), (942, 1454), (944, 1265), (946, 1276), (947, 1333), (949, 1282), (950, 1333), (952, 1301), (954, 1243), (955, 1254), (956, 1301), (957, 1333), (958, 1344), (959, 1363), (960, 1395), (961, 1421), (963, 1454), (965, 1243), (966, 1259), (967, 1301), (968, 1333), (969, 1344), (970, 1363), (971, 1395), (972, 1421), (974, 1454), (976, 1265), (978, 1243), (979, 1270), (980, 1301), (981, 1333), (982, 1344), (983, 1363), (984, 1395), (985, 1421), (987, 1454), (989, 1276), (991, 1282), (993, 1301), (995, 1363), (997, 1363), (999, 1333), (1000, 1363), (1002, 1243), (1003, 1254), (1004, 1301), (1005, 1333), (1006, 1363), (1007, 1375), (1008, 1395), (1009, 1421), (1011, 1454), (1013, 1265), (1014, 1395), (1016, 1243), (1017, 1270), (1018, 1301), (1019, 1333), (1020, 1363), (1021, 1375), (1022, 1395), (1023, 1421), (1025, 1454), (1027, 1276), (1029, 1282), (1030, 1395), (1032, 1301), (1034, 1243), (1035, 1301), (1036, 1313), (1037, 1333), (1038, 1363), (1039, 1375), (1040, 1395), (1041, 1421), (1043, 1454), (1045, 1395), (1047, 1333), (1049, 1421), (1051, 1395), (1052, 1421), (1054, 1421), (1056, 1363), (1057, 1421), (1138, 1243), (1139, 1254), (1140, 1301), (1141, 1333), (1142, 1363), (1143, 1395), (1144, 1421), (1146, 1434), (1147, 1454), (1149, 1243), (1150, 1259), (1151, 1301), (1152, 1333), (1153, 1363), (1154, 1395), (1155, 1421), (1157, 1434), (1158, 1454), (1160, 1265), (1162, 1243), (1163, 1270), (1164, 1301), (1165, 1333), (1166, 1363), (1167, 1395), (1168, 1421), (1170, 1434), (1171, 1454), (1173, 1276), (1175, 1282), (1177, 1301), (1179, 1243), (1180, 1301), (1181, 1313), (1182, 1333), (1183, 1363), (1184, 1395), (1185, 1421), (1187, 1434), (1188, 1454), (1190, 1333), (1192, 1454), (1194, 1454), (1196, 1454), (1198, 1363), (1199, 1454), (1201, 1243), (1202, 1301), (1203, 1333), (1204, 1363), (1205, 1375), (1206, 1395), (1207, 1421), (1209, 1434), (1210, 1454), (1212, 1395), (1214, 1421), (1215, 1454), (1231, 1243), (1232, 1243), (1233, 1243), (1234, 1243), (1235, 1243), (1236, 1243), (1237, 1243), (1238, 1243), (1244, 1243), (1245, 1243), (1246, 1243), (1247, 1243), (1248, 1243), (1251, 1254), (1252, 1254), (1253, 1254), (1255, 1254), (1257, 1259), (1258, 1259), (1260, 1259), (1262, 1265), (1263, 1265), (1264, 1265), (1266, 1265), (1268, 1270), (1269, 1270), (1271, 1270), (1273, 1276), (1274, 1276), (1275, 1276), (1277, 1276), (1279, 1282), (1280, 1282), (1281, 1282), (1283, 1282), (1285, 1301), (1286, 1301), (1287, 1301), (1288, 1301), (1289, 1301), (1290, 1301), (1291, 1301), (1292, 1301), (1293, 1301), (1294, 1301), (1295, 1301), (1302, 1301), (1303, 1301), (1304, 1301), (1305, 1301), (1306, 1301), (1307, 1301), (1310, 1313), (1311, 1313), (1312, 1313), (1314, 1313), (1316, 1333), (1317, 1333), (1318, 1333), (1319, 1333), (1320, 1333), (1321, 1333), (1322, 1333), (1323, 1333), (1324, 1333), (1325, 1333), (1326, 1333), (1327, 1333), (1334, 1333), (1335, 1333), (1336, 1333), (1337, 1333), (1338, 1333), (1339, 1333), (1342, 1344), (1343, 1344), (1344, 1344), (1346, 1363), (1347, 1363), (1348, 1363), (1349, 1363), (1350, 1363), (1351, 1363), (1352, 1363), (1353, 1363), (1354, 1363), (1355, 1363), (1356, 1363), (1357, 1363), (1364, 1363), (1365, 1363), (1366, 1363), (1367, 1363), (1368, 1363), (1369, 1363), (1372, 1375), (1373, 1375), (1374, 1375), (1376, 1375), (1378, 1395), (1379, 1395), (1380, 1395), (1381, 1395), (1382, 1395), (1383, 1395), (1384, 1395), (1385, 1395), (1386, 1395), (1387, 1395), (1388, 1395), (1389, 1395), (1396, 1395), (1397, 1395), (1398, 1395), (1399, 1395), (1400, 1395), (1401, 1395), (1404, 1421), (1405, 1421), (1406, 1421), (1407, 1421), (1408, 1421), (1409, 1421), (1410, 1421), (1411, 1421), (1412, 1421), (1413, 1421), (1414, 1421), (1415, 1421), (1422, 1421), (1423, 1421), (1424, 1421), (1425, 1421), (1426, 1421), (1427, 1421), (1463, 1434), (1464, 1434), (1465, 1434), (1466, 1434), (1467, 1434), (1470, 1454), (1471, 1454), (1472, 1454), (1473, 1454), (1474, 1454), (1475, 1454), (1476, 1454), (1477, 1454), (1483, 1454), (1484, 1454), (1485, 1454), (1486, 1454), (1487, 1454), (1488, 1454), (1489, 1454), (1490, 1454), (1491, 1454), (1492, 1454)]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
@@ -5463,712 +5877,422 @@ lemma useCache_eq (cs : List GateState) (f0 f1 : Checker) (b : Bool)
     exact (ok _ hs).symm
 
 def limbs (ns : List ℕ) : ℕ := ns.foldl (fun x n => (x <<< 64) ||| n) 0
-def w0 : W := mkW (PZ projections) ((rawP.getD 4 0) &&& mz 0)
-def w1 : W := opW false w0 w0
-def w2 : W := mkW (PZ projections) ((rawP.getD 6 0) &&& mz 0)
-def w3 : W := mkW (PZ projections) ((rawP.getD 7 0) &&& mz 0)
-def w4 : W := opW true w2 w3
-def w5 : W := opW true w1 w4
-def w6 : W := mkW (PZ projections) ((rawP.getD 5 0) &&& mz 0)
-def w7 : W := mkW (PZ projections) ((rawP.getD 1 0) &&& mz 0)
-def w8 : W := mkW (PZ projections) ((rawP.getD 3 0) &&& mz 0)
-def w9 : W := mkW (PZ projections) ((rawP.getD 2 0) &&& mz 0)
-def w10 : W := mkW (PZ projections) ((rawP.getD 0 0) &&& mz 0)
-def w11 : W := opW false w6 w2
-def w12 : W := opW false w6 w3
-def w13 : W := opW true w11 w12
-def w14 : W := opW false w3 w3
-def w15 : W := opW true w6 w2
-def w16 : W := opW true w14 w15
-def w17 : W := opW false w7 w7
-def w18 : W := opW true w17 w4
-def w19 : W := opW false w8 w3
-def w20 : W := opW false w2 w8
-def w21 : W := opW true w19 w20
-def w22 : W := opW true w2 w8
-def w23 : W := opW true w14 w22
-def w24 : W := opW true w9 w3
-def w25 : W := opW true w24 w2
-def w26 : W := opW true w9 w0
-def w27 : W := notW (mz 0) w2
-def w28 : W := opW false w26 w27
-def w29 : W := notW (mz 0) w3
-def w30 : W := opW false w1 w29
-def w31 : W := opW false w28 w30
-def w32 : W := opW false w9 w3
-def w33 : W := opW true w32 w27
-def w34 : W := opW false w29 w6
+def w0 : W := mkW (PZ projections) ((rawP.getD 6 0) &&& mz 0)
+def w1 : W := mkW (PZ projections) ((rawP.getD 7 0) &&& mz 0)
+def w2 : W := opW true w0 w1
+def w3 : W := mkW (PZ projections) ((rawP.getD 5 0) &&& mz 0)
+def w4 : W := opW true w3 w1
+def w5 : W := mkW (PZ projections) ((rawP.getD 4 0) &&& mz 0)
+def w6 : W := mkW (PZ projections) ((rawP.getD 1 0) &&& mz 0)
+def w7 : W := mkW (PZ projections) ((rawP.getD 3 0) &&& mz 0)
+def w8 : W := mkW (PZ projections) ((rawP.getD 2 0) &&& mz 0)
+def w9 : W := mkW (PZ projections) ((rawP.getD 0 0) &&& mz 0)
+def w10 : W := opW true w7 w1
+def w11 : W := opW true w8 w1
+def w12 : W := opW true w5 w7
+def w13 : W := opW true w0 w6
+def w14 : W := opW true w0 w7
+def w15 : W := opW true w8 w0
+def w16 : W := opW true w3 w6
+def w17 : W := opW true w8 w3
+def w18 : W := opW false w5 w5
+def w19 : W := opW true w18 w2
+def w20 : W := opW false w3 w0
+def w21 : W := opW false w3 w1
+def w22 : W := opW true w20 w21
+def w23 : W := opW false w1 w1
+def w24 : W := opW true w3 w0
+def w25 : W := opW true w23 w24
+def w26 : W := opW false w6 w6
+def w27 : W := opW true w26 w2
+def w28 : W := opW false w7 w1
+def w29 : W := opW false w0 w7
+def w30 : W := opW true w28 w29
+def w31 : W := opW true w23 w14
+def w32 : W := opW true w11 w0
+def w33 : W := opW true w8 w5
+def w34 : W := notW (mz 0) w0
 def w35 : W := opW false w33 w34
-def w36 : W := opW true w9 w8
-def w37 : W := opW false w36 w29
-def w38 : W := opW false w27 w8
-def w39 : W := opW false w37 w38
-def w40 : W := notW (mz 0) w6
-def w41 : W := opW false w40 w4
-def w42 : W := opW true w40 w4
-def w43 : W := opW true w1 w40
-def w44 : W := opW true w17 w40
-def w45 : W := opW false w40 w8
-def w46 : W := opW true w40 w8
-def w47 : W := opW true w40 w9
-def w48 : W := notW (mz 0) w8
-def w49 : W := opW false w4 w48
-def w50 : W := opW true w4 w48
-def w51 : W := opW true w1 w48
-def w52 : W := opW false w6 w6
-def w53 : W := opW false w52 w48
-def w54 : W := opW true w52 w48
-def w55 : W := opW true w17 w48
-def w56 : W := opW false w9 w8
-def w57 : W := opW true w56 w48
-def w58 : W := opW true w9 w6
-def w59 : W := opW true w7 w3
-def w60 : W := opW true w8 w3
-def w61 : W := opW true w6 w0
-def w62 : W := opW true w6 w7
-def w63 : W := opW false w6 w8
-def w64 : W := opW true w6 w8
-def w65 : W := opW true w9 w2
-def w66 : W := opW true w6 w3
-def w67 : W := opW true w2 w7
-def w68 : W := opW true w0 w8
-def w69 : W := opW true w7 w8
-def w70 : W := opW true w24 w6
-def w71 : W := opW true w65 w6
-def w72 : W := opW true w56 w63
-def w73 : W := opW true w64 w9
-def w74 : W := opW false w6 w10
-def w75 : W := notW (mz 0) w9
-def w76 : W := opW true w74 w75
-def w77 : W := opW false w76 w45
-def w78 : W := opW false w58 w48
-def w79 : W := opW true w0 w3
-def w80 : W := opW true w2 w0
-def w81 : W := opW false w6 w0
-def w82 : W := opW true w81 w12
-def w83 : W := opW true w1 w66
-def w84 : W := opW true w1 w59
-def w85 : W := opW false w0 w8
-def w86 : W := opW true w19 w85
-def w87 : W := opW true w1 w60
-def w88 : W := opW true w1 w24
-def w89 : W := opW false w29 w79
-def w90 : W := notW (mz 0) w89
-def w91 : W := notW (mz 0) w0
-def w92 : W := opW false w61 w91
-def w93 : W := opW false w92 w34
-def w94 : W := opW true w8 w10
-def w95 : W := opW false w94 w91
-def w96 : W := opW false w29 w8
-def w97 : W := opW false w95 w96
-def w98 : W := opW false w40 w79
-def w99 : W := opW true w40 w79
-def w100 : W := opW true w11 w40
-def w101 : W := opW false w48 w79
-def w102 : W := opW true w48 w79
-def w103 : W := opW true w20 w48
-def w104 : W := opW false w59 w6
-def w105 : W := opW true w17 w66
-def w106 : W := opW false w7 w8
-def w107 : W := opW true w19 w106
-def w108 : W := opW true w17 w60
-def w109 : W := notW (mz 0) w7
-def w110 : W := opW true w14 w109
-def w111 : W := opW false w110 w34
-def w112 : W := opW false w109 w8
-def w113 : W := opW false w112 w29
-def w114 : W := opW false w59 w40
-def w115 : W := opW false w59 w48
-def w116 : W := opW true w12 w63
-def w117 : W := opW true w64 w3
-def w118 : W := opW true w24 w8
-def w119 : W := opW true w29 w68
-def w120 : W := opW false w119 w51
-def w121 : W := opW false w29 w48
-def w122 : W := opW false w2 w3
-def w123 : W := opW true w122 w20
-def w124 : W := opW true w123 w121
-def w125 : W := opW false w0 w3
-def w126 : W := opW true w48 w125
-def w127 : W := opW false w126 w34
-def w128 : W := opW true w66 w48
-def w129 : W := opW true w29 w6
-def w130 : W := opW false w128 w129
-def w131 : W := opW true w29 w7
-def w132 : W := opW false w131 w55
-def w133 : W := opW true w121 w8
-def w134 : W := opW true w121 w9
-def w135 : W := opW false w29 w60
-def w136 : W := notW (mz 0) w135
-def w137 : W := opW false w40 w60
-def w138 : W := opW true w40 w60
-def w139 : W := opW false w60 w48
-def w140 : W := opW true w1 w15
-def w141 : W := opW true w17 w15
-def w142 : W := opW false w15 w8
-def w143 : W := opW true w64 w2
-def w144 : W := notW (mz 0) w15
-def w145 : W := opW true w144 w3
-def w146 : W := opW true w144 w0
-def w147 : W := opW true w11 w27
-def w148 : W := opW true w64 w40
-def w149 : W := opW false w147 w148
-def w150 : W := opW false w17 w15
-def w151 : W := opW true w150 w144
-def w152 : W := opW false w9 w6
-def w153 : W := opW true w27 w152
-def w154 : W := opW false w153 w45
-def w155 : W := opW true w20 w27
-def w156 : W := opW true w22 w40
-def w157 : W := opW false w155 w156
-def w158 : W := opW false w9 w2
-def w159 : W := opW true w158 w27
-def w160 : W := opW true w65 w40
-def w161 : W := opW false w159 w160
-def w162 : W := opW true w144 w2
-def w163 : W := opW false w15 w40
-def w164 : W := opW true w14 w48
-def w165 : W := opW false w15 w48
-def w166 : W := opW true w15 w48
-def w167 : W := opW false w61 w8
-def w168 : W := opW true w64 w0
-def w169 : W := opW false w95 w45
-def w170 : W := opW false w61 w48
-def w171 : W := opW false w62 w8
-def w172 : W := opW true w64 w7
-def w173 : W := opW false w112 w40
-def w174 : W := opW false w62 w48
-def w175 : W := opW true w14 w63
-def w176 : W := opW true w1 w63
-def w177 : W := opW false w22 w15
-def w178 : W := opW true w17 w63
-def w179 : W := opW false w36 w58
-def w180 : W := opW true w6 w10
-def w181 : W := opW false w180 w94
-def w182 : W := opW false w12 w48
-def w183 : W := opW false w14 w40
-def w184 : W := opW true w182 w183
-def w185 : W := opW true w40 w48
-def w186 : W := opW false w185 w0
-def w187 : W := opW false w185 w2
-def w188 : W := opW true w109 w63
-def w189 : W := notW (mz 0) w188
-def w190 : W := opW false w48 w9
-def w191 : W := opW false w40 w9
-def w192 : W := opW true w190 w191
-def w193 : W := opW false w138 w164
-def w194 : W := notW (mz 0) w64
-def w195 : W := opW false w51 w43
-def w196 : W := opW false w156 w103
-def w197 : W := opW false w64 w40
-def w198 : W := notW (mz 0) w197
-def w199 : W := opW false w44 w55
-def w200 : W := opW false w64 w48
-def w201 : W := notW (mz 0) w200
-def w202 : W := opW true w58 w48
-def w203 : W := opW false w202 w47
-def w204 : W := opW true w11 w152
-def w205 : W := opW false w65 w8
-def w206 : W := opW true w36 w2
-def w207 : W := notW (mz 0) w65
-def w208 : W := opW false w207 w6
-def w209 : W := opW false w207 w8
-def w210 : W := opW false w65 w40
-def w211 : W := opW false w65 w48
-def w212 : W := opW false w36 w6
-def w213 : W := opW false w36 w40
-def w214 : W := notW (mz 0) w36
-def w215 : W := opW false w214 w6
-def w216 : W := opW true w81 w11
-def w217 : W := opW true w1 w67
-def w218 : W := opW true w20 w85
-def w219 : W := opW true w1 w22
-def w220 : W := opW true w1 w65
-def w221 : W := opW false w27 w91
-def w222 : W := opW true w221 w2
-def w223 : W := opW true w20 w91
-def w224 : W := opW false w27 w6
-def w225 : W := opW false w223 w224
-def w226 : W := opW false w223 w38
-def w227 : W := opW true w14 w40
-def w228 : W := opW false w40 w80
-def w229 : W := opW true w40 w80
-def w230 : W := opW false w48 w80
-def w231 : W := opW true w48 w80
-def w232 : W := opW true w19 w63
-def w233 : W := opW true w29 w61
-def w234 : W := opW false w233 w43
-def w235 : W := opW false w29 w40
-def w236 : W := opW true w29 w15
-def w237 : W := opW false w236 w100
-def w238 : W := opW false w66 w40
-def w239 : W := notW (mz 0) w238
-def w240 : W := opW false w44 w131
-def w241 : W := opW false w37 w45
-def w242 : W := opW true w29 w8
-def w243 : W := opW false w138 w242
-def w244 : W := opW true w32 w152
-def w245 : W := opW true w244 w235
-def w246 : W := opW false w29 w66
-def w247 : W := notW (mz 0) w246
-def w248 : W := opW false w66 w48
-def w249 : W := opW false w6 w7
-def w250 : W := opW true w11 w249
-def w251 : W := opW true w20 w106
-def w252 : W := opW true w17 w22
-def w253 : W := opW false w7 w10
-def w254 : W := opW true w27 w253
-def w255 : W := opW false w109 w6
-def w256 : W := opW false w254 w255
-def w257 : W := opW false w112 w27
-def w258 : W := opW false w40 w67
-def w259 : W := opW false w67 w48
-def w260 : W := opW true w11 w63
-def w261 : W := opW true w14 w27
-def w262 : W := opW false w50 w261
-def w263 : W := notW (mz 0) w22
-def w264 : W := opW false w1 w22
-def w265 : W := opW true w264 w263
-def w266 : W := opW false w155 w53
-def w267 : W := opW false w147 w166
-def w268 : W := opW false w17 w22
-def w269 : W := opW true w268 w263
-def w270 : W := opW true w64 w48
-def w271 : W := opW false w155 w270
-def w272 : W := opW true w65 w48
-def w273 : W := opW false w159 w272
-def w274 : W := opW true w65 w27
-def w275 : W := opW false w103 w274
-def w276 : W := opW false w22 w40
-def w277 : W := opW false w22 w48
-def w278 : W := opW true w81 w63
-def w279 : W := opW false w223 w53
-def w280 : W := opW false w40 w68
-def w281 : W := opW false w24 w6
-def w282 : W := opW false w24 w8
-def w283 : W := opW false w75 w62
-def w284 : W := opW false w283 w34
-def w285 : W := opW false w75 w8
-def w286 : W := opW false w37 w285
-def w287 : W := opW false w24 w40
-def w288 : W := opW false w24 w48
-def w289 : W := opW false w69 w6
-def w290 : W := opW false w69 w40
-def w291 : W := opW false w8 w10
-def w292 : W := opW true w109 w291
-def w293 : W := opW false w292 w53
-def z0 : ℕ := limbs [0x9ca, 0x7294696a529494a7, 0x4a52539d2d4a5292, 0x94e94a4a73ace73a, 0xd6b39d2739c6739d, 0x2748525494a34952, 0x528ceb39ce718ca7, 0x39c652842719c630]
-def z1 : ℕ := limbs [0x9c6, 0x7294676a52938c65, 0x4a52539ced4a5271, 0x8ca94a4a73a4a52a, 0xd6b39d252942529d, 0x2748523494a348d2, 0x528cab39ce508467, 0x39c652842709c630]
-def z2 : ℕ := limbs [0x9ca, 0x729465494a5494a7, 0x4a52539ca9294a92, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x27484a5494a32952, 0x528c6718c6718ca7, 0x39c652842319c630]
-def z3 : ℕ := limbs [0x94a, 0x72946759ce7494a7, 0x4a52539ceb39ce92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x27484e5494a33952, 0x528ca9294a718ca7, 0x39c652842519c630]
-def z4 : ℕ := limbs [0x9ca, 0x728c696a4e949467, 0x49d233952d49d292, 0x8ce93a4672ace53a, 0xd2b29ce729c27295, 0x2538525494634952, 0x518ceb394e7184a7, 0x29c251842719c610]
-def z5 : ℕ := limbs [0x9ca, 0x7294694a529294a7, 0x294a539d294a5252, 0x94e5294a739ce739, 0xce739d2318c6738c, 0xa348525294a3494a, 0x528ce739ce318ca3, 0x18c652842718c630]
-def z6 : ℕ := limbs [0x9ca, 0x5294695a529394a7, 0x39ce539d2b4a5272, 0x94e739ca73a4e73a, 0x52939d2529467394, 0xe548525394a3494e, 0x528ce939ce518ca5, 0x2946528427194630]
-def z7 : ℕ := limbs [0x9ca, 0x71946969d2948ca7, 0x3a52329d2d3a5291, 0x94e74a4653aca73a, 0x56b2952539c25394, 0xe73852548ca34952, 0x328ceb29ce708ca5, 0x39c232842719c230]
-def z8 : ℕ := limbs [0x9ca, 0x7294676a52938c65, 0x4a52539ced4a5271, 0x8ca94a4a73a4a52a, 0xd6b39d252942529d, 0x2748523494a348d2, 0x528cab39ce508467, 0x39c652842709c630]
-def z9 : ℕ := limbs [0x94a, 0x729465494a5494a7, 0x4a52539ca9294a92, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x27484a5494a32952, 0x528c6718c6718ca7, 0x39c652842319c630]
-def z10 : ℕ := limbs [0x9ca, 0x5294694a529294a7, 0x294a539d294a5252, 0x94e5294a739ce739, 0xce739d2318c6738c, 0xa348525294a3494a, 0x528ce739ce318ca3, 0x18c652842718c630]
-def z11 : ℕ := limbs [0x8ca, 0x72946338c63494a7, 0x4a52539c6718c692, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x2748465494a31952, 0x528c250842718ca7, 0x39c652842119c630]
-def z12 : ℕ := limbs [0x94e, 0x939ca338c63494a7, 0x4a52539c6718c692, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x2748c65494a31952, 0x528c250842718ca7, 0x39c652842119c630]
-def z13 : ℕ := limbs [0x8ca, 0x939ca338c6338c65, 0x4a52539c6718c671, 0x8ca94a4a73942109, 0x4a5084652942529d, 0x2748c63494a318d2, 0x528c250842508467, 0x39c652842109c630]
-def z14 : ℕ := limbs [0x8ce, 0x9394a338c6349467, 0x49d233946718c692, 0x8ce93a4672942109, 0x4a50846729c27295, 0x2538c65494631952, 0x518c2508427184a7, 0x29c251842119c610]
-def z15 : ℕ := limbs [0x94e, 0x539ca5394a5294a7, 0x294a539ca7294a52, 0x94e5294a73946319, 0x4a518ca318c6738c, 0xa348ca5294a3294a, 0x528c6518c6318ca3, 0x18c652842318c630]
-def z16 : ℕ := limbs [0x8ce, 0x539ca328c63294a7, 0x294a539c6518c652, 0x94e5294a738c2108, 0xc630846318c6738c, 0xa348c65294a3194a, 0x528c230842318ca3, 0x18c652842118c630]
-def z17 : ℕ := limbs [0x8ce, 0x739ca338c63394a7, 0x39ce539c6718c672, 0x94e739ca73942109, 0x4a50846529467394, 0xe548c65394a3194e, 0x528c250842518ca5, 0x2946528421194630]
-def z18 : ℕ := limbs [0x8ce, 0x929ca338c6348ca7, 0x3a52329c6718c691, 0x94e74a4653942109, 0x4a50846539c25394, 0xe738c6548ca31952, 0x328c250842708ca5, 0x39c232842119c230]
-def z19 : ℕ := limbs [0x9ca, 0x3294693a529194a7, 0x18c6539d274a5232, 0x94e318ca7394e739, 0x4a539d2108467384, 0x6148525194a34946, 0x528ce539ce118ca1, 0x846528427184630]
-def z20 : ℕ := limbs [0xa4e, 0x539ca93a529194a7, 0x18c6539d274a5232, 0x94e318ca7394e739, 0x4a539d2108467384, 0x6148d25194a34946, 0x528ce539ce118ca1, 0x846528427184630]
-def z21 : ℕ := limbs [0xa4a, 0x339ca73a52918c65, 0x18c6539ce74a5231, 0x8ca318ca7394a529, 0x4a539d2108425284, 0x6148d23194a348c6, 0x528ca539ce108461, 0x846528427084630]
-def z22 : ℕ := limbs [0x94e, 0x339ca5294a5194a7, 0x18c6539ca5294a32, 0x94e318ca738c6318, 0xc6318ca108467384, 0x6148ca5194a32946, 0x528c6318c6118ca1, 0x846528423184630]
-def z23 : ℕ := limbs [0x9ce, 0x339ca739ce7194a7, 0x18c6539ce739ce32, 0x94e318ca7394a529, 0x4a5294e108467384, 0x6148ce5194a33946, 0x528ca5294a118ca1, 0x846528425184630]
-def z24 : ℕ := limbs [0xa4e, 0x3394a93a4e919467, 0x18c633952749d232, 0x8ce318c67294e539, 0x4a529ce108427284, 0x6138d25194634946, 0x518ce5394e1184a1, 0x842518427184610]
-def z25 : ℕ := limbs [0xa4e, 0x329ca939d2918ca7, 0x18c6329d273a5231, 0x94e318c65394a739, 0x4a52952108425384, 0x6138d2518ca34946, 0x328ce529ce108ca1, 0x842328427184230]
-def z26 : ℕ := limbs [0x9ce, 0x929ca7594e748ca7, 0x3a52329ceb29ce91, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe738ce548ca33952, 0x328ca9194a708ca5, 0x39c232842519c230]
-def z27 : ℕ := limbs [0xa4e, 0x939ca96a529494a7, 0x4a52539d2d4a5292, 0x94e94a4a73ace73a, 0xd6b39d2739c6739d, 0x2748d25494a34952, 0x528ceb39ce718ca7, 0x39c652842719c630]
-def z28 : ℕ := limbs [0xa4a, 0x939ca76a52938c65, 0x4a52539ced4a5271, 0x8ca94a4a73a4a52a, 0xd6b39d252942529d, 0x2748d23494a348d2, 0x528cab39ce508467, 0x39c652842709c630]
-def z29 : ℕ := limbs [0xa4e, 0x9394a96a4e949467, 0x49d233952d49d292, 0x8ce93a4672ace53a, 0xd2b29ce729c27295, 0x2538d25494634952, 0x518ceb394e7184a7, 0x29c251842719c610]
-def z30 : ℕ := limbs [0xa4e, 0x739ca95a529394a7, 0x39ce539d2b4a5272, 0x94e739ca73a4e73a, 0x52939d2529467394, 0xe548d25394a3494e, 0x528ce939ce518ca5, 0x2946528427194630]
-def z31 : ℕ := limbs [0x9ce, 0x939ca759ce7494a7, 0x4a52539ceb39ce92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ce5494a33952, 0x528ca9294a718ca7, 0x39c652842519c630]
-def z32 : ℕ := limbs [0x9ca, 0x939ca559ce738c65, 0x4a52539cab39ce71, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x2748ce3494a338d2, 0x528c69294a508467, 0x39c652842509c630]
-def z33 : ℕ := limbs [0x9ce, 0x9394a759ca749467, 0x49d23394eb394e92, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x2538ce5494633952, 0x518ca928ca7184a7, 0x29c251842519c610]
-def z34 : ℕ := limbs [0x94e, 0x539ca5494a5294a7, 0x294a539ca9294a52, 0x94e5294a739c6319, 0xce718ca318c6738c, 0xa348ca5294a3294a, 0x528c6718c6318ca3, 0x18c652842318c630]
-def z35 : ℕ := limbs [0x9ce, 0x739ca749ce7394a7, 0x39ce539ce939ce72, 0x94e739ca739ca529, 0xce7294e529467394, 0xe548ce5394a3394e, 0x528ca7294a518ca5, 0x2946528425194630]
-def z36 : ℕ := limbs [0xa4e, 0x929ca969d2948ca7, 0x3a52329d2d3a5291, 0x94e74a4653aca73a, 0x56b2952539c25394, 0xe738d2548ca34952, 0x328ceb29ce708ca5, 0x39c232842719c230]
-def z37 : ℕ := limbs [0xa4e, 0x729ca959d2938ca7, 0x29ce329d2b3a5271, 0x94e539c653a4a739, 0xd29295232942538c, 0xa538d2538ca3494e, 0x328ce929ce508ca3, 0x2942328427194230]
-def z38 : ℕ := limbs [0xa4a, 0x739ca75a52928c65, 0x39ce539ceb4a5251, 0x8ca739ca739ca52a, 0x52939d2318c25294, 0xe548d23394a348ce, 0x528ca939ce308465, 0x2946528427094630]
+def w36 : W := notW (mz 0) w1
+def w37 : W := opW false w18 w36
+def w38 : W := opW false w35 w37
+def w39 : W := opW false w8 w1
+def w40 : W := opW true w39 w34
+def w41 : W := opW false w36 w3
+def w42 : W := opW false w40 w41
+def w43 : W := opW true w8 w7
+def w44 : W := opW false w43 w36
+def w45 : W := opW false w34 w7
+def w46 : W := opW false w44 w45
+def w47 : W := notW (mz 0) w3
+def w48 : W := opW false w47 w2
+def w49 : W := opW true w47 w2
+def w50 : W := opW true w18 w47
+def w51 : W := opW true w26 w47
+def w52 : W := opW false w47 w7
+def w53 : W := opW true w47 w7
+def w54 : W := opW true w47 w8
+def w55 : W := notW (mz 0) w7
+def w56 : W := opW false w2 w55
+def w57 : W := opW true w2 w55
+def w58 : W := opW true w18 w55
+def w59 : W := opW false w3 w3
+def w60 : W := opW false w59 w55
+def w61 : W := opW true w59 w55
+def w62 : W := opW true w26 w55
+def w63 : W := opW false w8 w7
+def w64 : W := opW true w63 w55
+def w65 : W := opW true w6 w1
+def w66 : W := opW true w3 w5
+def w67 : W := opW false w3 w7
+def w68 : W := opW true w3 w7
+def w69 : W := opW true w6 w7
+def w70 : W := opW true w5 w1
+def w71 : W := opW false w3 w5
+def w72 : W := opW true w71 w21
+def w73 : W := opW true w18 w4
+def w74 : W := opW true w18 w65
+def w75 : W := opW false w5 w7
+def w76 : W := opW true w28 w75
+def w77 : W := opW true w18 w10
+def w78 : W := opW true w18 w11
+def w79 : W := opW false w36 w70
+def w80 : W := notW (mz 0) w79
+def w81 : W := notW (mz 0) w5
+def w82 : W := opW false w66 w81
+def w83 : W := opW false w82 w41
+def w84 : W := opW true w7 w9
+def w85 : W := opW false w84 w81
+def w86 : W := opW false w36 w7
+def w87 : W := opW false w85 w86
+def w88 : W := opW false w47 w70
+def w89 : W := opW true w47 w70
+def w90 : W := opW true w20 w47
+def w91 : W := opW false w55 w70
+def w92 : W := opW true w55 w70
+def w93 : W := opW true w29 w55
+def w94 : W := opW true w0 w5
+def w95 : W := opW false w65 w3
+def w96 : W := opW true w26 w4
+def w97 : W := opW false w6 w7
+def w98 : W := opW true w28 w97
+def w99 : W := opW true w26 w10
+def w100 : W := notW (mz 0) w6
+def w101 : W := opW true w23 w100
+def w102 : W := opW false w101 w41
+def w103 : W := opW false w100 w7
+def w104 : W := opW false w103 w36
+def w105 : W := opW false w65 w47
+def w106 : W := opW false w65 w55
+def w107 : W := opW true w18 w24
+def w108 : W := opW true w26 w24
+def w109 : W := opW false w24 w7
+def w110 : W := opW true w68 w0
+def w111 : W := opW true w15 w3
+def w112 : W := notW (mz 0) w24
+def w113 : W := opW true w112 w1
+def w114 : W := opW true w112 w5
+def w115 : W := opW true w20 w34
+def w116 : W := opW true w68 w47
+def w117 : W := opW false w115 w116
+def w118 : W := opW false w26 w24
+def w119 : W := opW true w118 w112
+def w120 : W := opW false w8 w3
+def w121 : W := opW true w34 w120
+def w122 : W := opW false w121 w52
+def w123 : W := opW true w29 w34
+def w124 : W := opW true w14 w47
+def w125 : W := opW false w123 w124
+def w126 : W := opW false w8 w0
+def w127 : W := opW true w126 w34
+def w128 : W := opW true w15 w47
+def w129 : W := opW false w127 w128
+def w130 : W := opW true w112 w0
+def w131 : W := opW false w24 w47
+def w132 : W := opW true w23 w55
+def w133 : W := opW false w24 w55
+def w134 : W := opW true w24 w55
+def w135 : W := opW false w66 w7
+def w136 : W := opW true w68 w5
+def w137 : W := opW false w85 w52
+def w138 : W := opW false w66 w55
+def w139 : W := opW true w23 w67
+def w140 : W := opW true w18 w67
+def w141 : W := opW false w14 w24
+def w142 : W := opW true w26 w67
+def w143 : W := opW false w43 w17
+def w144 : W := opW true w3 w9
+def w145 : W := opW false w144 w84
+def w146 : W := opW false w21 w55
+def w147 : W := opW false w23 w47
+def w148 : W := opW true w146 w147
+def w149 : W := opW true w47 w55
+def w150 : W := opW false w149 w5
+def w151 : W := opW false w149 w0
+def w152 : W := opW true w100 w67
+def w153 : W := notW (mz 0) w152
+def w154 : W := opW false w55 w8
+def w155 : W := opW false w47 w8
+def w156 : W := opW true w154 w155
+def w157 : W := opW true w68 w1
+def w158 : W := opW true w68 w6
+def w159 : W := opW true w68 w8
+def w160 : W := opW true w47 w10
+def w161 : W := opW false w160 w132
+def w162 : W := notW (mz 0) w68
+def w163 : W := opW false w58 w50
+def w164 : W := opW false w124 w93
+def w165 : W := opW false w68 w47
+def w166 : W := notW (mz 0) w165
+def w167 : W := opW false w51 w62
+def w168 : W := opW false w68 w55
+def w169 : W := notW (mz 0) w168
+def w170 : W := opW true w17 w55
+def w171 : W := opW false w170 w54
+def w172 : W := opW true w11 w7
+def w173 : W := opW true w43 w0
+def w174 : W := opW false w43 w3
+def w175 : W := opW false w43 w47
+def w176 : W := notW (mz 0) w43
+def w177 : W := opW false w176 w3
+def w178 : W := opW true w26 w14
+def w179 : W := opW false w69 w3
+def w180 : W := opW false w69 w47
+def w181 : W := opW false w7 w9
+def w182 : W := opW true w100 w181
+def w183 : W := opW false w182 w60
+def z0 : ℕ := limbs [0x9ce, 0x939ca759ce7494a7, 0x4a52539ceb39ce92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ce5494a33952, 0x528ca9294a718ca7, 0x39c652842519c630]
+def z1 : ℕ := limbs [0xa4e, 0x739ca95a529394a7, 0x39ce539d2b4a5272, 0x94e739ca73a4e73a, 0x52939d2529467394, 0xe548d25394a3494e, 0x528ce939ce518ca5, 0x2946528427194630]
+def z2 : ℕ := limbs [0xa4e, 0x929ca969d2948ca7, 0x3a52329d2d3a5291, 0x94e74a4653aca73a, 0x56b2952539c25394, 0xe738d2548ca34952, 0x328ceb29ce708ca5, 0x39c232842719c230]
+def z3 : ℕ := limbs [0xa4a, 0x739ca75a52928c65, 0x39ce539ceb4a5251, 0x8ca739ca739ca52a, 0x52939d2318c25294, 0xe548d23394a348ce, 0x528ca939ce308465, 0x2946528427094630]
+def z4 : ℕ := limbs [0xa4e, 0x9394a96a4e949467, 0x49d233952d49d292, 0x8ce93a4672ace53a, 0xd2b29ce729c27295, 0x2538d25494634952, 0x518ceb394e7184a7, 0x29c251842719c610]
+def z5 : ℕ := limbs [0x9ce, 0x9394a759ca749467, 0x49d23394eb394e92, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x2538ce5494633952, 0x518ca928ca7184a7, 0x29c251842519c610]
+def z6 : ℕ := limbs [0x9ce, 0x929ca7594e748ca7, 0x3a52329ceb29ce91, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe738ce548ca33952, 0x328ca9194a708ca5, 0x39c232842519c230]
+def z7 : ℕ := limbs [0x9ca, 0x7294696a529494a7, 0x4a52539d2d4a5292, 0x94e94a4a73ace73a, 0xd6b39d2739c6739d, 0x2748525494a34952, 0x528ceb39ce718ca7, 0x39c652842719c630]
+def z8 : ℕ := limbs [0x9c6, 0x7294676a52938c65, 0x4a52539ced4a5271, 0x8ca94a4a73a4a52a, 0xd6b39d252942529d, 0x2748523494a348d2, 0x528cab39ce508467, 0x39c652842709c630]
+def z9 : ℕ := limbs [0x9ca, 0x729465494a5494a7, 0x4a52539ca9294a92, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x27484a5494a32952, 0x528c6718c6718ca7, 0x39c652842319c630]
+def z10 : ℕ := limbs [0x94a, 0x72946759ce7494a7, 0x4a52539ceb39ce92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x27484e5494a33952, 0x528ca9294a718ca7, 0x39c652842519c630]
+def z11 : ℕ := limbs [0x9ca, 0x728c696a4e949467, 0x49d233952d49d292, 0x8ce93a4672ace53a, 0xd2b29ce729c27295, 0x2538525494634952, 0x518ceb394e7184a7, 0x29c251842719c610]
+def z12 : ℕ := limbs [0x9ca, 0x7294694a529294a7, 0x294a539d294a5252, 0x94e5294a739ce739, 0xce739d2318c6738c, 0xa348525294a3494a, 0x528ce739ce318ca3, 0x18c652842718c630]
+def z13 : ℕ := limbs [0x9ca, 0x5294695a529394a7, 0x39ce539d2b4a5272, 0x94e739ca73a4e73a, 0x52939d2529467394, 0xe548525394a3494e, 0x528ce939ce518ca5, 0x2946528427194630]
+def z14 : ℕ := limbs [0x9ca, 0x71946969d2948ca7, 0x3a52329d2d3a5291, 0x94e74a4653aca73a, 0x56b2952539c25394, 0xe73852548ca34952, 0x328ceb29ce708ca5, 0x39c232842719c230]
+def z15 : ℕ := limbs [0x9ca, 0x7294676a52938c65, 0x4a52539ced4a5271, 0x8ca94a4a73a4a52a, 0xd6b39d252942529d, 0x2748523494a348d2, 0x528cab39ce508467, 0x39c652842709c630]
+def z16 : ℕ := limbs [0x94a, 0x729465494a5494a7, 0x4a52539ca9294a92, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x27484a5494a32952, 0x528c6718c6718ca7, 0x39c652842319c630]
+def z17 : ℕ := limbs [0x9ca, 0x5294694a529294a7, 0x294a539d294a5252, 0x94e5294a739ce739, 0xce739d2318c6738c, 0xa348525294a3494a, 0x528ce739ce318ca3, 0x18c652842718c630]
+def z18 : ℕ := limbs [0x8ca, 0x72946338c63494a7, 0x4a52539c6718c692, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x2748465494a31952, 0x528c250842718ca7, 0x39c652842119c630]
+def z19 : ℕ := limbs [0x94e, 0x939ca338c63494a7, 0x4a52539c6718c692, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x2748c65494a31952, 0x528c250842718ca7, 0x39c652842119c630]
+def z20 : ℕ := limbs [0x8ca, 0x939ca338c6338c65, 0x4a52539c6718c671, 0x8ca94a4a73942109, 0x4a5084652942529d, 0x2748c63494a318d2, 0x528c250842508467, 0x39c652842109c630]
+def z21 : ℕ := limbs [0x8ce, 0x9394a338c6349467, 0x49d233946718c692, 0x8ce93a4672942109, 0x4a50846729c27295, 0x2538c65494631952, 0x518c2508427184a7, 0x29c251842119c610]
+def z22 : ℕ := limbs [0x94e, 0x539ca5394a5294a7, 0x294a539ca7294a52, 0x94e5294a73946319, 0x4a518ca318c6738c, 0xa348ca5294a3294a, 0x528c6518c6318ca3, 0x18c652842318c630]
+def z23 : ℕ := limbs [0x8ce, 0x539ca328c63294a7, 0x294a539c6518c652, 0x94e5294a738c2108, 0xc630846318c6738c, 0xa348c65294a3194a, 0x528c230842318ca3, 0x18c652842118c630]
+def z24 : ℕ := limbs [0x8ce, 0x739ca338c63394a7, 0x39ce539c6718c672, 0x94e739ca73942109, 0x4a50846529467394, 0xe548c65394a3194e, 0x528c250842518ca5, 0x2946528421194630]
+def z25 : ℕ := limbs [0x8ce, 0x929ca338c6348ca7, 0x3a52329c6718c691, 0x94e74a4653942109, 0x4a50846539c25394, 0xe738c6548ca31952, 0x328c250842708ca5, 0x39c232842119c230]
+def z26 : ℕ := limbs [0x9ca, 0x3294693a529194a7, 0x18c6539d274a5232, 0x94e318ca7394e739, 0x4a539d2108467384, 0x6148525194a34946, 0x528ce539ce118ca1, 0x846528427184630]
+def z27 : ℕ := limbs [0xa4e, 0x539ca93a529194a7, 0x18c6539d274a5232, 0x94e318ca7394e739, 0x4a539d2108467384, 0x6148d25194a34946, 0x528ce539ce118ca1, 0x846528427184630]
+def z28 : ℕ := limbs [0xa4a, 0x339ca73a52918c65, 0x18c6539ce74a5231, 0x8ca318ca7394a529, 0x4a539d2108425284, 0x6148d23194a348c6, 0x528ca539ce108461, 0x846528427084630]
+def z29 : ℕ := limbs [0x94e, 0x339ca5294a5194a7, 0x18c6539ca5294a32, 0x94e318ca738c6318, 0xc6318ca108467384, 0x6148ca5194a32946, 0x528c6318c6118ca1, 0x846528423184630]
+def z30 : ℕ := limbs [0x9ce, 0x339ca739ce7194a7, 0x18c6539ce739ce32, 0x94e318ca7394a529, 0x4a5294e108467384, 0x6148ce5194a33946, 0x528ca5294a118ca1, 0x846528425184630]
+def z31 : ℕ := limbs [0xa4e, 0x3394a93a4e919467, 0x18c633952749d232, 0x8ce318c67294e539, 0x4a529ce108427284, 0x6138d25194634946, 0x518ce5394e1184a1, 0x842518427184610]
+def z32 : ℕ := limbs [0xa4e, 0x329ca939d2918ca7, 0x18c6329d273a5231, 0x94e318c65394a739, 0x4a52952108425384, 0x6138d2518ca34946, 0x328ce529ce108ca1, 0x842328427184230]
+def z33 : ℕ := limbs [0xa4e, 0x939ca96a529494a7, 0x4a52539d2d4a5292, 0x94e94a4a73ace73a, 0xd6b39d2739c6739d, 0x2748d25494a34952, 0x528ceb39ce718ca7, 0x39c652842719c630]
+def z34 : ℕ := limbs [0xa4a, 0x939ca76a52938c65, 0x4a52539ced4a5271, 0x8ca94a4a73a4a52a, 0xd6b39d252942529d, 0x2748d23494a348d2, 0x528cab39ce508467, 0x39c652842709c630]
+def z35 : ℕ := limbs [0x9ca, 0x939ca559ce738c65, 0x4a52539cab39ce71, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x2748ce3494a338d2, 0x528c69294a508467, 0x39c652842509c630]
+def z36 : ℕ := limbs [0x94e, 0x539ca5494a5294a7, 0x294a539ca9294a52, 0x94e5294a739c6319, 0xce718ca318c6738c, 0xa348ca5294a3294a, 0x528c6718c6318ca3, 0x18c652842318c630]
+def z37 : ℕ := limbs [0x9ce, 0x739ca749ce7394a7, 0x39ce539ce939ce72, 0x94e739ca739ca529, 0xce7294e529467394, 0xe548ce5394a3394e, 0x528ca7294a518ca5, 0x2946528425194630]
+def z38 : ℕ := limbs [0xa4e, 0x729ca959d2938ca7, 0x29ce329d2b3a5271, 0x94e539c653a4a739, 0xd29295232942538c, 0xa538d2538ca3494e, 0x328ce929ce508ca3, 0x2942328427194230]
 def z39 : ℕ := limbs [0xa4e, 0x7394a95a4e939467, 0x394e33952b49d272, 0x8ce729c672a4e53a, 0x4e929ce51942728c, 0xe338d2539463494e, 0x518ce9394e5184a5, 0x1942518427194610]
-def z40 : ℕ := limbs [0xa52, 0xb3a4e758ce748ca7, 0x3a52329d2d2a52b2, 0x9d295aca74a42529, 0x529084e539c25394, 0xe7394e548ca349d6, 0x5394a9094a708ca5, 0x39c232846519c230]
-def z41 : ℕ := limbs [0xa52, 0xb3a4e969529594e9, 0x4ad653a4eb19ce91, 0x94e74a4653a42529, 0x529084e539c25394, 0xe739527594e53952, 0x328ca9094a708ca5, 0x39c2328c2519c230]
-def z42 : ℕ := limbs [0xad6, 0x94ad2949529394e9, 0x29ce53a5292a5272, 0x9d2539ca74942529, 0x4a5084e118c25384, 0x6339d27394e549ce, 0x5394a5094a308ca1, 0x18c2328c6518c230]
-def z43 : ℕ := limbs [0xad6, 0xb4ad2959529494e9, 0x3a5253a52b2a5292, 0x9d274a4a749c2528, 0xce7084e32942538c, 0xa539d27494e549d2, 0x5394a7094a508ca3, 0x2942328c65194230]
-def z44 : ℕ := limbs [0xad6, 0x94ad2949529394e9, 0x29ce53a5292a5272, 0x9d2539ca74942528, 0xca5084e118c25384, 0x6339d27394e549ce, 0x5394a5094a308ca1, 0x18c2328c6518c230]
-def z45 : ℕ := limbs [0xa52, 0xb3a4e7594e748ca7, 0x3a52329d2d3a52b2, 0x9d295aca74a46529, 0xd2918ce539c25394, 0xe7394e548ca349d6, 0x5394a9194a708ca5, 0x39c232846519c230]
-def z46 : ℕ := limbs [0xa52, 0x93a4e7494e738ca7, 0x29ce329d2b3a5292, 0x9d274a4a749c6529, 0x4e718ce32942538c, 0xa5394e538ca349d2, 0x5394a7194a508ca3, 0x2942328465194230]
-def z47 : ℕ := limbs [0xa52, 0xb3a4e969d29594e9, 0x4ad653a4eb29ce91, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe739527594e53952, 0x328ca9194a708ca5, 0x39c2328c2519c230]
-def z48 : ℕ := limbs [0x9d2, 0xb3a4e7594e7594e9, 0x4ad653a4a9194a91, 0x94e74a46539c2319, 0x4e7084a539c25394, 0xe7394e7594e52952, 0x328c6708c6708ca5, 0x39c2328c2319c230]
-def z49 : ℕ := limbs [0xa56, 0xb4ad27494e7494e9, 0x3a5253a4e929ce92, 0x9d274a4a74942318, 0xca5084a32942538c, 0xa539ce7494e539d2, 0x53946508c6508ca3, 0x2942328c63194230]
-def z50 : ℕ := limbs [0xad6, 0xb4ad2959d29494e9, 0x3a5253a52b3a5292, 0x9d274a4a749c6529, 0x4e718ce32942538c, 0xa539d27494e549d2, 0x5394a7194a508ca3, 0x2942328c65194230]
-def z51 : ℕ := limbs [0x9d2, 0xb3a4e548ca548ca7, 0x3a52329ceb29ceb2, 0x9d295aca749c2319, 0x4e7084a539c25394, 0xe7394a548ca339d6, 0x53946708c6708ca5, 0x39c232846319c230]
-def z52 : ℕ := limbs [0xa52, 0x93a4e959d29494e9, 0x3a5253a4e929ce71, 0x94e539c6539c6529, 0x4e718ce32942538c, 0xa539527494e5394e, 0x328ca7194a508ca3, 0x2942328c25194230]
-def z53 : ℕ := limbs [0xa4a, 0x939ca76a52938c65, 0x4a52539d2d4a5292, 0x94e94a4a73ace73a, 0xd6b39d2739c6739d, 0x2748d23494a34952, 0x528ceb39ce718ca7, 0x39c652842719c630]
-def z54 : ℕ := limbs [0x9ca, 0xb4a4e5494a528423, 0x4a52539ceb39ceb3, 0x9d2b5ace949c6319, 0xce718ca739c6739d, 0x27494a1494a339d6, 0x73946718c6718ca7, 0x39c652846319c630]
-def z55 : ℕ := limbs [0xa4e, 0xb4a4e559ce738c65, 0x4a52539d2d4a52b3, 0x9d2b5ace94a4a52a, 0x529294e739c6739d, 0x27494e3494a349d6, 0x7394a9294a718ca7, 0x39c652846519c630]
-def z56 : ℕ := limbs [0xace, 0xb49ce76a4e938c25, 0x49d233956f5a56b3, 0x952b4aca93ace53a, 0xd2b29ce729c27295, 0x25395234946359d6, 0x7294eb394e7184a7, 0x29c251846719c610]
-def z57 : ℕ := limbs [0xaca, 0x74a4e54a52928423, 0x294a539d6b5ad673, 0x9d2739ce949ce739, 0xce739d2318c6738c, 0xa349521294a359ce, 0x7394e739ce318ca3, 0x18c652846718c630]
-def z58 : ℕ := limbs [0xace, 0x94a4e75a52928c65, 0x39ce539d6d5ad693, 0x9d294a4e94a4e73a, 0x52939d2529467394, 0xe549523394a359d2, 0x7394e939ce518ca5, 0x2946528467194630]
-def z59 : ℕ := limbs [0xace, 0xb3a4e769d2938465, 0x3a52329d6f4ad6b2, 0x9d295aca74aca73a, 0x56b2952539c25394, 0xe73952348ca359d6, 0x5394eb29ce708ca5, 0x39c232846719c230]
-def z60 : ℕ := limbs [0xaca, 0xb4a4e56a52928423, 0x4a52539d6f5ad6b3, 0x9d2b5ace94ace73a, 0xd6b39d2739c6739d, 0x2749521494a359d6, 0x7394eb39ce718ca7, 0x39c652846719c630]
-def z61 : ℕ := limbs [0x9ca, 0xb4a4e3494a528423, 0x4a52539ceb39ceb3, 0x9d2b5ace949c6319, 0xce718ca739c6739d, 0x27494a1494a339d6, 0x73946718c6718ca7, 0x39c652846319c630]
-def z62 : ℕ := limbs [0xaca, 0x74a4e54a52918423, 0x294a539d6b5ad673, 0x9d2739ce949ce739, 0xce739d2318c6738c, 0xa349521294a359ce, 0x7394e739ce318ca3, 0x18c652846718c630]
-def z63 : ℕ := limbs [0x94a, 0xb4a4e138c6328423, 0x4a52539ca9294ab3, 0x9d2b5ace94942109, 0x4a50846739c6739d, 0x2749461494a329d6, 0x7394250842718ca7, 0x39c652846119c630]
-def z64 : ℕ := limbs [0x94e, 0xb4a4e338c6338c65, 0x4a52539ca9294ab3, 0x9d2b5ace94942109, 0x4a50846739c6739d, 0x2749463494a329d6, 0x7394250842718ca7, 0x39c652846119c630]
-def z65 : ℕ := limbs [0x94e, 0x939ca338c63494a7, 0x4a52539ca9294a92, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x2748c65494a32952, 0x528c250842718ca7, 0x39c652842119c630]
-def z66 : ℕ := limbs [0x952, 0xb49ce338c6349467, 0x49d23394a9294ab3, 0x952b4aca93942109, 0x4a50846729c27295, 0x25394654946329d6, 0x72942508427184a7, 0x29c251846119c610]
-def z67 : ℕ := limbs [0x9d2, 0x74a4e5394a5294a7, 0x294a539ce939ce73, 0x9d2739ce94946319, 0x4a518ca318c6738c, 0xa3494a5294a339ce, 0x73946518c6318ca3, 0x18c652846318c630]
-def z68 : ℕ := limbs [0x952, 0x74a4e328c63294a7, 0x294a539ca7294a73, 0x9d2739ce948c2108, 0xc630846318c6738c, 0xa349465294a329ce, 0x7394230842318ca3, 0x18c652846118c630]
-def z69 : ℕ := limbs [0x952, 0x94a4e338c63394a7, 0x39ce539ca9294a93, 0x9d294a4e94942109, 0x4a50846529467394, 0xe549465394a329d2, 0x7394250842518ca5, 0x2946528461194630]
-def z70 : ℕ := limbs [0x952, 0xb3a4e338c6348ca7, 0x3a52329ca9294ab2, 0x9d295aca74942109, 0x4a50846539c25394, 0xe73946548ca329d6, 0x5394250842708ca5, 0x39c232846119c230]
-def z71 : ℕ := limbs [0xaca, 0x54a4e53a52908423, 0x18c6539d695ad653, 0x9d25294e9494e739, 0x4a539d2108467384, 0x6149521194a359ca, 0x7394e539ce118ca1, 0x846528467184630]
-def z72 : ℕ := limbs [0xace, 0x54a4e73a52918c65, 0x18c6539d695ad653, 0x9d25294e9494e739, 0x4a539d2108467384, 0x6149523194a359ca, 0x7394e539ce118ca1, 0x846528467184630]
-def z73 : ℕ := limbs [0xa4e, 0x539ca93a529194a7, 0x18c6539d294a5252, 0x94e5294a7394e739, 0x4a539d2108467384, 0x6148d25194a3494a, 0x528ce539ce118ca1, 0x846528427184630]
-def z74 : ℕ := limbs [0x9d2, 0x54a4e5294a5194a7, 0x18c6539ce739ce53, 0x9d25294e948c6318, 0xc6318ca108467384, 0x61494a5194a339ca, 0x73946318c6118ca1, 0x846528463184630]
-def z75 : ℕ := limbs [0xa52, 0x54a4e739ce7194a7, 0x18c6539d294a5253, 0x9d25294e9494a529, 0x4a5294e108467384, 0x61494e5194a349ca, 0x7394a5294a118ca1, 0x846528465184630]
-def z76 : ℕ := limbs [0xad2, 0x549ce93a4e919467, 0x18c63395695a5653, 0x9525294a9394e539, 0x4a529ce108427284, 0x61395251946359ca, 0x7294e5394e1184a1, 0x842518467184610]
-def z77 : ℕ := limbs [0xad2, 0x53a4e939d2918ca7, 0x18c6329d694ad652, 0x9d25294a7494a739, 0x4a52952108425384, 0x613952518ca359ca, 0x5394e529ce108ca1, 0x842328467184230]
-def z78 : ℕ := limbs [0xa46, 0x939ca56a52928423, 0x4a52539ced4a5271, 0x8ca94a4a73a4a52a, 0xd6b39d252942529d, 0x2748d21494a348d2, 0x528cab39ce508467, 0x39c652842709c630]
-def z79 : ℕ := limbs [0x9ca, 0xb4a4e5494a528423, 0x4a52539cab39ce92, 0x94eb5ace94942109, 0xce718ca52942529d, 0x27494a1494a33956, 0x73942718c6508467, 0x39c652846309c630]
-def z80 : ℕ := limbs [0xa4a, 0xb4a4e359ce728423, 0x4a52539ced4a5292, 0x94eb5ace949c631a, 0x529294e52942529d, 0x27494e1494a34956, 0x739469294a508467, 0x39c652846509c630]
-def z81 : ℕ := limbs [0xaca, 0x74a4e54a52928423, 0x294a539d2b5ad652, 0x94e739ce9494a529, 0xce739d210842528c, 0xa349521294a3594e, 0x7394a739ce108463, 0x18c652846708c630]
-def z82 : ℕ := limbs [0xaca, 0x94a4e55a52918423, 0x39ce539d2d5ad672, 0x94e94a4e949ca52a, 0x52939d2318c25294, 0xe549521394a35952, 0x7394a939ce308465, 0x2946528467094630]
-def z83 : ℕ := limbs [0x9ca, 0xb4a4e3494a528423, 0x4a52539cab39ce92, 0x94eb5ace94942109, 0xce718ca52942529d, 0x27494a1494a33956, 0x73942718c6508467, 0x39c652846309c630]
-def z84 : ℕ := limbs [0xaca, 0x74a4e54a52918423, 0x294a539d2b5ad652, 0x94e739ce9494a529, 0xce739d210842528c, 0xa349521294a3594e, 0x7394a739ce108463, 0x18c652846708c630]
-def z85 : ℕ := limbs [0x94e, 0xb4a4e338c6338c65, 0x4a52539ca9294a92, 0x94eb5ace94942109, 0x4a5084652942529d, 0x2749463494a32956, 0x7394250842508467, 0x39c652846109c630]
-def z86 : ℕ := limbs [0x9ce, 0x74a4e3394a518c65, 0x294a539ca939ce52, 0x94e739ce948c2109, 0x4a518ca10842528c, 0xa3494a3294a3394e, 0x73942518c6108463, 0x18c652846308c630]
-def z87 : ℕ := limbs [0xace, 0x54a4e73a52918c65, 0x18c6539d295ad652, 0x94e5294e9494a529, 0x4a539d2108425284, 0x6149523194a3594a, 0x7394a539ce108461, 0x846528467084630]
-def z88 : ℕ := limbs [0xad2, 0xb49ce96a4e949467, 0x49d233956f5a56b3, 0x952b4aca93ace53a, 0xd2b29ce729c27295, 0x25395254946359d6, 0x7294eb394e7184a7, 0x29c251846719c610]
-def z89 : ℕ := limbs [0xace, 0x94a4e75a52928c65, 0x39ce539d2d5ad672, 0x94e94a4e949ca52a, 0x52939d2318c25294, 0xe549523394a35952, 0x7394a939ce308465, 0x2946528467094630]
-def z90 : ℕ := limbs [0xa4e, 0xb4a4e559ce738c65, 0x4a52539ced4a5292, 0x94eb5ace949c631a, 0x529294e52942529d, 0x27494e3494a34956, 0x739469294a508467, 0x39c652846509c630]
-def z91 : ℕ := limbs [0xa52, 0xb49ce759ca749467, 0x49d233952d49d2b3, 0x952b4aca93a4a32a, 0x4e9194a729c27295, 0x25394e54946349d6, 0x7294a928ca7184a7, 0x29c251846519c610]
-def z92 : ℕ := limbs [0x9d2, 0x74a4e5494a5294a7, 0x294a539ceb39ce73, 0x9d2739ce949c6319, 0xce718ca318c6738c, 0xa3494a5294a339ce, 0x73946718c6318ca3, 0x18c652846318c630]
-def z93 : ℕ := limbs [0xa52, 0x94a4e749ce7394a7, 0x39ce539d2b4a5293, 0x9d294a4e949ca529, 0xce7294e529467394, 0xe5494e5394a349d2, 0x7394a7294a518ca5, 0x2946528465194630]
-def z94 : ℕ := limbs [0x9ce, 0x74a4e3494a518c65, 0x294a539cab39ce52, 0x94e739ce94942109, 0xce718ca10842528c, 0xa3494a3294a3394e, 0x73942718c6108463, 0x18c652846308c630]
-def z95 : ℕ := limbs [0xa4e, 0x94a4e549ce728c65, 0x39ce539ceb4a5272, 0x94e94a4e94946319, 0xce7294e318c25294, 0xe5494e3394a34952, 0x739467294a308465, 0x2946528465094630]
-def z96 : ℕ := limbs [0xad2, 0x93a4e959d2938ca7, 0x29ce329d6d4ad692, 0x9d274a4a74a4a739, 0xd29295232942538c, 0xa53952538ca359d2, 0x5394e929ce508ca3, 0x2942328467194230]
-def z97 : ℕ := limbs [0xad2, 0xb3a4e969d2948ca7, 0x3a52329d6f4ad6b2, 0x9d295aca74aca73a, 0x56b2952539c25394, 0xe73952548ca359d6, 0x5394eb29ce708ca5, 0x39c232846719c230]
-def z98 : ℕ := limbs [0xad2, 0x949ce95a4e939467, 0x394e33956d5a5693, 0x95293a4a93a4e53a, 0x4e929ce51942728c, 0xe3395253946359d2, 0x7294e9394e5184a5, 0x1942518467194610]
-def z99 : ℕ := limbs [0xa4e, 0x938ca96a4a949427, 0x4952138d2d49d292, 0x8ce93a4672ace53a, 0xd2b29ce729c27295, 0x2538d25494234952, 0x518ceb394e7184a7, 0x29c251842719c610]
-def z100 : ℕ := limbs [0x9d2, 0xb494e5494a549427, 0x4952138ceb394eb3, 0x952b4aca939c6119, 0xca708c6729c27295, 0x25394a54942339d6, 0x72946718467184a7, 0x29c251846319c610]
-def z101 : ℕ := limbs [0xa52, 0xb494e759c6749427, 0x4952138d2d49d2b3, 0x952b4aca93a4a32a, 0x4e9194a729c27295, 0x25394e54942349d6, 0x7294a928ca7184a7, 0x29c251846519c610]
-def z102 : ℕ := limbs [0xad2, 0x7494e94a4a929427, 0x294a138d6b5a5673, 0x952729ca939ce539, 0xca729ce308c27284, 0xa1395252942359ce, 0x7294e7394e3184a3, 0x8c251846718c610]
-def z103 : ℕ := limbs [0xad2, 0x9494e95a4a939427, 0x38ce138d6d5a5693, 0x95293a4a93a4e53a, 0x4e929ce51942728c, 0xe3395253942359d2, 0x7294e9394e5184a5, 0x1942518467194610]
-def z104 : ℕ := limbs [0x9d2, 0xb494e54946549427, 0x4952138ceb394eb3, 0x952b4aca939c6119, 0xca708c6729c27295, 0x25394a54942339d6, 0x72946718467184a7, 0x29c251846319c610]
-def z105 : ℕ := limbs [0xad2, 0x7494e94a4a929427, 0x28ca138d6b5a5673, 0x952729ca939ce539, 0xca729ce308c27284, 0xa1395252942359ce, 0x7294e7394e3184a3, 0x8c251846718c610]
-def z106 : ℕ := limbs [0x9d2, 0x749ce53946529467, 0x28ca3394e9394e73, 0x952729ca93946119, 0x46508c6308c27284, 0xa1394a52946339ce, 0x72946518463184a3, 0x8c251846318c610]
-def z107 : ℕ := limbs [0x9d2, 0x749ce54946529467, 0x28ca3394eb394e73, 0x952729ca939c6119, 0xca708c6308c27284, 0xa1394a52946339ce, 0x72946718463184a3, 0x8c251846318c610]
-def z108 : ℕ := limbs [0xa52, 0x949ce749ca739467, 0x394e33952b49d293, 0x95293a4a939ca329, 0xca7194a51942728c, 0xe3394e53946349d2, 0x7294a728ca5184a5, 0x1942518465194610]
-def z109 : ℕ := limbs [0xace, 0x74a4e74a52918c65, 0x294a539d2d5ad672, 0x94e94a4e949ca52a, 0x52939d2318c25294, 0xe549523294a35952, 0x7394a939ce308465, 0x2946528467094630]
-def z110 : ℕ := limbs [0xa4e, 0x539ca94a529294a7, 0x294a539d2b4a5272, 0x94e739ca73a4e73a, 0x52939d2529467394, 0xe548d25294a3494e, 0x528ce939ce518ca5, 0x2946528427194630]
-def z111 : ℕ := limbs [0x9d2, 0x74a4e5494a5294a7, 0x294a539ce939ce93, 0x9d294a4e94946319, 0x4a518ca529467394, 0xe5494a5294a339d2, 0x73946518c6518ca5, 0x2946528463194630]
-def z112 : ℕ := limbs [0x9d2, 0x54a4e5394a5194a7, 0x18c6539ce939ce93, 0x9d294a4e94946319, 0x4a518ca529467394, 0xe5494a5194a339d2, 0x73946518c6518ca5, 0x2946528463194630]
-def z113 : ℕ := limbs [0xa52, 0x74a4e739ce7294a7, 0x294a539d2b4a5293, 0x9d294a4e949ca529, 0xce7294e529467394, 0xe5494e5294a349d2, 0x7394a7294a518ca5, 0x2946528465194630]
-def z114 : ℕ := limbs [0xad2, 0x749ce94a4e929467, 0x28ca33956d5a5693, 0x95293a4a93a4e53a, 0x4e929ce51942728c, 0xe3395252946359d2, 0x7294e9394e5184a5, 0x1942518467194610]
-def z115 : ℕ := limbs [0xad2, 0x73a4e949d2928ca7, 0x194a329d6d4ad692, 0x9d274a4a74a4a739, 0xd29295232942538c, 0xa53952528ca359d2, 0x5394e929ce508ca3, 0x2942328467194230]
-def z116 : ℕ := limbs [0xace, 0x54a4e73a52918c65, 0x18c6539d2d5ad672, 0x94e94a4e949ca52a, 0x52939d2318c25294, 0xe549523194a35952, 0x7394a939ce308465, 0x2946528467094630]
-def z117 : ℕ := limbs [0xace, 0x34a4e72a52908c65, 0x842539d2d5ad672, 0x94e94a4e949ca52a, 0x52939d2318c25294, 0xe549523094a35952, 0x7394a939ce308465, 0x2946528467094630]
-def z118 : ℕ := limbs [0xa4e, 0x539ca93a529194a7, 0x18c6539d2b4a5272, 0x94e739ca73a4e73a, 0x52939d2529467394, 0xe548d25194a3494e, 0x528ce939ce518ca5, 0x2946528427194630]
-def z119 : ℕ := limbs [0xa4e, 0x339ca92a529094a7, 0x842539d2b4a5272, 0x94e739ca73a4e73a, 0x52939d2529467394, 0xe548d25094a3494e, 0x528ce939ce518ca5, 0x2946528427194630]
-def z120 : ℕ := limbs [0x9d2, 0x74a4e5394a5294a7, 0x294a539ce939ce93, 0x9d294a4e94946319, 0x4a518ca529467394, 0xe5494a5294a339d2, 0x73946518c6518ca5, 0x2946528463194630]
-def z121 : ℕ := limbs [0x9d2, 0x54a4e5294a5194a7, 0x18c6539ce939ce93, 0x9d294a4e94946319, 0x4a518ca529467394, 0xe5494a5194a339d2, 0x73946518c6518ca5, 0x2946528463194630]
-def z122 : ℕ := limbs [0xa52, 0x54a4e739ce7194a7, 0x18c6539d2b4a5293, 0x9d294a4e949ca529, 0xce7294e529467394, 0xe5494e5194a349d2, 0x7394a7294a518ca5, 0x2946528465194630]
-def z123 : ℕ := limbs [0xa52, 0x34a4e729ce7094a7, 0x842539d2b4a5293, 0x9d294a4e949ca529, 0xce7294e529467394, 0xe5494e5094a349d2, 0x7394a7294a518ca5, 0x2946528465194630]
-def z124 : ℕ := limbs [0xad2, 0x549ce93a4e919467, 0x18c633956d5a5693, 0x95293a4a93a4e53a, 0x4e929ce51942728c, 0xe3395251946359d2, 0x7294e9394e5184a5, 0x1942518467194610]
-def z125 : ℕ := limbs [0xad2, 0x349ce92a4e909467, 0x84233956d5a5693, 0x95293a4a93a4e53a, 0x4e929ce51942728c, 0xe3395250946359d2, 0x7294e9394e5184a5, 0x1942518467194610]
-def z126 : ℕ := limbs [0xad2, 0x54a4e93a529194a7, 0x18c6539d6b5ad673, 0x9d2739ce949ce739, 0xce739d2318c6738c, 0xa349525194a359ce, 0x7394e739ce318ca3, 0x18c652846718c630]
-def z127 : ℕ := limbs [0xad2, 0x34a4e92a529094a7, 0x842539d6b5ad673, 0x9d2739ce949ce739, 0xce739d2318c6738c, 0xa349525094a359ce, 0x7394e739ce318ca3, 0x18c652846718c630]
-def z128 : ℕ := limbs [0xad2, 0x53a4e939d2918ca7, 0x18c6329d6d4ad692, 0x9d274a4a74a4a739, 0xd29295232942538c, 0xa53952518ca359d2, 0x5394e929ce508ca3, 0x2942328467194230]
-def z129 : ℕ := limbs [0xad2, 0x33a4e929d2908ca7, 0x842329d6d4ad692, 0x9d274a4a74a4a739, 0xd29295232942538c, 0xa53952508ca359d2, 0x5394e929ce508ca3, 0x2942328467194230]
-def z130 : ℕ := limbs [0xad2, 0x54a4e93a529194a7, 0x18c6539d6d5ad693, 0x9d294a4e94a4e73a, 0x52939d2529467394, 0xe549525194a359d2, 0x7394e939ce518ca5, 0x2946528467194630]
-def z131 : ℕ := limbs [0xad2, 0x34a4e92a529094a7, 0x842539d6d5ad693, 0x9d294a4e94a4e73a, 0x52939d2529467394, 0xe549525094a359d2, 0x7394e939ce518ca5, 0x2946528467194630]
-def z132 : ℕ := limbs [0x9d2, 0x34a4e5194a5094a7, 0x842539ce939ce93, 0x9d294a4e94946319, 0x4a518ca529467394, 0xe5494a5094a339d2, 0x73946518c6518ca5, 0x2946528463194630]
-def z133 : ℕ := limbs [0x952, 0x74a4e328c63294a7, 0x294a539ca7294a93, 0x9d294a4e948c2108, 0xc630846529467394, 0xe549465294a329d2, 0x7394230842518ca5, 0x2946528461194630]
-def z134 : ℕ := limbs [0x952, 0x54a4e318c63194a7, 0x18c6539ca7294a93, 0x9d294a4e948c2108, 0xc630846529467394, 0xe549465194a329d2, 0x7394230842518ca5, 0x2946528461194630]
-def z135 : ℕ := limbs [0x952, 0x94a4e338c63394a7, 0x39ce539ca7294a93, 0x9d294a4e948c2108, 0xc630846529467394, 0xe549465394a329d2, 0x7394230842518ca5, 0x2946528461194630]
-def z136 : ℕ := limbs [0x94e, 0x94a4e328c6328c65, 0x39ce539ca7294a72, 0x94e94a4e948c2108, 0xc630846318c25294, 0xe549463394a32952, 0x7394230842308465, 0x2946528461094630]
-def z137 : ℕ := limbs [0x94e, 0x739ca328c63394a7, 0x39ce539ca7294a72, 0x94e739ca738c2108, 0xc630846529467394, 0xe548c65394a3294e, 0x528c230842518ca5, 0x2946528421194630]
-def z138 : ℕ := limbs [0x952, 0x949ce328c6339467, 0x394e3394a7294a93, 0x95293a4a938c2108, 0xc63084651942728c, 0xe3394653946329d2, 0x72942308425184a5, 0x1942518461194610]
-def z139 : ℕ := limbs [0x952, 0x54a4e318c63194a7, 0x18c6539ca5294a53, 0x9d25294e94842108, 0x4210846108467384, 0x6149465194a329ca, 0x7394210842118ca1, 0x846528461184630]
-def z140 : ℕ := limbs [0x952, 0x93a4e328c6338ca7, 0x29ce329ca7294a92, 0x9d274a4a748c2108, 0xc63084632942538c, 0xa53946538ca329d2, 0x5394230842508ca3, 0x2942328461194230]
-def z141 : ℕ := limbs [0xad2, 0x54a4e93a529194a7, 0x18c6539d695ad653, 0x9d25294e9494e739, 0x4a539d2108467384, 0x6149525194a359ca, 0x7394e539ce118ca1, 0x846528467184630]
-def z142 : ℕ := limbs [0xad2, 0x34a4e92a529094a7, 0x842539d695ad653, 0x9d25294e9494e739, 0x4a539d2108467384, 0x6149525094a359ca, 0x7394e539ce118ca1, 0x846528467184630]
-def z143 : ℕ := limbs [0x9d2, 0x54a4e5394a5194a7, 0x18c6539ce939ce53, 0x9d25294e94946319, 0x4a518ca108467384, 0x61494a5194a339ca, 0x73946518c6118ca1, 0x846528463184630]
-def z144 : ℕ := limbs [0xa52, 0x74a4e739ce7294a7, 0x294a539d294a5273, 0x9d2739ce9494a529, 0x4a5294e318c6738c, 0xa3494e5294a349ce, 0x7394a5294a318ca3, 0x18c652846518c630]
-def z145 : ℕ := limbs [0xad2, 0x73a4e949d2928ca7, 0x194a329d6b4ad672, 0x9d2539ca749ca739, 0x4e72952118c25384, 0x633952528ca359ce, 0x5394e729ce308ca1, 0x18c232846718c230]
-def z146 : ℕ := limbs [0xa4e, 0x539ca94a529294a7, 0x294a539d294a5252, 0x94e5294a739ce739, 0xce739d2318c6738c, 0xa348d25294a3494a, 0x528ce739ce318ca3, 0x18c652842718c630]
-def z147 : ℕ := limbs [0xace, 0x74a4e74a52918c65, 0x294a539d2b5ad652, 0x94e739ce9494a529, 0xce739d210842528c, 0xa349523294a3594e, 0x7394a739ce108463, 0x18c652846708c630]
-def z148 : ℕ := limbs [0xad2, 0x749ce94a4e929467, 0x28ca33956b5a5673, 0x952729ca939ce539, 0xca729ce308c27284, 0xa1395252946359ce, 0x7294e7394e3184a3, 0x8c251846718c610]
-def z149 : ℕ := limbs [0x94e, 0x939ca759ce7494a7, 0x4a52539ca9294a92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ce5494a32952, 0x528ca9294a718ca7, 0x39c652842519c630]
-def z150 : ℕ := limbs [0x9ce, 0xb4a4e76a529494a7, 0x5ad674a469294a71, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x274952559ce528d2, 0x528c69294a508467, 0x39c6528c2509c630]
-def z151 : ℕ := limbs [0x9d2, 0xb49ce96a4e959ca9, 0x5a56549ca928ca92, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x253952759ca52952, 0x518ca928ca7184a7, 0x29c2518c2519c610]
-def z152 : ℕ := limbs [0x9d2, 0x74a4e94a52939ce9, 0x39ce74a4a9294a52, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5294a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
-def z153 : ℕ := limbs [0x952, 0x74a4e94a52939ce9, 0x39ce74a46718c652, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5194a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
-def z154 : ℕ := limbs [0x9d2, 0x94a4e95a52949ce9, 0x4a5274a4a7294a72, 0x94e739ca739ca529, 0xce7294e529467394, 0xe54952749ce5294e, 0x528ca7294a518ca5, 0x2946528c25194630]
-def z155 : ℕ := limbs [0x9d2, 0xb3a4e969d29594e9, 0x4ad653a4a9194a91, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe739527594e52952, 0x328ca9194a708ca5, 0x39c2328c2519c230]
-def z156 : ℕ := limbs [0x94e, 0x939ca759ce7494a7, 0x4a52539c6718c692, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ce5494a31952, 0x528ca9294a718ca7, 0x39c652842519c630]
-def z157 : ℕ := limbs [0x8ce, 0x939ca759ce7494a7, 0x4a52539c25084292, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ce5494a30952, 0x528ca9294a718ca7, 0x39c652842519c630]
-def z158 : ℕ := limbs [0x94e, 0xb4a4e76a529494a7, 0x5ad674a46718c671, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x274952559ce518d2, 0x528c69294a508467, 0x39c6528c2509c630]
-def z159 : ℕ := limbs [0x8ce, 0xb4a4e76a529494a7, 0x5ad674a425084271, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x274952559ce508d2, 0x528c69294a508467, 0x39c6528c2509c630]
-def z160 : ℕ := limbs [0x952, 0xb4a4e759ce759ce9, 0x5ad674a46718c692, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x27494e759ce51952, 0x528c6718c6718ca7, 0x39c6528c2319c630]
-def z161 : ℕ := limbs [0x8d2, 0xb4a4e759ce759ce9, 0x5ad674a425084292, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x27494e759ce50952, 0x528c6718c6718ca7, 0x39c6528c2319c630]
-def z162 : ℕ := limbs [0x952, 0xb49ce96a4e959ca9, 0x5a56549c6718c692, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x253952759ca51952, 0x518ca928ca7184a7, 0x29c2518c2519c610]
-def z163 : ℕ := limbs [0x8d2, 0xb49ce96a4e959ca9, 0x5a56549c25084292, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x253952759ca50952, 0x518ca928ca7184a7, 0x29c2518c2519c610]
-def z164 : ℕ := limbs [0x9d2, 0x74a4e94a52939ce9, 0x39ce74a4a7294a52, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5294a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
-def z165 : ℕ := limbs [0x952, 0x74a4e94a52939ce9, 0x39ce74a46518c652, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5194a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
-def z166 : ℕ := limbs [0x952, 0x94a4e95a52949ce9, 0x4a5274a46718c672, 0x94e739ca739ca529, 0xce7294e529467394, 0xe54952749ce5194e, 0x528ca7294a518ca5, 0x2946528c25194630]
-def z167 : ℕ := limbs [0x8d2, 0x94a4e95a52949ce9, 0x4a5274a425084272, 0x94e739ca739ca529, 0xce7294e529467394, 0xe54952749ce5094e, 0x528ca7294a518ca5, 0x2946528c25194630]
-def z168 : ℕ := limbs [0x952, 0xb3a4e969d29594e9, 0x4ad653a46718c691, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe739527594e51952, 0x328ca9194a708ca5, 0x39c2328c2519c230]
-def z169 : ℕ := limbs [0x8d2, 0xb3a4e969d29594e9, 0x4ad653a425084291, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe739527594e50952, 0x328ca9194a708ca5, 0x39c2328c2519c230]
-def z170 : ℕ := limbs [0x952, 0xb4a4e96a52959ce9, 0x5ad674a46718c692, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x274952759ce51952, 0x528ca9294a718ca7, 0x39c6528c2519c630]
-def z171 : ℕ := limbs [0x8d2, 0xb4a4e96a52959ce9, 0x5ad674a425084292, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x274952759ce50952, 0x528ca9294a718ca7, 0x39c6528c2519c630]
-def z172 : ℕ := limbs [0x8d2, 0x74a4e94a52939ce9, 0x39ce74a423084252, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5094a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
-def z173 : ℕ := limbs [0x952, 0xb4a4e5494a559ce9, 0x5ad674a46718c692, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x27494a759ce51952, 0x528c250842718ca7, 0x39c6528c2119c630]
-def z174 : ℕ := limbs [0x8d2, 0xb4a4e5494a559ce9, 0x5ad674a425084292, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x27494a759ce50952, 0x528c250842718ca7, 0x39c6528c2119c630]
-def z175 : ℕ := limbs [0x952, 0x74a4e5394a539ce9, 0x39ce74a46518c652, 0x94e5294a738c2108, 0xc630846318c6738c, 0xa3494a739ce5194a, 0x528c230842318ca3, 0x18c6528c2118c630]
-def z176 : ℕ := limbs [0x9ce, 0x539ca739ce7294a7, 0x294a539ce539ce32, 0x94e318ca738ca528, 0xc63294e108467384, 0x6148ce5294a33946, 0x528ca3294a118ca1, 0x846528425184630]
-def z177 : ℕ := limbs [0xa4e, 0x54a4e73a529294a7, 0x294a74a4a539ce31, 0x8ca318ca738c6318, 0xc63294e108425284, 0x614952529ce538c6, 0x528c63294a108461, 0x846528c25084630]
-def z178 : ℕ := limbs [0x9d2, 0x54a4e93a52929ce9, 0x294a74a4a5294a32, 0x94e318ca738ca528, 0xc63294e108467384, 0x614952729ce52946, 0x528ca3294a118ca1, 0x846528c25184630]
-def z179 : ℕ := limbs [0x952, 0x54a4e93a52929ce9, 0x294a74a46318c632, 0x94e318ca738ca528, 0xc63294e108467384, 0x614952729ce51946, 0x528ca3294a118ca1, 0x846528c25184630]
-def z180 : ℕ := limbs [0xa52, 0x54a4e93a52929ce9, 0x294a74a4e739ce32, 0x94e318ca738ca528, 0xc63294e108467384, 0x614952729ce53946, 0x528ca3294a118ca1, 0x846528c25184630]
-def z181 : ℕ := limbs [0x9d2, 0x74a4e749ce739ce9, 0x39ce74a4a7294a52, 0x94e5294a73946319, 0x4a518ca318c6738c, 0xa3494e739ce5294a, 0x528c6518c6318ca3, 0x18c6528c2318c630]
-def z182 : ℕ := limbs [0x9d2, 0x54a4e739ce729ce9, 0x294a74a4a5294a32, 0x94e318ca738c6318, 0xc6318ca108467384, 0x61494e729ce52946, 0x528c6318c6118ca1, 0x846528c23184630]
-def z183 : ℕ := limbs [0x952, 0x54a4e5294a529ce9, 0x294a74a46318c632, 0x94e318ca73842108, 0x4210846108467384, 0x61494a729ce51946, 0x528c210842118ca1, 0x846528c21184630]
-def z184 : ℕ := limbs [0xa52, 0x549ce93a4e929ca9, 0x294a549ce5394e32, 0x8ce318c6728ca328, 0xc63194a108427284, 0x613952729ca53946, 0x518ca328ca1184a1, 0x842518c25184610]
-def z185 : ℕ := limbs [0xa52, 0x53a4e939d29294e9, 0x294a53a4e529ce31, 0x94e318c6538c6528, 0xc6318ce108425384, 0x6139527294e53946, 0x328ca3194a108ca1, 0x842328c25184230]
-def z186 : ℕ := limbs [0x9ce, 0xb4a4e559ce7494a7, 0x5ad674a469294a71, 0x8ca94a4a73942109, 0xce718ca52942529d, 0x27494e559ce528d2, 0x528c2718c6508467, 0x39c6528c2309c630]
-def z187 : ℕ := limbs [0xa4e, 0xb4a4e76a529494a7, 0x5ad674a4ab39ce71, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x274952559ce538d2, 0x528c69294a508467, 0x39c6528c2509c630]
-def z188 : ℕ := limbs [0xa52, 0xb49ce96a4e959ca9, 0x5a56549ceb394e92, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x253952759ca53952, 0x518ca928ca7184a7, 0x29c2518c2519c610]
-def z189 : ℕ := limbs [0x9d2, 0xb49ce759ca759ca9, 0x5a56549ca928ca92, 0x8ce93a46729c6119, 0xca708c6729c27295, 0x25394e759ca52952, 0x518c6718467184a7, 0x29c2518c2319c610]
-def z190 : ℕ := limbs [0x952, 0x74a4e5494a539ce9, 0x39ce74a46718c652, 0x94e5294a73942109, 0x4a50846318c6738c, 0xa3494a739ce5194a, 0x528c250842318ca3, 0x18c6528c2118c630]
-def z191 : ℕ := limbs [0xa52, 0x94a4e95a52949ce9, 0x4a5274a4e939ce72, 0x94e739ca739ca529, 0xce7294e529467394, 0xe54952749ce5394e, 0x528ca7294a518ca5, 0x2946528c25194630]
-def z192 : ℕ := limbs [0x9d2, 0x94a4e749ce749ce9, 0x4a5274a4a7294a72, 0x94e739ca73946319, 0x4a518ca529467394, 0xe5494e749ce5294e, 0x528c6518c6518ca5, 0x2946528c23194630]
-def z193 : ℕ := limbs [0x94e, 0x939ca5494a5494a7, 0x4a52539ca9294a92, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x2748ca5494a32952, 0x528c6718c6718ca7, 0x39c652842319c630]
-def z194 : ℕ := limbs [0xa4e, 0x94a4e75a529394a7, 0x4a5274a4a939ce51, 0x8ca739ca73946319, 0xce7294e318c25294, 0xe54952549ce538ce, 0x528c67294a308465, 0x2946528c25094630]
-def z195 : ℕ := limbs [0xa52, 0x949ce95a4e949ca9, 0x49d2549ce9394e72, 0x8ce729c6729ca329, 0xca7194a51942728c, 0xe33952749ca5394e, 0x518ca728ca5184a5, 0x1942518c25194610]
-def z196 : ℕ := limbs [0xa4e, 0xb4a4e359ce738c65, 0x4a52539cad4a5292, 0x94eb5ace9494210a, 0x529294e52942529d, 0x27494e3494a34956, 0x739429294a508467, 0x39c652846509c630]
-def z197 : ℕ := limbs [0xa4e, 0xb4a4e56a529494a7, 0x5ad674a46b39ce71, 0x8ca94a4a7394210a, 0x529294e52942529d, 0x274952559ce538d2, 0x528c29294a508467, 0x39c6528c2509c630]
-def z198 : ℕ := limbs [0xad2, 0x95ad254a529294a7, 0x39ce74a4a94a5252, 0x94e739ce94942109, 0x4a5294e10842528c, 0xa349d2539ce5494e, 0x739425294a108463, 0x18c6528c6508c630]
-def z199 : ℕ := limbs [0xad2, 0xb5ad255a529394a7, 0x4a5274a4ab4a5272, 0x94e94a4e948c2109, 0xce7294e318c25294, 0xe549d2549ce54952, 0x739427294a308465, 0x2946528c65094630]
-def z200 : ℕ := limbs [0xad2, 0x95ad254a529294a7, 0x39ce74a4a94a5252, 0x94e739ce948c2109, 0x4a5294e10842528c, 0xa349d2539ce5494e, 0x739425294a108463, 0x18c6528c6508c630]
-def z201 : ℕ := limbs [0xa52, 0xb5ad2549ce7394a7, 0x4a5274a4a939ce72, 0x94e94a4e948c2109, 0x4a518ca318c25294, 0xe549ce549ce53952, 0x73942518c6308465, 0x2946528c63094630]
-def z202 : ℕ := limbs [0xad2, 0xb5ad275a529394a7, 0x4a5274a4eb4a5272, 0x94e94a4e94946319, 0xce7294e318c25294, 0xe549d2549ce54952, 0x739467294a308465, 0x2946528c65094630]
-def z203 : ℕ := limbs [0x9ce, 0xb4a4e3494a538c65, 0x4a52539cab39ce92, 0x94eb5ace94942109, 0xce718ca52942529d, 0x27494a3494a33956, 0x73942718c6508467, 0x39c652846309c630]
-def z204 : ℕ := limbs [0xa52, 0xb49ce759c6749467, 0x49d233952d4952b3, 0x952b4aca93a4a12a, 0x4a90946729c27295, 0x25394e54946349d6, 0x7294a9284a7184a7, 0x29c251846519c610]
-def z205 : ℕ := limbs [0xa52, 0xb49ce96a4a959ca9, 0x5a56549ceb38ce92, 0x8ce93a4672a4a12a, 0x4a90946729c27295, 0x253952759ca53952, 0x518ca9284a7184a7, 0x29c2518c2519c610]
-def z206 : ℕ := limbs [0xad6, 0x95a5294a4a939ca9, 0x394e549d29495273, 0x952729ca9394a129, 0x4a50946308c27284, 0xa139d2739ca549ce, 0x7294a5284a3184a3, 0x8c2518c6518c610]
-def z207 : ℕ := limbs [0xad6, 0xb5a5295a4a949ca9, 0x49d2549d2b495293, 0x95293a4a939ca129, 0xc67094651942728c, 0xe339d2749ca549d2, 0x7294a7284a5184a5, 0x1942518c65194610]
-def z208 : ℕ := limbs [0xad6, 0x95a5294a4a939ca9, 0x394e549d29495273, 0x952729ca9394a129, 0x4650946308c27284, 0xa139d2739ca549ce, 0x7294a5284a3184a3, 0x8c2518c6518c610]
-def z209 : ℕ := limbs [0xa56, 0x95a52749ca739ca9, 0x394e549ce9394e73, 0x952729ca93946119, 0x46508c6308c27284, 0xa139ce739ca539ce, 0x72946518463184a3, 0x8c2518c6318c610]
-def z210 : ℕ := limbs [0xad6, 0xb5a5295a4e949ca9, 0x49d2549d2b49d293, 0x95293a4a939ca329, 0xca7194a51942728c, 0xe339d2749ca549d2, 0x7294a728ca5184a5, 0x1942518c65194610]
-def z211 : ℕ := limbs [0xa56, 0xb5a52749ca749ca9, 0x49d2549ce9394e93, 0x95293a4a93946119, 0x46508c651942728c, 0xe339ce749ca539d2, 0x72946518465184a5, 0x1942518c63194610]
-def z212 : ℕ := limbs [0x9d2, 0xb49ce54946549467, 0x49d23394eb394eb3, 0x952b4aca939c6119, 0xca708c6729c27295, 0x25394a54946339d6, 0x72946718467184a7, 0x29c251846319c610]
-def z213 : ℕ := limbs [0xa56, 0x95ad2759ce739ce9, 0x39ce74a4eb39ce73, 0x9d2739ce949c6319, 0xce718ca318c6738c, 0xa349ce739ce539ce, 0x73946718c6318ca3, 0x18c6528c6318c630]
-def z214 : ℕ := limbs [0x9d6, 0x95ad25494a539ce9, 0x39ce74a4a9294a73, 0x9d2739ce94942109, 0x4a50846318c6738c, 0xa349ca739ce529ce, 0x7394250842318ca3, 0x18c6528c6118c630]
-def z215 : ℕ := limbs [0xa56, 0x75ad2749ce729ce9, 0x294a74a4e939ce53, 0x9d25294e94946319, 0x4a518ca108467384, 0x6149ce729ce539ca, 0x73946518c6118ca1, 0x846528c63184630]
-def z216 : ℕ := limbs [0x9d6, 0x75ad25394a529ce9, 0x294a74a4a7294a53, 0x9d25294e948c2108, 0xc630846108467384, 0x6149ca729ce529ca, 0x7394230842118ca1, 0x846528c61184630]
-def z217 : ℕ := limbs [0x9d6, 0x75ad25494a529ce9, 0x294a74a4a9294a53, 0x9d25294e94942109, 0x4a50846108467384, 0x6149ca729ce529ca, 0x7394250842118ca1, 0x846528c61184630]
-def z218 : ℕ := limbs [0x952, 0x54a4e338c63194a7, 0x18c6539ca9294a53, 0x9d25294e94942109, 0x4a50846108467384, 0x6149465194a329ca, 0x7394250842118ca1, 0x846528461184630]
-def z219 : ℕ := limbs [0xa52, 0x95ad2559ce7294a7, 0x39ce74a4ab39ce52, 0x94e739ce94942109, 0xce718ca10842528c, 0xa349ce539ce5394e, 0x73942718c6108463, 0x18c6528c6308c630]
-def z220 : ℕ := limbs [0x9d2, 0x74a4e759ce739ce9, 0x39ce74a4a9294a52, 0x94e5294a739c6319, 0xce718ca318c6738c, 0xa3494e739ce5294a, 0x528c6718c6318ca3, 0x18c6528c2318c630]
-def z221 : ℕ := limbs [0x952, 0x54a4e5494a529ce9, 0x294a74a46718c632, 0x94e318ca73942109, 0x4a50846108467384, 0x61494a729ce51946, 0x528c250842118ca1, 0x846528c21184630]
-def z222 : ℕ := limbs [0xa56, 0x95a52759ca739ca9, 0x394e549ceb394e73, 0x952729ca939c6119, 0xca708c6308c27284, 0xa139ce739ca539ce, 0x72946718463184a3, 0x8c2518c6318c610]
-def z223 : ℕ := limbs [0xa56, 0x94ad27594e7394e9, 0x29ce53a4eb29ce72, 0x9d2539ca749c2319, 0x4e7084a118c25384, 0x6339ce7394e539ce, 0x53946708c6308ca1, 0x18c2328c6318c230]
-def z224 : ℕ := limbs [0x9d2, 0x74a4e5494a5294a7, 0x294a539ca9294a53, 0x9d25294e94942109, 0x4a50846108467384, 0x61494a5294a329ca, 0x7394250842118ca1, 0x846528461184630]
-def z225 : ℕ := limbs [0x9d2, 0x75ad25494a5294a7, 0x294a74a4a9294a52, 0x94e5294e94942109, 0x4a50846108425284, 0x6149ca529ce5294a, 0x7394250842108461, 0x846528c61084630]
-def z226 : ℕ := limbs [0x9d2, 0x74a4e5494a529ce9, 0x294a74a4a9294a52, 0x94e5294a73942109, 0x4a50846108467384, 0x61494a729ce5294a, 0x528c250842118ca1, 0x846528c21184630]
-def z227 : ℕ := limbs [0x9d6, 0x75a525494a529ca9, 0x294a549ca9294a53, 0x9525294a93942109, 0x4a50846108427284, 0x6139ca729ca529ca, 0x72942508421184a1, 0x842518c61184610]
-def z228 : ℕ := limbs [0x9d6, 0x74ad25494a5294e9, 0x294a53a4a9294a52, 0x9d25294a74942109, 0x4a50846108425384, 0x6139ca7294e529ca, 0x5394250842108ca1, 0x842328c61184230]
-def z229 : ℕ := limbs [0xa52, 0x94a4e739ce7394a7, 0x39ce539d294a5293, 0x9d294a4e9494a529, 0x4a5294e529467394, 0xe5494e5394a349d2, 0x7394a5294a518ca5, 0x2946528465194630]
-def z230 : ℕ := limbs [0xad2, 0xb5ad274a529394a7, 0x4a5274a4e94a5272, 0x94e94a4e948c6319, 0x4a5294e318c25294, 0xe549d2549ce54952, 0x739465294a308465, 0x2946528c65094630]
-def z231 : ℕ := limbs [0xa52, 0x94a4e94a52949ce9, 0x4a5274a4e739ce72, 0x94e739ca7394a529, 0x4a5294e529467394, 0xe54952749ce5394e, 0x528ca5294a518ca5, 0x2946528c25194630]
-def z232 : ℕ := limbs [0xad6, 0xb5a5294a4e949ca9, 0x49d2549d2949d293, 0x95293a4a9394a329, 0x465194a51942728c, 0xe339d2749ca549d2, 0x7294a528ca5184a5, 0x1942518c65194610]
-def z233 : ℕ := limbs [0xad6, 0xb4ad2949d29494e9, 0x3a5253a5293a5292, 0x9d274a4a74946528, 0xca518ce32942538c, 0xa539d27494e549d2, 0x5394a5194a508ca3, 0x2942328c65194230]
-def z234 : ℕ := limbs [0xa52, 0x94a4e739ce7394a7, 0x39ce539d274a5293, 0x9d294a4e948ca528, 0xc63294e529467394, 0xe5494e5394a349d2, 0x7394a3294a518ca5, 0x2946528465194630]
-def z235 : ℕ := limbs [0xa52, 0x94a4e729ce7394a7, 0x39ce539d254a5293, 0x9d294a4e9484a528, 0x421294e529467394, 0xe5494e5394a349d2, 0x7394a1294a518ca5, 0x2946528465194630]
-def z236 : ℕ := limbs [0xad2, 0xb5ad273a529394a7, 0x4a5274a4e74a5272, 0x94e94a4e948c6318, 0xc63294e318c25294, 0xe549d2549ce54952, 0x739463294a308465, 0x2946528c65094630]
-def z237 : ℕ := limbs [0xad2, 0xb5ad272a529394a7, 0x4a5274a4e54a5272, 0x94e94a4e94846318, 0x421294e318c25294, 0xe549d2549ce54952, 0x739461294a308465, 0x2946528c65094630]
-def z238 : ℕ := limbs [0xa52, 0x94a4e93a52949ce9, 0x4a5274a4e739ce72, 0x94e739ca738ca528, 0xc63294e529467394, 0xe54952749ce5394e, 0x528ca3294a518ca5, 0x2946528c25194630]
-def z239 : ℕ := limbs [0xa52, 0x94a4e92a52949ce9, 0x4a5274a4e539ce72, 0x94e739ca7384a528, 0x421294e529467394, 0xe54952749ce5394e, 0x528ca1294a518ca5, 0x2946528c25194630]
-def z240 : ℕ := limbs [0xa56, 0xb5ad2739ce749ce9, 0x4a5274a4e739ce93, 0x9d294a4e948c6318, 0xc6318ca529467394, 0xe549ce749ce539d2, 0x73946318c6518ca5, 0x2946528c63194630]
-def z241 : ℕ := limbs [0xa56, 0xb5ad2729ce749ce9, 0x4a5274a4e539ce93, 0x9d294a4e94846318, 0x42118ca529467394, 0xe549ce749ce539d2, 0x73946118c6518ca5, 0x2946528c63194630]
-def z242 : ℕ := limbs [0xad6, 0xb5a5293a4e949ca9, 0x49d2549d2749d293, 0x95293a4a938ca328, 0xc63194a51942728c, 0xe339d2749ca549d2, 0x7294a328ca5184a5, 0x1942518c65194610]
-def z243 : ℕ := limbs [0xad6, 0xb5a5292a4e949ca9, 0x49d2549d2549d293, 0x95293a4a9384a328, 0x421194a51942728c, 0xe339d2749ca549d2, 0x7294a128ca5184a5, 0x1942518c65194610]
-def z244 : ℕ := limbs [0xad6, 0x95ad293a52939ce9, 0x39ce74a5274a5273, 0x9d2739ce948ca528, 0xc63294e318c6738c, 0xa349d2739ce549ce, 0x7394a3294a318ca3, 0x18c6528c6518c630]
-def z245 : ℕ := limbs [0xad6, 0x95ad292a52939ce9, 0x39ce74a5254a5273, 0x9d2739ce9484a528, 0x421294e318c6738c, 0xa349d2739ce549ce, 0x7394a1294a318ca3, 0x18c6528c6518c630]
-def z246 : ℕ := limbs [0xad6, 0xb4ad2939d29494e9, 0x3a5253a5273a5292, 0x9d274a4a748c6528, 0xc6318ce32942538c, 0xa539d27494e549d2, 0x5394a3194a508ca3, 0x2942328c65194230]
-def z247 : ℕ := limbs [0xad6, 0xb4ad2929d29494e9, 0x3a5253a5253a5292, 0x9d274a4a74846528, 0x42118ce32942538c, 0xa539d27494e549d2, 0x5394a1194a508ca3, 0x2942328c65194230]
-def z248 : ℕ := limbs [0xad6, 0xb5ad293a52949ce9, 0x4a5274a5274a5293, 0x9d294a4e948ca528, 0xc63294e529467394, 0xe549d2749ce549d2, 0x7394a3294a518ca5, 0x2946528c65194630]
-def z249 : ℕ := limbs [0xad6, 0xb5ad292a52949ce9, 0x4a5274a5254a5293, 0x9d294a4e9484a528, 0x421294e529467394, 0xe549d2749ce549d2, 0x7394a1294a518ca5, 0x2946528c65194630]
-def z250 : ℕ := limbs [0x9d6, 0xb5ad25394a549ce9, 0x4a5274a4a7294a93, 0x9d294a4e948c2108, 0xc630846529467394, 0xe549ca749ce529d2, 0x7394230842518ca5, 0x2946528c61194630]
-def z251 : ℕ := limbs [0x9d6, 0xb5ad25294a549ce9, 0x4a5274a4a5294a93, 0x9d294a4e94842108, 0x4210846529467394, 0xe549ca749ce529d2, 0x7394210842518ca5, 0x2946528c61194630]
-def z252 : ℕ := limbs [0x9d6, 0x75ad25294a529ce9, 0x294a74a4a5294a53, 0x9d25294e94842108, 0x4210846108467384, 0x6149ca729ce529ca, 0x7394210842118ca1, 0x846528c61184630]
-def z253 : ℕ := limbs [0xad6, 0x75ad293a52929ce9, 0x294a74a5274a5253, 0x9d25294e948ca528, 0xc63294e108467384, 0x6149d2729ce549ca, 0x7394a3294a118ca1, 0x846528c65184630]
-def z254 : ℕ := limbs [0xad6, 0x75ad292a52929ce9, 0x294a74a5254a5253, 0x9d25294e9484a528, 0x421294e108467384, 0x6149d2729ce549ca, 0x7394a1294a118ca1, 0x846528c65184630]
-def z255 : ℕ := limbs [0x9d2, 0x73a4e7594e7394e9, 0x29ce53a4a9194a51, 0x94e32946539c2319, 0x4e7084a118c25384, 0x63394e7394e5294a, 0x328c6708c6308ca1, 0x18c2328c2318c230]
-def z256 : ℕ := limbs [0xad6, 0x94ad2949d29394e9, 0x29ce53a5293a5272, 0x9d2539ca74946528, 0xca518ce118c25384, 0x6339d27394e549ce, 0x5394a5194a308ca1, 0x18c2328c6518c230]
-def z257 : ℕ := limbs [0x9ce, 0x74a4e559ce7294a7, 0x39ce74a469294a31, 0x8ca5294a73942109, 0xce718ca10842528c, 0xa3494e539ce528ca, 0x528c2718c6108463, 0x18c6528c2308c630]
-def z258 : ℕ := limbs [0x952, 0x74a4e338c63294a7, 0x294a539ca9294a73, 0x9d2739ce94942109, 0x4a50846318c6738c, 0xa349465294a329ce, 0x7394250842318ca3, 0x18c652846118c630]
-def z259 : ℕ := limbs [0x9d2, 0x94a4e5394a5394a7, 0x39ce539ce939ce93, 0x9d294a4e94946319, 0x4a518ca529467394, 0xe5494a5394a339d2, 0x73946518c6518ca5, 0x2946528463194630]
-def z260 : ℕ := limbs [0x9d2, 0x749ce759ca739ca9, 0x394e549ca928ca52, 0x8ce51946729c6119, 0xca708c6308c27284, 0xa1394e739ca5294a, 0x518c6718463184a3, 0x8c2518c2318c610]
-def z261 : ℕ := limbs [0x9d2, 0x54a4e749ce729ce9, 0x294a74a4a7294a32, 0x94e318ca73946319, 0x4a518ca108467384, 0x61494e729ce52946, 0x528c6518c6118ca1, 0x846528c23184630]
-def z262 : ℕ := limbs [0xa52, 0x74a4e94a52939ce9, 0x39ce74a4e739ce52, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5394a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
-def z263 : ℕ := limbs [0xad2, 0x95ad274a529294a7, 0x39ce74a4e94a5252, 0x94e739ce948c6319, 0x4a5294e10842528c, 0xa349d2539ce5494e, 0x739465294a108463, 0x18c6528c6508c630]
-def z264 : ℕ := limbs [0x9d2, 0x73a4e548ca528ca7, 0x194a329ceb29ce72, 0x9d2539ca749c2319, 0x4e7084a118c25384, 0x63394a528ca339ce, 0x53946708c6308ca1, 0x18c232846318c230]
-def z265 : ℕ := limbs [0xad6, 0x95a5294a4e939ca9, 0x394e549d2949d273, 0x952729ca9394a329, 0x465194a308c27284, 0xa139d2739ca549ce, 0x7294a528ca3184a3, 0x8c2518c6518c610]
-def z266 : ℕ := limbs [0xa4e, 0x919ca969d2948ca7, 0x3a52329d2d2a5290, 0x94e54a4233aca73a, 0x56b2952539c25394, 0xe738d2548ca34952, 0x128ceb29ce708ca5, 0x39c232842719c230]
-def z267 : ℕ := limbs [0x9d2, 0xb2a4e7594e7594e9, 0x4ad653a4a9294a90, 0x94e54a42339c2319, 0x4e7084a539c25394, 0xe7394e7594e52952, 0x128c6708c6708ca5, 0x39c2328c2319c230]
-def z268 : ℕ := limbs [0xa52, 0xb2a4e969d29594e9, 0x4ad653a4eb19ce90, 0x94e54a4233a46529, 0xd2918ce539c25394, 0xe739527594e53952, 0x128ca9194a708ca5, 0x39c2328c2519c230]
-def z269 : ℕ := limbs [0xad2, 0x72a4eb5a56b394e9, 0x29ce53a5292a5250, 0x94e52942339ca739, 0x4e72952118c25384, 0x6339567394e5494a, 0x128ce729ce308ca1, 0x18c2328c2718c230]
-def z270 : ℕ := limbs [0xad2, 0x92a4eb6a56b494e9, 0x3a5253a52b2a5270, 0x94e339c233a4a739, 0xd29295232942538c, 0xa539567494e5494e, 0x128ce929ce508ca3, 0x2942328c27194230]
-def z271 : ℕ := limbs [0x9d2, 0xb2a4e7594e7594e9, 0x4ad653a4a9194a90, 0x94e54a42339c2319, 0x4e7084a539c25394, 0xe7394e7594e52952, 0x128c6708c6708ca5, 0x39c2328c2319c230]
-def z272 : ℕ := limbs [0xad2, 0x72a4eb5a56b394e9, 0x29ce53a5292a5250, 0x94e32942339ca739, 0x4e72952118c25384, 0x6339567394e5494a, 0x128ce729ce308ca1, 0x18c2328c2718c230]
-def z273 : ℕ := limbs [0x9d2, 0x73a4e7494e7394e9, 0x29ce53a4a7194a51, 0x94e3294653942318, 0xca5084a118c25384, 0x63394e7394e5294a, 0x328c6508c6308ca1, 0x18c2328c2318c230]
-def z274 : ℕ := limbs [0xad2, 0x93a4eb6a56b494e9, 0x3a5253a52b3a5271, 0x94e539c653a4a739, 0xd29295232942538c, 0xa539567494e5494e, 0x328ce929ce508ca3, 0x2942328c27194230]
-def z275 : ℕ := limbs [0xad2, 0xb3a4eb7a56b594e9, 0x4ad653a52d3a5291, 0x94e74a4653aca73a, 0x56b2952539c25394, 0xe739567594e54952, 0x328ceb29ce708ca5, 0x39c2328c2719c230]
-def z276 : ℕ := limbs [0xad2, 0x93a4e959d2938ca7, 0x19ce329d6d4ad692, 0x9d254a4a74a4a739, 0x5292952129425384, 0x653952538ca359d2, 0x5394e929ce508ca1, 0x2942328467194230]
-def z277 : ℕ := limbs [0xad2, 0x93a4eb6a56b494e9, 0x2a5253a52b3a5271, 0x94e339c653a4a739, 0x5292952129425384, 0x6539567494e5494e, 0x328ce929ce508ca1, 0x2942328c27194230]
-def z278 : ℕ := limbs [0xa56, 0xb4ad27494e7494e9, 0x2a5253a4e929ce92, 0x9d254a4a74942319, 0x4a5084a129425384, 0x6539ce7494e539d2, 0x53946508c6508ca1, 0x2942328c63194230]
-def z279 : ℕ := limbs [0xad6, 0xb4ad2959d29494e9, 0x2a5253a52b3a5292, 0x9d254a4a749c6528, 0xce718ce129425384, 0x6539d27494e549d2, 0x5394a7194a508ca1, 0x2942328c65194230]
-def z280 : ℕ := limbs [0xa56, 0xb4ad27494e7494e9, 0x2a5253a4e929ce92, 0x9d254a4a74942318, 0xca5084a129425384, 0x6539ce7494e539d2, 0x53946508c6508ca1, 0x2942328c63194230]
-def z281 : ℕ := limbs [0xa56, 0x94ad27494e7394e9, 0x29ce53a4e929ce72, 0x9d2539ca74942318, 0xca5084a118c25384, 0x6339ce7394e539ce, 0x53946508c6308ca1, 0x18c2328c6318c230]
-def z282 : ℕ := limbs [0xad2, 0x73a4eb5a56b394e9, 0x29ce53a5293a5251, 0x94e32946539ca739, 0x4e72952118c25384, 0x6339567394e5494a, 0x328ce729ce308ca1, 0x18c2328c2718c230]
-def z283 : ℕ := limbs [0xa4a, 0x939ca96a529494a7, 0x4a52539ced4a5271, 0x8ca94a4a73ace73a, 0xd6b39d2739c6739d, 0x2748d25494a348d2, 0x528ceb39ce718ca7, 0x39c652842719c630]
-def z284 : ℕ := limbs [0x9ca, 0xb4a4e759ce759ce9, 0x5ad674a4a9294a50, 0x84694a4a739c6319, 0xce718ca739c6739d, 0x27494e759ce52852, 0x528c6718c6718ca7, 0x39c6528c2319c630]
-def z285 : ℕ := limbs [0xa4e, 0xb4a4e96a52959ce9, 0x5ad674a4ab39ce71, 0x8ca94a4a73a4a52a, 0x529294e739c6739d, 0x274952759ce538d2, 0x528ca9294a718ca7, 0x39c6528c2519c630]
-def z286 : ℕ := limbs [0xace, 0xb49ceb7ad2b59ca9, 0x5a56549ced49d271, 0x84a93a4672ace53a, 0xd2b29ce729c27295, 0x253956759ca548d2, 0x518ceb394e7184a7, 0x29c2518c2719c610]
-def z287 : ℕ := limbs [0xaca, 0x74a4eb5ad6b39ce9, 0x39ce74a4a94a5250, 0x8465294a739ce739, 0xce739d2318c6738c, 0xa34956739ce5484a, 0x528ce739ce318ca3, 0x18c6528c2718c630]
-def z288 : ℕ := limbs [0xace, 0x94a4eb6ad6b49ce9, 0x4a5274a4eb4a5251, 0x8ca739ca73a4e73a, 0x52939d2529467394, 0xe54956749ce548ce, 0x528ce939ce518ca5, 0x2946528c27194630]
-def z289 : ℕ := limbs [0xace, 0xb3a4eb7a56b594e9, 0x4ad653a4ed3a5270, 0x8ca74a4653aca73a, 0x56b2952539c25394, 0xe739567594e548d2, 0x328ceb29ce708ca5, 0x39c2328c2719c230]
-def z290 : ℕ := limbs [0xaca, 0xb4a4eb7ad6b59ce9, 0x5ad674a4ad4a5250, 0x84694a4a73ace73a, 0xd6b39d2739c6739d, 0x274956759ce54852, 0x528ceb39ce718ca7, 0x39c6528c2719c630]
-def z291 : ℕ := limbs [0x9ca, 0xb4a4e759ce759ce9, 0x5ad674a469294a50, 0x84694a4a739c6319, 0xce718ca739c6739d, 0x27494e759ce52852, 0x528c6718c6718ca7, 0x39c6528c2319c630]
-def z292 : ℕ := limbs [0xaca, 0x74a4eb5ad6b39ce9, 0x39ce74a4a94a5230, 0x8465294a739ce739, 0xce739d2318c6738c, 0xa34956739ce5484a, 0x528ce739ce318ca3, 0x18c6528c2718c630]
-def z293 : ℕ := limbs [0x94e, 0x939ca5494a5494a7, 0x4a52539c6718c692, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x2748ca5494a31952, 0x528c250842718ca7, 0x39c652842119c630]
-def z294 : ℕ := limbs [0x94a, 0xb4a4e5494a559ce9, 0x5ad674a42718c650, 0x84694a4a73942109, 0x4a50846739c6739d, 0x27494a759ce51852, 0x528c250842718ca7, 0x39c6528c2119c630]
-def z295 : ℕ := limbs [0x94e, 0xb4a4e5494a559ce9, 0x5ad674a46718c671, 0x8ca94a4a73942109, 0x4a50846739c6739d, 0x27494a759ce518d2, 0x528c250842718ca7, 0x39c6528c2119c630]
-def z296 : ℕ := limbs [0x952, 0xb49ce5494a559ca9, 0x5a56549c6718c692, 0x8ce93a4672942109, 0x4a50846729c27295, 0x25394a759ca51952, 0x518c2508427184a7, 0x29c2518c2119c610]
-def z297 : ℕ := limbs [0x952, 0x94a4e5494a549ce9, 0x4a5274a46718c672, 0x94e739ca73942109, 0x4a50846529467394, 0xe5494a749ce5194e, 0x528c250842518ca5, 0x2946528c21194630]
-def z298 : ℕ := limbs [0x952, 0xb3a4e5494a5594e9, 0x4ad653a46718c691, 0x94e74a4653942109, 0x4a50846539c25394, 0xe7394a7594e51952, 0x328c250842708ca5, 0x39c2328c2119c230]
-def z299 : ℕ := limbs [0xa4e, 0x539ca94a529294a7, 0x294a539d274a5232, 0x94e318ca7394e739, 0x4a539d2108467384, 0x6148d25294a34946, 0x528ce539ce118ca1, 0x846528427184630]
-def z300 : ℕ := limbs [0xaca, 0x54a4eb4ad6b29ce9, 0x294a74a4a74a5210, 0x846318ca7394e739, 0x4a539d2108467384, 0x614956729ce54846, 0x528ce539ce118ca1, 0x846528c27184630]
-def z301 : ℕ := limbs [0xace, 0x54a4eb4ad6b29ce9, 0x294a74a4e74a5231, 0x8ca318ca7394e739, 0x4a539d2108467384, 0x614956729ce548c6, 0x528ce539ce118ca1, 0x846528c27184630]
-def z302 : ℕ := limbs [0xa52, 0x54a4e94a52929ce9, 0x294a74a4e739ce32, 0x94e318ca7394a529, 0x4a5294e108467384, 0x614952729ce53946, 0x528ca5294a118ca1, 0x846528c25184630]
-def z303 : ℕ := limbs [0xad2, 0x549ceb4ad2b29ca9, 0x294a549d2749d232, 0x8ce318c67294e539, 0x4a529ce108427284, 0x613956729ca54946, 0x518ce5394e1184a1, 0x842518c27184610]
-def z304 : ℕ := limbs [0xad2, 0x53a4eb4a56b294e9, 0x294a53a5273a5231, 0x94e318c65394a739, 0x4a52952108425384, 0x6139567294e54946, 0x328ce529ce108ca1, 0x842328c27184230]
-def z305 : ℕ := limbs [0xa46, 0x939ca76a52938c65, 0x4a52539cad4a5250, 0x84694a4a73a4a52a, 0xd6b39d252942529d, 0x2748d23494a34852, 0x528cab39ce508467, 0x39c652842709c630]
-def z306 : ℕ := limbs [0x9ca, 0xb4a4e559ce7494a7, 0x5ad674a4a9294a50, 0x84694a4a73942109, 0xce718ca52942529d, 0x27494e559ce52852, 0x528c2718c6508467, 0x39c6528c2309c630]
-def z307 : ℕ := limbs [0xa4a, 0xb4a4e76a529494a7, 0x5ad674a46b39ce50, 0x84694a4a739c631a, 0x529294e52942529d, 0x274952559ce53852, 0x528c69294a508467, 0x39c6528c2509c630]
-def z308 : ℕ := limbs [0xaca, 0x74a4e95ad6b294a7, 0x39ce74a4a94a5250, 0x8465294a7394a529, 0xce739d210842528c, 0xa34956539ce5484a, 0x528ca739ce108463, 0x18c6528c2708c630]
-def z309 : ℕ := limbs [0xaca, 0x94a4e96ad6b394a7, 0x4a5274a4ab4a5230, 0x846739ca739ca52a, 0x52939d2318c25294, 0xe54956549ce5484e, 0x528ca939ce308465, 0x2946528c27094630]
-def z310 : ℕ := limbs [0x9ca, 0xb4a4e559ce7494a7, 0x5ad674a469294a50, 0x84694a4a73942109, 0xce718ca52942529d, 0x27494e559ce52852, 0x528c2718c6508467, 0x39c6528c2309c630]
-def z311 : ℕ := limbs [0xaca, 0x74a4e95ad6b294a7, 0x39ce74a4a94a5230, 0x8465294a7394a529, 0xce739d210842528c, 0xa34956539ce5484a, 0x528ca739ce108463, 0x18c6528c2708c630]
-def z312 : ℕ := limbs [0x94e, 0xb4a4e5494a5494a7, 0x5ad674a46718c671, 0x8ca94a4a73942109, 0x4a5084652942529d, 0x27494a559ce518d2, 0x528c250842508467, 0x39c6528c2109c630]
-def z313 : ℕ := limbs [0x9ce, 0x74a4e549ce7294a7, 0x39ce74a467294a31, 0x8ca5294a738c2109, 0x4a518ca10842528c, 0xa3494e539ce528ca, 0x528c2518c6108463, 0x18c6528c2308c630]
-def z314 : ℕ := limbs [0xace, 0x54a4e94ad6b294a7, 0x294a74a4e74a5231, 0x8ca318ca7394a529, 0x4a539d2108425284, 0x614956529ce548c6, 0x528ca539ce108461, 0x846528c27084630]
-def z315 : ℕ := limbs [0xad2, 0xb49ceb7ad2b59ca9, 0x5a56549d2d49d292, 0x8ce93a4672ace53a, 0xd2b29ce729c27295, 0x253956759ca54952, 0x518ceb394e7184a7, 0x29c2518c2719c610]
-def z316 : ℕ := limbs [0xace, 0x94a4e96ad6b394a7, 0x4a5274a4eb4a5251, 0x8ca739ca739ca52a, 0x52939d2318c25294, 0xe54956549ce548ce, 0x528ca939ce308465, 0x2946528c27094630]
-def z317 : ℕ := limbs [0xad2, 0x949ceb6ad2b49ca9, 0x49d2549d2b49d272, 0x8ce729c672a4e53a, 0x4e929ce51942728c, 0xe33956749ca5494e, 0x518ce9394e5184a5, 0x1942518c27194610]
-def z318 : ℕ := limbs [0x9ce, 0xb4a4e3494a538c65, 0x4a52539ced4a5292, 0x94eb5ace949c631a, 0x529294e52942529d, 0x27494a3494a34956, 0x739469294a508467, 0x39c652846509c630]
-def z319 : ℕ := limbs [0x94e, 0x939ca5494a5494a7, 0x4a52539ceb39ce92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ca5494a33952, 0x528ca9294a718ca7, 0x39c652842519c630]
-def z320 : ℕ := limbs [0x9d2, 0xb49ce54946549467, 0x49d233952d49d2b3, 0x952b4aca93a4a32a, 0x4e9194a729c27295, 0x25394a54946349d6, 0x7294a928ca7184a7, 0x29c251846519c610]
-def z321 : ℕ := limbs [0x9d2, 0x74a4e5494a5294a7, 0x294a539d294a5273, 0x9d2739ce9494a529, 0x4a5294e318c6738c, 0xa3494a5294a349ce, 0x7394a5294a318ca3, 0x18c652846518c630]
-def z322 : ℕ := limbs [0x952, 0x74a4e338c63294a7, 0x294a539d294a5273, 0x9d2739ce9494a529, 0x4a5294e318c6738c, 0xa349465294a349ce, 0x7394a5294a318ca3, 0x18c652846518c630]
-def z323 : ℕ := limbs [0x9d2, 0x94a4e5394a5394a7, 0x39ce539d2b4a5293, 0x9d294a4e949ca529, 0xce7294e529467394, 0xe5494a5394a349d2, 0x7394a7294a518ca5, 0x2946528465194630]
-def z324 : ℕ := limbs [0x9d2, 0xb3a4e548ca548ca7, 0x3a52329d2d3a52b2, 0x9d295aca74a46529, 0xd2918ce539c25394, 0xe7394a548ca349d6, 0x5394a9194a708ca5, 0x39c232846519c230]
-def z325 : ℕ := limbs [0x94e, 0xb4a4e338c6338c65, 0x4a52539ced4a5292, 0x94eb5ace949c631a, 0x529294e52942529d, 0x2749463494a34956, 0x739469294a508467, 0x39c652846509c630]
-def z326 : ℕ := limbs [0x8ce, 0xb4a4e12842138c65, 0x4a52539ced4a5292, 0x94eb5ace949c631a, 0x529294e52942529d, 0x2749423494a34956, 0x739469294a508467, 0x39c652846509c630]
-def z327 : ℕ := limbs [0x94e, 0x939ca338c63494a7, 0x4a52539ceb39ce92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748c65494a33952, 0x528ca9294a718ca7, 0x39c652842519c630]
-def z328 : ℕ := limbs [0x8ce, 0x939ca128421494a7, 0x4a52539ceb39ce92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748c25494a33952, 0x528ca9294a718ca7, 0x39c652842519c630]
-def z329 : ℕ := limbs [0x952, 0xb4a4e338c63494a7, 0x4a52539ceb39ceb3, 0x9d2b5ace949c6319, 0xce718ca739c6739d, 0x2749465494a339d6, 0x73946718c6718ca7, 0x39c652846319c630]
-def z330 : ℕ := limbs [0x8d2, 0xb4a4e128421494a7, 0x4a52539ceb39ceb3, 0x9d2b5ace949c6319, 0xce718ca739c6739d, 0x2749425494a339d6, 0x73946718c6718ca7, 0x39c652846319c630]
-def z331 : ℕ := limbs [0x952, 0xb49ce338c6349467, 0x49d233952d49d2b3, 0x952b4aca93a4a32a, 0x4e9194a729c27295, 0x25394654946349d6, 0x7294a928ca7184a7, 0x29c251846519c610]
-def z332 : ℕ := limbs [0x8d2, 0xb49ce12842149467, 0x49d233952d49d2b3, 0x952b4aca93a4a32a, 0x4e9194a729c27295, 0x25394254946349d6, 0x7294a928ca7184a7, 0x29c251846519c610]
-def z333 : ℕ := limbs [0x9d2, 0x74a4e5394a5294a7, 0x294a539d294a5273, 0x9d2739ce9494a529, 0x4a5294e318c6738c, 0xa3494a5294a349ce, 0x7394a5294a318ca3, 0x18c652846518c630]
-def z334 : ℕ := limbs [0x952, 0x74a4e328c63294a7, 0x294a539d294a5273, 0x9d2739ce9494a529, 0x4a5294e318c6738c, 0xa349465294a349ce, 0x7394a5294a318ca3, 0x18c652846518c630]
-def z335 : ℕ := limbs [0x952, 0x94a4e338c63394a7, 0x39ce539d2b4a5293, 0x9d294a4e949ca529, 0xce7294e529467394, 0xe549465394a349d2, 0x7394a7294a518ca5, 0x2946528465194630]
-def z336 : ℕ := limbs [0x8d2, 0x94a4e128421394a7, 0x39ce539d2b4a5293, 0x9d294a4e949ca529, 0xce7294e529467394, 0xe549425394a349d2, 0x7394a7294a518ca5, 0x2946528465194630]
-def z337 : ℕ := limbs [0x952, 0xb3a4e338c6348ca7, 0x3a52329d2d3a52b2, 0x9d295aca74a46529, 0xd2918ce539c25394, 0xe73946548ca349d6, 0x5394a9194a708ca5, 0x39c232846519c230]
-def z338 : ℕ := limbs [0x8d2, 0xb3a4e12842148ca7, 0x3a52329d2d3a52b2, 0x9d295aca74a46529, 0xd2918ce539c25394, 0xe73942548ca349d6, 0x5394a9194a708ca5, 0x39c232846519c230]
-def z339 : ℕ := limbs [0x952, 0xb4a4e338c63494a7, 0x4a52539d2d4a52b3, 0x9d2b5ace94a4a52a, 0x529294e739c6739d, 0x2749465494a349d6, 0x7394a9294a718ca7, 0x39c652846519c630]
-def z340 : ℕ := limbs [0x8d2, 0xb4a4e128421494a7, 0x4a52539d2d4a52b3, 0x9d2b5ace94a4a52a, 0x529294e739c6739d, 0x2749425494a349d6, 0x7394a9294a718ca7, 0x39c652846519c630]
-def z341 : ℕ := limbs [0x8d2, 0x74a4e118421294a7, 0x294a539d294a5273, 0x9d2739ce9494a529, 0x4a5294e318c6738c, 0xa349425294a349ce, 0x7394a5294a318ca3, 0x18c652846518c630]
-def z342 : ℕ := limbs [0x952, 0xb4a4e338c63494a7, 0x4a52539ca9294ab3, 0x9d2b5ace94942109, 0x4a50846739c6739d, 0x2749465494a329d6, 0x7394250842718ca7, 0x39c652846119c630]
-def z343 : ℕ := limbs [0x8d2, 0xb4a4e128421494a7, 0x4a52539ca9294ab3, 0x9d2b5ace94942109, 0x4a50846739c6739d, 0x2749425494a329d6, 0x7394250842718ca7, 0x39c652846119c630]
-def z344 : ℕ := limbs [0x9d2, 0x54a4e5294a5194a7, 0x18c6539d274a5253, 0x9d25294e948ca528, 0xc63294e108467384, 0x61494a5194a349ca, 0x7394a3294a118ca1, 0x846528465184630]
-def z345 : ℕ := limbs [0x952, 0x54a4e318c63194a7, 0x18c6539d274a5253, 0x9d25294e948ca528, 0xc63294e108467384, 0x6149465194a349ca, 0x7394a3294a118ca1, 0x846528465184630]
-def z346 : ℕ := limbs [0xa52, 0x54a4e739ce7194a7, 0x18c6539d274a5253, 0x9d25294e948ca528, 0xc63294e108467384, 0x61494e5194a349ca, 0x7394a3294a118ca1, 0x846528465184630]
-def z347 : ℕ := limbs [0xa4e, 0x54a4e529ce718c65, 0x18c6539ce74a5252, 0x94e5294e948c6318, 0xc63294e108425284, 0x61494e3194a3494a, 0x739463294a108461, 0x846528465084630]
-def z348 : ℕ := limbs [0x9ce, 0x539ca729ce7194a7, 0x18c6539ce739ce52, 0x94e5294a738ca528, 0xc63294e108467384, 0x6148ce5194a3394a, 0x528ca3294a118ca1, 0x846528425184630]
-def z349 : ℕ := limbs [0xa52, 0x549ce729ca719467, 0x18c633952749d253, 0x9525294a938ca328, 0xc63194a108427284, 0x61394e51946349ca, 0x7294a328ca1184a1, 0x842518465184610]
-def z350 : ℕ := limbs [0xa52, 0x53a4e7294e718ca7, 0x18c6329d273a5252, 0x9d25294a748c6528, 0xc6318ce108425384, 0x61394e518ca349ca, 0x5394a3194a108ca1, 0x842328465184230]
-def z351 : ℕ := limbs [0xa4e, 0x938ca96a4e949467, 0x49d233952d495292, 0x84e92a4271ace53a, 0xd2b29ce729c27295, 0x2538d25494634952, 0x508ceb394e7184a7, 0x29c251842719c610]
-def z352 : ℕ := limbs [0x9d2, 0xb494e759ca759ca9, 0x5a56549ca9294a92, 0x84e92a42719c6119, 0xca708c6729c27295, 0x25394e759ca52952, 0x508c6718467184a7, 0x29c2518c2319c610]
-def z353 : ℕ := limbs [0xa52, 0xb494e96a4e959ca9, 0x5a56549ceb38ce92, 0x84e92a4271a4a32a, 0x4e9194a729c27295, 0x253952759ca53952, 0x508ca928ca7184a7, 0x29c2518c2519c610]
-def z354 : ℕ := limbs [0xad2, 0x7494eb5ad2b39ca9, 0x394e549d29495252, 0x84e52942719ce539, 0xca729ce308c27284, 0xa13956739ca5494a, 0x508ce7394e3184a3, 0x8c2518c2718c610]
-def z355 : ℕ := limbs [0xad2, 0x9494eb6ad2b49ca9, 0x49d2549d2b495272, 0x84e719c271a4e53a, 0x4e929ce51942728c, 0xe33956749ca5494e, 0x508ce9394e5184a5, 0x1942518c27194610]
-def z356 : ℕ := limbs [0x9d2, 0xb494e759ca759ca9, 0x5a56549ca928ca92, 0x84e92a42719c6119, 0xca708c6729c27295, 0x25394e759ca52952, 0x508c6718467184a7, 0x29c2518c2319c610]
-def z357 : ℕ := limbs [0xad2, 0x7494eb5ad2b39ca9, 0x394e549d29495252, 0x84e51942719ce539, 0xca729ce308c27284, 0xa13956739ca5494a, 0x508ce7394e3184a3, 0x8c2518c2718c610]
-def z358 : ℕ := limbs [0x9d2, 0x749ce749ca739ca9, 0x394e549ca728ca52, 0x8ce5194672946119, 0x46508c6308c27284, 0xa1394e739ca5294a, 0x518c6518463184a3, 0x8c2518c2318c610]
-def z359 : ℕ := limbs [0xa4e, 0x539ca95a529394a7, 0x39ce539d294a5252, 0x94e5294a73a4e73a, 0x52939d2529467394, 0xe548d25394a3494a, 0x528ce939ce518ca5, 0x2946528427194630]
-def z360 : ℕ := limbs [0xace, 0x74a4e96ad6b394a7, 0x4a5274a4e94a5231, 0x8ca5294a739ca52a, 0x52939d2318c25294, 0xe54956549ce548ca, 0x528ca939ce308465, 0x2946528c27094630]
-def z361 : ℕ := limbs [0x9d2, 0x74a4e749ce749ce9, 0x4a5274a4a9294a52, 0x94e5294a73946319, 0x4a518ca529467394, 0xe5494e749ce5294a, 0x528c6518c6518ca5, 0x2946528c23194630]
-def z362 : ℕ := limbs [0x9d2, 0x54a4e749ce749ce9, 0x4a5274a4a7294a32, 0x94e318ca73946319, 0x4a518ca529467394, 0xe5494e749ce52946, 0x528c6518c6518ca5, 0x2946528c23194630]
-def z363 : ℕ := limbs [0xa52, 0x74a4e95a52949ce9, 0x4a5274a4e739ce52, 0x94e5294a739ca529, 0xce7294e529467394, 0xe54952749ce5394a, 0x528ca7294a518ca5, 0x2946528c25194630]
-def z364 : ℕ := limbs [0xad2, 0x749ceb6ad2b49ca9, 0x49d2549d2949d252, 0x8ce5194672a4e53a, 0x4e929ce51942728c, 0xe33956749ca5494a, 0x518ce9394e5184a5, 0x1942518c27194610]
-def z365 : ℕ := limbs [0xad2, 0x73a4eb6a56b494e9, 0x3a5253a5293a5251, 0x94e3294653a4a739, 0xd29295232942538c, 0xa539567494e5494a, 0x328ce929ce508ca3, 0x2942328c27194230]
-def z366 : ℕ := limbs [0xa4e, 0x539ca95a529394a7, 0x39ce539d274a5232, 0x94e318ca73a4e73a, 0x52939d2529467394, 0xe548d25394a34946, 0x528ce939ce518ca5, 0x2946528427194630]
-def z367 : ℕ := limbs [0xa4e, 0x339ca95a529394a7, 0x39ce539d254a5212, 0x94e1084a73a4e73a, 0x52939d2529467394, 0xe548d25394a34942, 0x528ce939ce518ca5, 0x2946528427194630]
-def z368 : ℕ := limbs [0xace, 0x54a4e96ad6b394a7, 0x4a5274a4e74a5231, 0x8ca318ca739ca52a, 0x52939d2318c25294, 0xe54956549ce548c6, 0x528ca939ce308465, 0x2946528c27094630]
-def z369 : ℕ := limbs [0xace, 0x34a4e96ad6b394a7, 0x4a5274a4e54a5211, 0x8ca1084a739ca52a, 0x52939d2318c25294, 0xe54956549ce548c2, 0x528ca939ce308465, 0x2946528c27094630]
-def z370 : ℕ := limbs [0x9d2, 0x74a4e749ce749ce9, 0x4a5274a4a7294a52, 0x94e5294a73946319, 0x4a518ca529467394, 0xe5494e749ce5294a, 0x528c6518c6518ca5, 0x2946528c23194630]
-def z371 : ℕ := limbs [0x9d2, 0x54a4e749ce749ce9, 0x4a5274a4a5294a32, 0x94e318ca73946319, 0x4a518ca529467394, 0xe5494e749ce52946, 0x528c6518c6518ca5, 0x2946528c23194630]
-def z372 : ℕ := limbs [0xa52, 0x54a4e95a52949ce9, 0x4a5274a4e739ce32, 0x94e318ca739ca529, 0xce7294e529467394, 0xe54952749ce53946, 0x528ca7294a518ca5, 0x2946528c25194630]
-def z373 : ℕ := limbs [0xa52, 0x34a4e95a52949ce9, 0x4a5274a4e539ce12, 0x94e1084a739ca529, 0xce7294e529467394, 0xe54952749ce53942, 0x528ca7294a518ca5, 0x2946528c25194630]
-def z374 : ℕ := limbs [0xad2, 0x549ceb6ad2b49ca9, 0x49d2549d2749d232, 0x8ce318c672a4e53a, 0x4e929ce51942728c, 0xe33956749ca54946, 0x518ce9394e5184a5, 0x1942518c27194610]
-def z375 : ℕ := limbs [0xad2, 0x349ceb6ad2b49ca9, 0x49d2549d2549d212, 0x8ce1084672a4e53a, 0x4e929ce51942728c, 0xe33956749ca54942, 0x518ce9394e5184a5, 0x1942518c27194610]
-def z376 : ℕ := limbs [0xad2, 0x54a4eb5ad6b39ce9, 0x39ce74a5274a5232, 0x94e318ca739ce739, 0xce739d2318c6738c, 0xa34956739ce54946, 0x528ce739ce318ca3, 0x18c6528c2718c630]
-def z377 : ℕ := limbs [0xad2, 0x34a4eb5ad6b39ce9, 0x39ce74a5254a5212, 0x94e1084a739ce739, 0xce739d2318c6738c, 0xa34956739ce54942, 0x528ce739ce318ca3, 0x18c6528c2718c630]
-def z378 : ℕ := limbs [0xad2, 0x53a4eb6a56b494e9, 0x3a5253a5273a5231, 0x94e318c653a4a739, 0xd29295232942538c, 0xa539567494e54946, 0x328ce929ce508ca3, 0x2942328c27194230]
-def z379 : ℕ := limbs [0xad2, 0x33a4eb6a56b494e9, 0x3a5253a5253a5211, 0x94e1084653a4a739, 0xd29295232942538c, 0xa539567494e54942, 0x328ce929ce508ca3, 0x2942328c27194230]
-def z380 : ℕ := limbs [0xad2, 0x54a4eb6ad6b49ce9, 0x4a5274a5274a5232, 0x94e318ca73a4e73a, 0x52939d2529467394, 0xe54956749ce54946, 0x528ce939ce518ca5, 0x2946528c27194630]
-def z381 : ℕ := limbs [0xad2, 0x34a4eb6ad6b49ce9, 0x4a5274a5254a5212, 0x94e1084a73a4e73a, 0x52939d2529467394, 0xe54956749ce54942, 0x528ce939ce518ca5, 0x2946528c27194630]
-def z382 : ℕ := limbs [0x9d2, 0x34a4e749ce749ce9, 0x4a5274a4a3294a12, 0x94e1084a73946319, 0x4a518ca529467394, 0xe5494e749ce52942, 0x528c6518c6518ca5, 0x2946528c23194630]
-def z383 : ℕ := limbs [0x94e, 0x739ca5394a5394a7, 0x39ce539c6518c672, 0x94e739ca738c2108, 0xc630846529467394, 0xe548ca5394a3194e, 0x528c230842518ca5, 0x2946528421194630]
-def z384 : ℕ := limbs [0x94e, 0x94a4e5394a5394a7, 0x4a5274a46518c651, 0x8ca739ca738c2108, 0xc630846318c25294, 0xe5494a549ce518ce, 0x528c230842308465, 0x2946528c21094630]
-def z385 : ℕ := limbs [0x952, 0x74a4e5394a549ce9, 0x4a5274a46518c652, 0x94e5294a738c2108, 0xc630846529467394, 0xe5494a749ce5194a, 0x528c230842518ca5, 0x2946528c21194630]
-def z386 : ℕ := limbs [0x952, 0x54a4e5394a549ce9, 0x4a5274a46318c632, 0x94e318ca738c2108, 0xc630846529467394, 0xe5494a749ce51946, 0x528c230842518ca5, 0x2946528c21194630]
-def z387 : ℕ := limbs [0x952, 0x94a4e5394a549ce9, 0x4a5274a46718c672, 0x94e739ca738c2108, 0xc630846529467394, 0xe5494a749ce5194e, 0x528c230842518ca5, 0x2946528c21194630]
-def z388 : ℕ := limbs [0x952, 0x949ce5394a549ca9, 0x49d2549c6518c672, 0x8ce729c6728c2108, 0xc63084651942728c, 0xe3394a749ca5194e, 0x518c2308425184a5, 0x1942518c21194610]
-def z389 : ℕ := limbs [0x952, 0x93a4e5394a5494e9, 0x3a5253a46518c671, 0x94e539c6538c2108, 0xc63084632942538c, 0xa5394a7494e5194e, 0x328c230842508ca3, 0x2942328c21194230]
-def z390 : ℕ := limbs [0xad2, 0x54a4eb4ad6b29ce9, 0x294a74a5274a5232, 0x94e318ca7394e739, 0x4a539d2108467384, 0x614956729ce54946, 0x528ce539ce118ca1, 0x846528c27184630]
-def z391 : ℕ := limbs [0xad2, 0x34a4eb4ad6b29ce9, 0x294a74a5254a5212, 0x94e1084a7394e739, 0x4a539d2108467384, 0x614956729ce54942, 0x528ce539ce118ca1, 0x846528c27184630]
-def z392 : ℕ := limbs [0xace, 0x74a4e95ad6b294a7, 0x39ce74a4e94a5231, 0x8ca5294a7394a529, 0xce739d210842528c, 0xa34956539ce548ca, 0x528ca739ce108463, 0x18c6528c2708c630]
-def z393 : ℕ := limbs [0xad2, 0x749ceb5ad2b39ca9, 0x394e549d2949d252, 0x8ce51946729ce539, 0xca729ce308c27284, 0xa13956739ca5494a, 0x518ce7394e3184a3, 0x8c2518c2718c610]
-def z394 : ℕ := limbs [0xace, 0x94a4e75a52918c65, 0x39ce539d2d5ad652, 0x94e94a4e9494a52a, 0x52939d2108425294, 0xe549523394a35952, 0x7394a939ce108465, 0x2946528467094630]
-def z395 : ℕ := limbs [0xace, 0x94a4e96ad6b294a7, 0x4a5274a4eb4a5231, 0x8ca739ca7394a52a, 0x52939d2108425294, 0xe54956549ce548ce, 0x528ca939ce108465, 0x2946528c27094630]
-def z396 : ℕ := limbs [0xa52, 0xb5ad2549ce7294a7, 0x4a5274a4a939ce52, 0x94e94a4e94942109, 0x4a518ca108425294, 0xe549ce549ce53952, 0x73942518c6108465, 0x2946528c63094630]
-def z397 : ℕ := limbs [0xad2, 0xb5ad275a529294a7, 0x4a5274a4eb4a5252, 0x94e94a4e948c6319, 0xce7294e108425294, 0xe549d2549ce54952, 0x739467294a108465, 0x2946528c65094630]
-def z398 : ℕ := limbs [0xa52, 0xb5ad2549ce7294a7, 0x4a5274a4a939ce52, 0x94e94a4e948c2109, 0x4a518ca108425294, 0xe549ce549ce53952, 0x73942518c6108465, 0x2946528c63094630]
-def z399 : ℕ := limbs [0xa4e, 0x919ca969529484a7, 0x2a52119d2d3a5291, 0x94e74a4653aca73a, 0x56b2952539c25394, 0xe738d25484a34952, 0x328ceb29ce708ca5, 0x39c232842719c230]
-def z400 : ℕ := limbs [0x9d2, 0xb2a4e5494a5484a7, 0x2a52119ceb29ceb2, 0x9d295aca749c2319, 0x4e7084a539c25394, 0xe7394a5484a339d6, 0x53946708c6708ca5, 0x39c232846319c230]
-def z401 : ℕ := limbs [0xa52, 0xb2a4e758ce7484a7, 0x2a52119d2d3a52b2, 0x9d295aca74a46529, 0xd2918ce539c25394, 0xe7394e5484a349d6, 0x5394a9194a708ca5, 0x39c232846519c230]
-def z402 : ℕ := limbs [0xad2, 0x72a4e949529284a7, 0x294a119d6b4ad672, 0x9d2539ca749ca739, 0x4e72952118c25384, 0x6339525284a359ce, 0x5394e729ce308ca1, 0x18c232846718c230]
-def z403 : ℕ := limbs [0xad2, 0x92a4e959529384a7, 0x19ce119d6d4ad692, 0x9d274a4a74a4a739, 0xd29295232942538c, 0xa539525384a359d2, 0x5394e929ce508ca3, 0x2942328467194230]
-def z404 : ℕ := limbs [0x9d2, 0xb2a4e548ca5484a7, 0x2a52119ceb29ceb2, 0x9d295aca749c2319, 0x4e7084a539c25394, 0xe7394a5484a339d6, 0x53946708c6708ca5, 0x39c232846319c230]
-def z405 : ℕ := limbs [0xad2, 0x72a4e949529284a7, 0x194a119d6b4ad672, 0x9d2539ca749ca739, 0x4e72952118c25384, 0x6339525284a359ce, 0x5394e729ce308ca1, 0x18c232846718c230]
-def z406 : ℕ := limbs [0x9d2, 0x73a4e538ca528ca7, 0x194a329ce929ce72, 0x9d2539ca74942318, 0xca5084a118c25384, 0x63394a528ca339ce, 0x53946508c6308ca1, 0x18c232846318c230]
-def z407 : ℕ := limbs [0xad2, 0x949ce95a4e939467, 0x38ce33956d5a5693, 0x95292a4a93a4e53a, 0x4a929ce509427284, 0xe1395253946359d2, 0x7294e9394e5184a5, 0x942518467194610]
-def z408 : ℕ := limbs [0xad2, 0x949ceb6ad2b49ca9, 0x4952549d2b49d272, 0x8ce719c672a4e53a, 0x4a929ce509427284, 0xe13956749ca5494e, 0x518ce9394e5184a5, 0x942518c27194610]
-def z409 : ℕ := limbs [0xa56, 0xb5a52749ca749ca9, 0x4952549ce9394e93, 0x95292a4a93946119, 0x4a508c6509427284, 0xe139ce749ca539d2, 0x72946518465184a5, 0x942518c63194610]
-def z410 : ℕ := limbs [0xad6, 0xb5a5295a4e949ca9, 0x4952549d2b49d293, 0x95292a4a939ca329, 0xc67194a509427284, 0xe139d2749ca549d2, 0x7294a728ca5184a5, 0x942518c65194610]
-def z411 : ℕ := limbs [0xa56, 0xb5a52749ca749ca9, 0x4952549ce9394e93, 0x95292a4a93946119, 0x46508c6509427284, 0xe139ce749ca539d2, 0x72946518465184a5, 0x942518c63194610]
+def z40 : ℕ := limbs [0xad2, 0xb3a4e969d2948ca7, 0x3a52329d6f4ad6b2, 0x9d295aca74aca73a, 0x56b2952539c25394, 0xe73952548ca359d6, 0x5394eb29ce708ca5, 0x39c232846719c230]
+def z41 : ℕ := limbs [0xa52, 0xb49ce759ca749467, 0x49d233952d49d2b3, 0x952b4aca93a4a32a, 0x4e9194a729c27295, 0x25394e54946349d6, 0x7294a928ca7184a7, 0x29c251846519c610]
+def z42 : ℕ := limbs [0xa52, 0xb3a4e7594e748ca7, 0x3a52329d2d3a52b2, 0x9d295aca74a46529, 0xd2918ce539c25394, 0xe7394e548ca349d6, 0x5394a9194a708ca5, 0x39c232846519c230]
+def z43 : ℕ := limbs [0xa4a, 0x939ca76a52938c65, 0x4a52539d2d4a5292, 0x94e94a4a73ace73a, 0xd6b39d2739c6739d, 0x2748d23494a34952, 0x528ceb39ce718ca7, 0x39c652842719c630]
+def z44 : ℕ := limbs [0x9ca, 0xb4a4e5494a528423, 0x4a52539ceb39ceb3, 0x9d2b5ace949c6319, 0xce718ca739c6739d, 0x27494a1494a339d6, 0x73946718c6718ca7, 0x39c652846319c630]
+def z45 : ℕ := limbs [0xa4e, 0xb4a4e559ce738c65, 0x4a52539d2d4a52b3, 0x9d2b5ace94a4a52a, 0x529294e739c6739d, 0x27494e3494a349d6, 0x7394a9294a718ca7, 0x39c652846519c630]
+def z46 : ℕ := limbs [0xace, 0xb49ce76a4e938c25, 0x49d233956f5a56b3, 0x952b4aca93ace53a, 0xd2b29ce729c27295, 0x25395234946359d6, 0x7294eb394e7184a7, 0x29c251846719c610]
+def z47 : ℕ := limbs [0xaca, 0x74a4e54a52928423, 0x294a539d6b5ad673, 0x9d2739ce949ce739, 0xce739d2318c6738c, 0xa349521294a359ce, 0x7394e739ce318ca3, 0x18c652846718c630]
+def z48 : ℕ := limbs [0xace, 0x94a4e75a52928c65, 0x39ce539d6d5ad693, 0x9d294a4e94a4e73a, 0x52939d2529467394, 0xe549523394a359d2, 0x7394e939ce518ca5, 0x2946528467194630]
+def z49 : ℕ := limbs [0xace, 0xb3a4e769d2938465, 0x3a52329d6f4ad6b2, 0x9d295aca74aca73a, 0x56b2952539c25394, 0xe73952348ca359d6, 0x5394eb29ce708ca5, 0x39c232846719c230]
+def z50 : ℕ := limbs [0xaca, 0xb4a4e56a52928423, 0x4a52539d6f5ad6b3, 0x9d2b5ace94ace73a, 0xd6b39d2739c6739d, 0x2749521494a359d6, 0x7394eb39ce718ca7, 0x39c652846719c630]
+def z51 : ℕ := limbs [0x9ca, 0xb4a4e3494a528423, 0x4a52539ceb39ceb3, 0x9d2b5ace949c6319, 0xce718ca739c6739d, 0x27494a1494a339d6, 0x73946718c6718ca7, 0x39c652846319c630]
+def z52 : ℕ := limbs [0xaca, 0x74a4e54a52918423, 0x294a539d6b5ad673, 0x9d2739ce949ce739, 0xce739d2318c6738c, 0xa349521294a359ce, 0x7394e739ce318ca3, 0x18c652846718c630]
+def z53 : ℕ := limbs [0x94a, 0xb4a4e138c6328423, 0x4a52539ca9294ab3, 0x9d2b5ace94942109, 0x4a50846739c6739d, 0x2749461494a329d6, 0x7394250842718ca7, 0x39c652846119c630]
+def z54 : ℕ := limbs [0x94e, 0xb4a4e338c6338c65, 0x4a52539ca9294ab3, 0x9d2b5ace94942109, 0x4a50846739c6739d, 0x2749463494a329d6, 0x7394250842718ca7, 0x39c652846119c630]
+def z55 : ℕ := limbs [0x94e, 0x939ca338c63494a7, 0x4a52539ca9294a92, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x2748c65494a32952, 0x528c250842718ca7, 0x39c652842119c630]
+def z56 : ℕ := limbs [0x952, 0xb49ce338c6349467, 0x49d23394a9294ab3, 0x952b4aca93942109, 0x4a50846729c27295, 0x25394654946329d6, 0x72942508427184a7, 0x29c251846119c610]
+def z57 : ℕ := limbs [0x9d2, 0x74a4e5394a5294a7, 0x294a539ce939ce73, 0x9d2739ce94946319, 0x4a518ca318c6738c, 0xa3494a5294a339ce, 0x73946518c6318ca3, 0x18c652846318c630]
+def z58 : ℕ := limbs [0x952, 0x74a4e328c63294a7, 0x294a539ca7294a73, 0x9d2739ce948c2108, 0xc630846318c6738c, 0xa349465294a329ce, 0x7394230842318ca3, 0x18c652846118c630]
+def z59 : ℕ := limbs [0x952, 0x94a4e338c63394a7, 0x39ce539ca9294a93, 0x9d294a4e94942109, 0x4a50846529467394, 0xe549465394a329d2, 0x7394250842518ca5, 0x2946528461194630]
+def z60 : ℕ := limbs [0x952, 0xb3a4e338c6348ca7, 0x3a52329ca9294ab2, 0x9d295aca74942109, 0x4a50846539c25394, 0xe73946548ca329d6, 0x5394250842708ca5, 0x39c232846119c230]
+def z61 : ℕ := limbs [0xaca, 0x54a4e53a52908423, 0x18c6539d695ad653, 0x9d25294e9494e739, 0x4a539d2108467384, 0x6149521194a359ca, 0x7394e539ce118ca1, 0x846528467184630]
+def z62 : ℕ := limbs [0xace, 0x54a4e73a52918c65, 0x18c6539d695ad653, 0x9d25294e9494e739, 0x4a539d2108467384, 0x6149523194a359ca, 0x7394e539ce118ca1, 0x846528467184630]
+def z63 : ℕ := limbs [0xa4e, 0x539ca93a529194a7, 0x18c6539d294a5252, 0x94e5294a7394e739, 0x4a539d2108467384, 0x6148d25194a3494a, 0x528ce539ce118ca1, 0x846528427184630]
+def z64 : ℕ := limbs [0x9d2, 0x54a4e5294a5194a7, 0x18c6539ce739ce53, 0x9d25294e948c6318, 0xc6318ca108467384, 0x61494a5194a339ca, 0x73946318c6118ca1, 0x846528463184630]
+def z65 : ℕ := limbs [0xa52, 0x54a4e739ce7194a7, 0x18c6539d294a5253, 0x9d25294e9494a529, 0x4a5294e108467384, 0x61494e5194a349ca, 0x7394a5294a118ca1, 0x846528465184630]
+def z66 : ℕ := limbs [0xad2, 0x549ce93a4e919467, 0x18c63395695a5653, 0x9525294a9394e539, 0x4a529ce108427284, 0x61395251946359ca, 0x7294e5394e1184a1, 0x842518467184610]
+def z67 : ℕ := limbs [0xad2, 0x53a4e939d2918ca7, 0x18c6329d694ad652, 0x9d25294a7494a739, 0x4a52952108425384, 0x613952518ca359ca, 0x5394e529ce108ca1, 0x842328467184230]
+def z68 : ℕ := limbs [0xace, 0x94a4e75a52928c65, 0x39ce539d2d5ad672, 0x94e94a4e949ca52a, 0x52939d2318c25294, 0xe549523394a35952, 0x7394a939ce308465, 0x2946528467094630]
+def z69 : ℕ := limbs [0xa46, 0x939ca56a52928423, 0x4a52539ced4a5271, 0x8ca94a4a73a4a52a, 0xd6b39d252942529d, 0x2748d21494a348d2, 0x528cab39ce508467, 0x39c652842709c630]
+def z70 : ℕ := limbs [0x9ca, 0xb4a4e5494a528423, 0x4a52539cab39ce92, 0x94eb5ace94942109, 0xce718ca52942529d, 0x27494a1494a33956, 0x73942718c6508467, 0x39c652846309c630]
+def z71 : ℕ := limbs [0xa4a, 0xb4a4e359ce728423, 0x4a52539ced4a5292, 0x94eb5ace949c631a, 0x529294e52942529d, 0x27494e1494a34956, 0x739469294a508467, 0x39c652846509c630]
+def z72 : ℕ := limbs [0xaca, 0x74a4e54a52928423, 0x294a539d2b5ad652, 0x94e739ce9494a529, 0xce739d210842528c, 0xa349521294a3594e, 0x7394a739ce108463, 0x18c652846708c630]
+def z73 : ℕ := limbs [0xaca, 0x94a4e55a52918423, 0x39ce539d2d5ad672, 0x94e94a4e949ca52a, 0x52939d2318c25294, 0xe549521394a35952, 0x7394a939ce308465, 0x2946528467094630]
+def z74 : ℕ := limbs [0x9ca, 0xb4a4e3494a528423, 0x4a52539cab39ce92, 0x94eb5ace94942109, 0xce718ca52942529d, 0x27494a1494a33956, 0x73942718c6508467, 0x39c652846309c630]
+def z75 : ℕ := limbs [0xaca, 0x74a4e54a52918423, 0x294a539d2b5ad652, 0x94e739ce9494a529, 0xce739d210842528c, 0xa349521294a3594e, 0x7394a739ce108463, 0x18c652846708c630]
+def z76 : ℕ := limbs [0x94e, 0xb4a4e338c6338c65, 0x4a52539ca9294a92, 0x94eb5ace94942109, 0x4a5084652942529d, 0x2749463494a32956, 0x7394250842508467, 0x39c652846109c630]
+def z77 : ℕ := limbs [0x9ce, 0x74a4e3394a518c65, 0x294a539ca939ce52, 0x94e739ce948c2109, 0x4a518ca10842528c, 0xa3494a3294a3394e, 0x73942518c6108463, 0x18c652846308c630]
+def z78 : ℕ := limbs [0xace, 0x54a4e73a52918c65, 0x18c6539d295ad652, 0x94e5294e9494a529, 0x4a539d2108425284, 0x6149523194a3594a, 0x7394a539ce108461, 0x846528467084630]
+def z79 : ℕ := limbs [0xad2, 0xb49ce96a4e949467, 0x49d233956f5a56b3, 0x952b4aca93ace53a, 0xd2b29ce729c27295, 0x25395254946359d6, 0x7294eb394e7184a7, 0x29c251846719c610]
+def z80 : ℕ := limbs [0xa4e, 0xb4a4e559ce738c65, 0x4a52539ced4a5292, 0x94eb5ace949c631a, 0x529294e52942529d, 0x27494e3494a34956, 0x739469294a508467, 0x39c652846509c630]
+def z81 : ℕ := limbs [0x9d2, 0x74a4e5494a5294a7, 0x294a539ceb39ce73, 0x9d2739ce949c6319, 0xce718ca318c6738c, 0xa3494a5294a339ce, 0x73946718c6318ca3, 0x18c652846318c630]
+def z82 : ℕ := limbs [0xa52, 0x94a4e749ce7394a7, 0x39ce539d2b4a5293, 0x9d294a4e949ca529, 0xce7294e529467394, 0xe5494e5394a349d2, 0x7394a7294a518ca5, 0x2946528465194630]
+def z83 : ℕ := limbs [0x9ce, 0x74a4e3494a518c65, 0x294a539cab39ce52, 0x94e739ce94942109, 0xce718ca10842528c, 0xa3494a3294a3394e, 0x73942718c6108463, 0x18c652846308c630]
+def z84 : ℕ := limbs [0xa4e, 0x94a4e549ce728c65, 0x39ce539ceb4a5272, 0x94e94a4e94946319, 0xce7294e318c25294, 0xe5494e3394a34952, 0x739467294a308465, 0x2946528465094630]
+def z85 : ℕ := limbs [0xad2, 0x93a4e959d2938ca7, 0x29ce329d6d4ad692, 0x9d274a4a74a4a739, 0xd29295232942538c, 0xa53952538ca359d2, 0x5394e929ce508ca3, 0x2942328467194230]
+def z86 : ℕ := limbs [0xad2, 0x949ce95a4e939467, 0x394e33956d5a5693, 0x95293a4a93a4e53a, 0x4e929ce51942728c, 0xe3395253946359d2, 0x7294e9394e5184a5, 0x1942518467194610]
+def z87 : ℕ := limbs [0xa4e, 0x938ca96a4a949427, 0x4952138d2d49d292, 0x8ce93a4672ace53a, 0xd2b29ce729c27295, 0x2538d25494234952, 0x518ceb394e7184a7, 0x29c251842719c610]
+def z88 : ℕ := limbs [0x9d2, 0xb494e5494a549427, 0x4952138ceb394eb3, 0x952b4aca939c6119, 0xca708c6729c27295, 0x25394a54942339d6, 0x72946718467184a7, 0x29c251846319c610]
+def z89 : ℕ := limbs [0xa52, 0xb494e759c6749427, 0x4952138d2d49d2b3, 0x952b4aca93a4a32a, 0x4e9194a729c27295, 0x25394e54942349d6, 0x7294a928ca7184a7, 0x29c251846519c610]
+def z90 : ℕ := limbs [0xad2, 0x7494e94a4a929427, 0x294a138d6b5a5673, 0x952729ca939ce539, 0xca729ce308c27284, 0xa1395252942359ce, 0x7294e7394e3184a3, 0x8c251846718c610]
+def z91 : ℕ := limbs [0xad2, 0x9494e95a4a939427, 0x38ce138d6d5a5693, 0x95293a4a93a4e53a, 0x4e929ce51942728c, 0xe3395253942359d2, 0x7294e9394e5184a5, 0x1942518467194610]
+def z92 : ℕ := limbs [0x9d2, 0xb494e54946549427, 0x4952138ceb394eb3, 0x952b4aca939c6119, 0xca708c6729c27295, 0x25394a54942339d6, 0x72946718467184a7, 0x29c251846319c610]
+def z93 : ℕ := limbs [0xad2, 0x7494e94a4a929427, 0x28ca138d6b5a5673, 0x952729ca939ce539, 0xca729ce308c27284, 0xa1395252942359ce, 0x7294e7394e3184a3, 0x8c251846718c610]
+def z94 : ℕ := limbs [0x9d2, 0x749ce53946529467, 0x28ca3394e9394e73, 0x952729ca93946119, 0x46508c6308c27284, 0xa1394a52946339ce, 0x72946518463184a3, 0x8c251846318c610]
+def z95 : ℕ := limbs [0x9d2, 0x749ce54946529467, 0x28ca3394eb394e73, 0x952729ca939c6119, 0xca708c6308c27284, 0xa1394a52946339ce, 0x72946718463184a3, 0x8c251846318c610]
+def z96 : ℕ := limbs [0xa52, 0x949ce749ca739467, 0x394e33952b49d293, 0x95293a4a939ca329, 0xca7194a51942728c, 0xe3394e53946349d2, 0x7294a728ca5184a5, 0x1942518465194610]
+def z97 : ℕ := limbs [0x94e, 0x939ca5494a5494a7, 0x4a52539ca9294a92, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x2748ca5494a32952, 0x528c6718c6718ca7, 0x39c652842319c630]
+def z98 : ℕ := limbs [0xa4e, 0x94a4e75a529394a7, 0x4a5274a4a939ce51, 0x8ca739ca73946319, 0xce7294e318c25294, 0xe54952549ce538ce, 0x528c67294a308465, 0x2946528c25094630]
+def z99 : ℕ := limbs [0xa52, 0x94a4e95a52949ce9, 0x4a5274a4e939ce72, 0x94e739ca739ca529, 0xce7294e529467394, 0xe54952749ce5394e, 0x528ca7294a518ca5, 0x2946528c25194630]
+def z100 : ℕ := limbs [0xa52, 0xb3a4e969d29594e9, 0x4ad653a4eb29ce91, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe739527594e53952, 0x328ca9194a708ca5, 0x39c2328c2519c230]
+def z101 : ℕ := limbs [0xa52, 0xb49ce96a4e959ca9, 0x5a56549ceb394e92, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x253952759ca53952, 0x518ca928ca7184a7, 0x29c2518c2519c610]
+def z102 : ℕ := limbs [0x9d2, 0xb49ce759ca759ca9, 0x5a56549ca928ca92, 0x8ce93a46729c6119, 0xca708c6729c27295, 0x25394e759ca52952, 0x518c6718467184a7, 0x29c2518c2319c610]
+def z103 : ℕ := limbs [0x9d2, 0xb3a4e7594e7594e9, 0x4ad653a4a9194a91, 0x94e74a46539c2319, 0x4e7084a539c25394, 0xe7394e7594e52952, 0x328c6708c6708ca5, 0x39c2328c2319c230]
+def z104 : ℕ := limbs [0x94e, 0x939ca759ce7494a7, 0x4a52539ca9294a92, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ce5494a32952, 0x528ca9294a718ca7, 0x39c652842519c630]
+def z105 : ℕ := limbs [0x9ce, 0xb4a4e76a529494a7, 0x5ad674a469294a71, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x274952559ce528d2, 0x528c69294a508467, 0x39c6528c2509c630]
+def z106 : ℕ := limbs [0x9d2, 0xb49ce96a4e959ca9, 0x5a56549ca928ca92, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x253952759ca52952, 0x518ca928ca7184a7, 0x29c2518c2519c610]
+def z107 : ℕ := limbs [0x9d2, 0x74a4e94a52939ce9, 0x39ce74a4a9294a52, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5294a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
+def z108 : ℕ := limbs [0x952, 0x74a4e94a52939ce9, 0x39ce74a46718c652, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5194a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
+def z109 : ℕ := limbs [0x9d2, 0x94a4e95a52949ce9, 0x4a5274a4a7294a72, 0x94e739ca739ca529, 0xce7294e529467394, 0xe54952749ce5294e, 0x528ca7294a518ca5, 0x2946528c25194630]
+def z110 : ℕ := limbs [0x9d2, 0xb3a4e969d29594e9, 0x4ad653a4a9194a91, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe739527594e52952, 0x328ca9194a708ca5, 0x39c2328c2519c230]
+def z111 : ℕ := limbs [0x94e, 0x939ca759ce7494a7, 0x4a52539c6718c692, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ce5494a31952, 0x528ca9294a718ca7, 0x39c652842519c630]
+def z112 : ℕ := limbs [0x8ce, 0x939ca759ce7494a7, 0x4a52539c25084292, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x2748ce5494a30952, 0x528ca9294a718ca7, 0x39c652842519c630]
+def z113 : ℕ := limbs [0x94e, 0xb4a4e76a529494a7, 0x5ad674a46718c671, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x274952559ce518d2, 0x528c69294a508467, 0x39c6528c2509c630]
+def z114 : ℕ := limbs [0x8ce, 0xb4a4e76a529494a7, 0x5ad674a425084271, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x274952559ce508d2, 0x528c69294a508467, 0x39c6528c2509c630]
+def z115 : ℕ := limbs [0x952, 0xb4a4e759ce759ce9, 0x5ad674a46718c692, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x27494e759ce51952, 0x528c6718c6718ca7, 0x39c6528c2319c630]
+def z116 : ℕ := limbs [0x8d2, 0xb4a4e759ce759ce9, 0x5ad674a425084292, 0x94e94a4a739c6319, 0xce718ca739c6739d, 0x27494e759ce50952, 0x528c6718c6718ca7, 0x39c6528c2319c630]
+def z117 : ℕ := limbs [0x952, 0xb49ce96a4e959ca9, 0x5a56549c6718c692, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x253952759ca51952, 0x518ca928ca7184a7, 0x29c2518c2519c610]
+def z118 : ℕ := limbs [0x8d2, 0xb49ce96a4e959ca9, 0x5a56549c25084292, 0x8ce93a4672a4a32a, 0x4e9194a729c27295, 0x253952759ca50952, 0x518ca928ca7184a7, 0x29c2518c2519c610]
+def z119 : ℕ := limbs [0x9d2, 0x74a4e94a52939ce9, 0x39ce74a4a7294a52, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5294a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
+def z120 : ℕ := limbs [0x952, 0x74a4e94a52939ce9, 0x39ce74a46518c652, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5194a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
+def z121 : ℕ := limbs [0x952, 0x94a4e95a52949ce9, 0x4a5274a46718c672, 0x94e739ca739ca529, 0xce7294e529467394, 0xe54952749ce5194e, 0x528ca7294a518ca5, 0x2946528c25194630]
+def z122 : ℕ := limbs [0x8d2, 0x94a4e95a52949ce9, 0x4a5274a425084272, 0x94e739ca739ca529, 0xce7294e529467394, 0xe54952749ce5094e, 0x528ca7294a518ca5, 0x2946528c25194630]
+def z123 : ℕ := limbs [0x952, 0xb3a4e969d29594e9, 0x4ad653a46718c691, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe739527594e51952, 0x328ca9194a708ca5, 0x39c2328c2519c230]
+def z124 : ℕ := limbs [0x8d2, 0xb3a4e969d29594e9, 0x4ad653a425084291, 0x94e74a4653a46529, 0xd2918ce539c25394, 0xe739527594e50952, 0x328ca9194a708ca5, 0x39c2328c2519c230]
+def z125 : ℕ := limbs [0x952, 0xb4a4e96a52959ce9, 0x5ad674a46718c692, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x274952759ce51952, 0x528ca9294a718ca7, 0x39c6528c2519c630]
+def z126 : ℕ := limbs [0x8d2, 0xb4a4e96a52959ce9, 0x5ad674a425084292, 0x94e94a4a73a4a52a, 0x529294e739c6739d, 0x274952759ce50952, 0x528ca9294a718ca7, 0x39c6528c2519c630]
+def z127 : ℕ := limbs [0x8d2, 0x74a4e94a52939ce9, 0x39ce74a423084252, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5094a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
+def z128 : ℕ := limbs [0x952, 0xb4a4e5494a559ce9, 0x5ad674a46718c692, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x27494a759ce51952, 0x528c250842718ca7, 0x39c6528c2119c630]
+def z129 : ℕ := limbs [0x8d2, 0xb4a4e5494a559ce9, 0x5ad674a425084292, 0x94e94a4a73942109, 0x4a50846739c6739d, 0x27494a759ce50952, 0x528c250842718ca7, 0x39c6528c2119c630]
+def z130 : ℕ := limbs [0x952, 0x74a4e5394a539ce9, 0x39ce74a46518c652, 0x94e5294a738c2108, 0xc630846318c6738c, 0xa3494a739ce5194a, 0x528c230842318ca3, 0x18c6528c2118c630]
+def z131 : ℕ := limbs [0x9ce, 0x539ca739ce7294a7, 0x294a539ce539ce32, 0x94e318ca738ca528, 0xc63294e108467384, 0x6148ce5294a33946, 0x528ca3294a118ca1, 0x846528425184630]
+def z132 : ℕ := limbs [0xa4e, 0x54a4e73a529294a7, 0x294a74a4a539ce31, 0x8ca318ca738c6318, 0xc63294e108425284, 0x614952529ce538c6, 0x528c63294a108461, 0x846528c25084630]
+def z133 : ℕ := limbs [0x9d2, 0x54a4e93a52929ce9, 0x294a74a4a5294a32, 0x94e318ca738ca528, 0xc63294e108467384, 0x614952729ce52946, 0x528ca3294a118ca1, 0x846528c25184630]
+def z134 : ℕ := limbs [0x952, 0x54a4e93a52929ce9, 0x294a74a46318c632, 0x94e318ca738ca528, 0xc63294e108467384, 0x614952729ce51946, 0x528ca3294a118ca1, 0x846528c25184630]
+def z135 : ℕ := limbs [0xa52, 0x54a4e93a52929ce9, 0x294a74a4e739ce32, 0x94e318ca738ca528, 0xc63294e108467384, 0x614952729ce53946, 0x528ca3294a118ca1, 0x846528c25184630]
+def z136 : ℕ := limbs [0x9d2, 0x74a4e749ce739ce9, 0x39ce74a4a7294a52, 0x94e5294a73946319, 0x4a518ca318c6738c, 0xa3494e739ce5294a, 0x528c6518c6318ca3, 0x18c6528c2318c630]
+def z137 : ℕ := limbs [0x9d2, 0x54a4e739ce729ce9, 0x294a74a4a5294a32, 0x94e318ca738c6318, 0xc6318ca108467384, 0x61494e729ce52946, 0x528c6318c6118ca1, 0x846528c23184630]
+def z138 : ℕ := limbs [0x952, 0x54a4e5294a529ce9, 0x294a74a46318c632, 0x94e318ca73842108, 0x4210846108467384, 0x61494a729ce51946, 0x528c210842118ca1, 0x846528c21184630]
+def z139 : ℕ := limbs [0xa52, 0x549ce93a4e929ca9, 0x294a549ce5394e32, 0x8ce318c6728ca328, 0xc63194a108427284, 0x613952729ca53946, 0x518ca328ca1184a1, 0x842518c25184610]
+def z140 : ℕ := limbs [0xa52, 0x53a4e939d29294e9, 0x294a53a4e529ce31, 0x94e318c6538c6528, 0xc6318ce108425384, 0x6139527294e53946, 0x328ca3194a108ca1, 0x842328c25184230]
+def z141 : ℕ := limbs [0x9ce, 0xb4a4e559ce7494a7, 0x5ad674a469294a71, 0x8ca94a4a73942109, 0xce718ca52942529d, 0x27494e559ce528d2, 0x528c2718c6508467, 0x39c6528c2309c630]
+def z142 : ℕ := limbs [0xa4e, 0xb4a4e76a529494a7, 0x5ad674a4ab39ce71, 0x8ca94a4a739c631a, 0x529294e52942529d, 0x274952559ce538d2, 0x528c69294a508467, 0x39c6528c2509c630]
+def z143 : ℕ := limbs [0x952, 0x74a4e5494a539ce9, 0x39ce74a46718c652, 0x94e5294a73942109, 0x4a50846318c6738c, 0xa3494a739ce5194a, 0x528c250842318ca3, 0x18c6528c2118c630]
+def z144 : ℕ := limbs [0x9d2, 0x94a4e749ce749ce9, 0x4a5274a4a7294a72, 0x94e739ca73946319, 0x4a518ca529467394, 0xe5494e749ce5294e, 0x528c6518c6518ca5, 0x2946528c23194630]
+def z145 : ℕ := limbs [0xa52, 0x93a4e959d29494e9, 0x3a5253a4e929ce71, 0x94e539c6539c6529, 0x4e718ce32942538c, 0xa539527494e5394e, 0x328ca7194a508ca3, 0x2942328c25194230]
+def z146 : ℕ := limbs [0xa52, 0x949ce95a4e949ca9, 0x49d2549ce9394e72, 0x8ce729c6729ca329, 0xca7194a51942728c, 0xe33952749ca5394e, 0x518ca728ca5184a5, 0x1942518c25194610]
+def z147 : ℕ := limbs [0x9ce, 0xb4a4e3494a538c65, 0x4a52539cab39ce92, 0x94eb5ace94942109, 0xce718ca52942529d, 0x27494a3494a33956, 0x73942718c6508467, 0x39c652846309c630]
+def z148 : ℕ := limbs [0xad2, 0xb5ad275a529394a7, 0x4a5274a4eb4a5272, 0x94e94a4e94946319, 0xce7294e318c25294, 0xe549d2549ce54952, 0x739467294a308465, 0x2946528c65094630]
+def z149 : ℕ := limbs [0xa4e, 0xb4a4e359ce738c65, 0x4a52539cad4a5292, 0x94eb5ace9494210a, 0x529294e52942529d, 0x27494e3494a34956, 0x739429294a508467, 0x39c652846509c630]
+def z150 : ℕ := limbs [0xa4e, 0xb4a4e56a529494a7, 0x5ad674a46b39ce71, 0x8ca94a4a7394210a, 0x529294e52942529d, 0x274952559ce538d2, 0x528c29294a508467, 0x39c6528c2509c630]
+def z151 : ℕ := limbs [0xad2, 0x95ad254a529294a7, 0x39ce74a4a94a5252, 0x94e739ce94942109, 0x4a5294e10842528c, 0xa349d2539ce5494e, 0x739425294a108463, 0x18c6528c6508c630]
+def z152 : ℕ := limbs [0xad2, 0xb5ad255a529394a7, 0x4a5274a4ab4a5272, 0x94e94a4e948c2109, 0xce7294e318c25294, 0xe549d2549ce54952, 0x739427294a308465, 0x2946528c65094630]
+def z153 : ℕ := limbs [0xad2, 0x95ad254a529294a7, 0x39ce74a4a94a5252, 0x94e739ce948c2109, 0x4a5294e10842528c, 0xa349d2539ce5494e, 0x739425294a108463, 0x18c6528c6508c630]
+def z154 : ℕ := limbs [0xa52, 0xb5ad2549ce7394a7, 0x4a5274a4a939ce72, 0x94e94a4e948c2109, 0x4a518ca318c25294, 0xe549ce549ce53952, 0x73942518c6308465, 0x2946528c63094630]
+def z155 : ℕ := limbs [0x952, 0x74a4e338c63294a7, 0x294a539ca9294a73, 0x9d2739ce94942109, 0x4a50846318c6738c, 0xa349465294a329ce, 0x7394250842318ca3, 0x18c652846118c630]
+def z156 : ℕ := limbs [0x9d2, 0x54a4e5394a5194a7, 0x18c6539ce939ce53, 0x9d25294e94946319, 0x4a518ca108467384, 0x61494a5194a339ca, 0x73946518c6118ca1, 0x846528463184630]
+def z157 : ℕ := limbs [0x9d2, 0x73a4e548ca528ca7, 0x194a329ceb29ce72, 0x9d2539ca749c2319, 0x4e7084a118c25384, 0x63394a528ca339ce, 0x53946708c6308ca1, 0x18c232846318c230]
+def z158 : ℕ := limbs [0x9d2, 0x74a4e759ce739ce9, 0x39ce74a4a9294a52, 0x94e5294a739c6319, 0xce718ca318c6738c, 0xa3494e739ce5294a, 0x528c6718c6318ca3, 0x18c6528c2318c630]
+def z159 : ℕ := limbs [0x9ce, 0x74a4e559ce7294a7, 0x39ce74a469294a31, 0x8ca5294a73942109, 0xce718ca10842528c, 0xa3494e539ce528ca, 0x528c2718c6108463, 0x18c6528c2308c630]
+def z160 : ℕ := limbs [0x9d2, 0x749ce759ca739ca9, 0x394e549ca928ca52, 0x8ce51946729c6119, 0xca708c6308c27284, 0xa1394e739ca5294a, 0x518c6718463184a3, 0x8c2518c2318c610]
+def z161 : ℕ := limbs [0x9d2, 0x54a4e749ce729ce9, 0x294a74a4a7294a32, 0x94e318ca73946319, 0x4a518ca108467384, 0x61494e729ce52946, 0x528c6518c6118ca1, 0x846528c23184630]
+def z162 : ℕ := limbs [0x9d2, 0x73a4e7594e7394e9, 0x29ce53a4a9194a51, 0x94e32946539c2319, 0x4e7084a118c25384, 0x63394e7394e5294a, 0x328c6708c6308ca1, 0x18c2328c2318c230]
+def z163 : ℕ := limbs [0xa56, 0x95ad2759ce739ce9, 0x39ce74a4eb39ce73, 0x9d2739ce949c6319, 0xce718ca318c6738c, 0xa349ce739ce539ce, 0x73946718c6318ca3, 0x18c6528c6318c630]
+def z164 : ℕ := limbs [0x9d6, 0x95ad25494a539ce9, 0x39ce74a4a9294a73, 0x9d2739ce94942109, 0x4a50846318c6738c, 0xa349ca739ce529ce, 0x7394250842318ca3, 0x18c6528c6118c630]
+def z165 : ℕ := limbs [0xa56, 0x75ad2749ce729ce9, 0x294a74a4e939ce53, 0x9d25294e94946319, 0x4a518ca108467384, 0x6149ce729ce539ca, 0x73946518c6118ca1, 0x846528c63184630]
+def z166 : ℕ := limbs [0x9d6, 0x75ad25394a529ce9, 0x294a74a4a7294a53, 0x9d25294e948c2108, 0xc630846108467384, 0x6149ca729ce529ca, 0x7394230842118ca1, 0x846528c61184630]
+def z167 : ℕ := limbs [0x9d6, 0x75ad25494a529ce9, 0x294a74a4a9294a53, 0x9d25294e94942109, 0x4a50846108467384, 0x6149ca729ce529ca, 0x7394250842118ca1, 0x846528c61184630]
+def z168 : ℕ := limbs [0x952, 0x54a4e338c63194a7, 0x18c6539ca9294a53, 0x9d25294e94942109, 0x4a50846108467384, 0x6149465194a329ca, 0x7394250842118ca1, 0x846528461184630]
+def z169 : ℕ := limbs [0xa52, 0x95ad2559ce7294a7, 0x39ce74a4ab39ce52, 0x94e739ce94942109, 0xce718ca10842528c, 0xa349ce539ce5394e, 0x73942718c6108463, 0x18c6528c6308c630]
+def z170 : ℕ := limbs [0x952, 0x54a4e5494a529ce9, 0x294a74a46718c632, 0x94e318ca73942109, 0x4a50846108467384, 0x61494a729ce51946, 0x528c250842118ca1, 0x846528c21184630]
+def z171 : ℕ := limbs [0xa56, 0x95a52759ca739ca9, 0x394e549ceb394e73, 0x952729ca939c6119, 0xca708c6308c27284, 0xa139ce739ca539ce, 0x72946718463184a3, 0x8c2518c6318c610]
+def z172 : ℕ := limbs [0xa56, 0x94ad27594e7394e9, 0x29ce53a4eb29ce72, 0x9d2539ca749c2319, 0x4e7084a118c25384, 0x6339ce7394e539ce, 0x53946708c6308ca1, 0x18c2328c6318c230]
+def z173 : ℕ := limbs [0x9d2, 0x74a4e5494a5294a7, 0x294a539ca9294a53, 0x9d25294e94942109, 0x4a50846108467384, 0x61494a5294a329ca, 0x7394250842118ca1, 0x846528461184630]
+def z174 : ℕ := limbs [0x9d2, 0x75ad25494a5294a7, 0x294a74a4a9294a52, 0x94e5294e94942109, 0x4a50846108425284, 0x6149ca529ce5294a, 0x7394250842108461, 0x846528c61084630]
+def z175 : ℕ := limbs [0x9d2, 0x74a4e5494a529ce9, 0x294a74a4a9294a52, 0x94e5294a73942109, 0x4a50846108467384, 0x61494a729ce5294a, 0x528c250842118ca1, 0x846528c21184630]
+def z176 : ℕ := limbs [0x9d6, 0x75a525494a529ca9, 0x294a549ca9294a53, 0x9525294a93942109, 0x4a50846108427284, 0x6139ca729ca529ca, 0x72942508421184a1, 0x842518c61184610]
+def z177 : ℕ := limbs [0x9d6, 0x74ad25494a5294e9, 0x294a53a4a9294a52, 0x9d25294a74942109, 0x4a50846108425384, 0x6139ca7294e529ca, 0x5394250842108ca1, 0x842328c61184230]
+def z178 : ℕ := limbs [0x9d2, 0x94a4e5394a5394a7, 0x39ce539ce939ce93, 0x9d294a4e94946319, 0x4a518ca529467394, 0xe5494a5394a339d2, 0x73946518c6518ca5, 0x2946528463194630]
+def z179 : ℕ := limbs [0xa52, 0x74a4e739ce7294a7, 0x294a539d294a5273, 0x9d2739ce9494a529, 0x4a5294e318c6738c, 0xa3494e5294a349ce, 0x7394a5294a318ca3, 0x18c652846518c630]
+def z180 : ℕ := limbs [0xa52, 0x93a4e7494e738ca7, 0x29ce329d2b3a5292, 0x9d274a4a749c6529, 0x4e718ce32942538c, 0xa5394e538ca349d2, 0x5394a7194a508ca3, 0x2942328465194230]
+def z181 : ℕ := limbs [0xad2, 0x95ad274a529294a7, 0x39ce74a4e94a5252, 0x94e739ce948c6319, 0x4a5294e10842528c, 0xa349d2539ce5494e, 0x739465294a108463, 0x18c6528c6508c630]
+def z182 : ℕ := limbs [0xa52, 0x74a4e94a52939ce9, 0x39ce74a4e739ce52, 0x94e5294a7394a529, 0x4a5294e318c6738c, 0xa34952739ce5394a, 0x528ca5294a318ca3, 0x18c6528c2518c630]
+def z183 : ℕ := limbs [0xad6, 0xb5a5295a4e949ca9, 0x49d2549d2b49d293, 0x95293a4a939ca329, 0xca7194a51942728c, 0xe339d2749ca549d2, 0x7294a728ca5184a5, 0x1942518c65194610]
+def z184 : ℕ := limbs [0xa56, 0xb5a52749ca749ca9, 0x49d2549ce9394e93, 0x95293a4a93946119, 0x46508c651942728c, 0xe339ce749ca539d2, 0x72946518465184a5, 0x1942518c63194610]
+def z185 : ℕ := limbs [0xa56, 0xb4ad27494e7494e9, 0x3a5253a4e929ce92, 0x9d274a4a74942318, 0xca5084a32942538c, 0xa539ce7494e539d2, 0x53946508c6508ca3, 0x2942328c63194230]
+def z186 : ℕ := limbs [0xa52, 0x94a4e739ce7394a7, 0x39ce539d294a5293, 0x9d294a4e9494a529, 0x4a5294e529467394, 0xe5494e5394a349d2, 0x7394a5294a518ca5, 0x2946528465194630]
+def z187 : ℕ := limbs [0xad2, 0xb5ad274a529394a7, 0x4a5274a4e94a5272, 0x94e94a4e948c6319, 0x4a5294e318c25294, 0xe549d2549ce54952, 0x739465294a308465, 0x2946528c65094630]
+def z188 : ℕ := limbs [0xa52, 0x94a4e94a52949ce9, 0x4a5274a4e739ce72, 0x94e739ca7394a529, 0x4a5294e529467394, 0xe54952749ce5394e, 0x528ca5294a518ca5, 0x2946528c25194630]
+def z189 : ℕ := limbs [0xad6, 0xb5a5294a4e949ca9, 0x49d2549d2949d293, 0x95293a4a9394a329, 0x465194a51942728c, 0xe339d2749ca549d2, 0x7294a528ca5184a5, 0x1942518c65194610]
+def z190 : ℕ := limbs [0xad6, 0xb4ad2949d29494e9, 0x3a5253a5293a5292, 0x9d274a4a74946528, 0xca518ce32942538c, 0xa539d27494e549d2, 0x5394a5194a508ca3, 0x2942328c65194230]
+def z191 : ℕ := limbs [0xa52, 0x94a4e739ce7394a7, 0x39ce539d274a5293, 0x9d294a4e948ca528, 0xc63294e529467394, 0xe5494e5394a349d2, 0x7394a3294a518ca5, 0x2946528465194630]
+def z192 : ℕ := limbs [0xa52, 0x94a4e729ce7394a7, 0x39ce539d254a5293, 0x9d294a4e9484a528, 0x421294e529467394, 0xe5494e5394a349d2, 0x7394a1294a518ca5, 0x2946528465194630]
+def z193 : ℕ := limbs [0xad2, 0xb5ad273a529394a7, 0x4a5274a4e74a5272, 0x94e94a4e948c6318, 0xc63294e318c25294, 0xe549d2549ce54952, 0x739463294a308465, 0x2946528c65094630]
+def z194 : ℕ := limbs [0xad2, 0xb5ad272a529394a7, 0x4a5274a4e54a5272, 0x94e94a4e94846318, 0x421294e318c25294, 0xe549d2549ce54952, 0x739461294a308465, 0x2946528c65094630]
+def z195 : ℕ := limbs [0xa52, 0x94a4e93a52949ce9, 0x4a5274a4e739ce72, 0x94e739ca738ca528, 0xc63294e529467394, 0xe54952749ce5394e, 0x528ca3294a518ca5, 0x2946528c25194630]
+def z196 : ℕ := limbs [0xa52, 0x94a4e92a52949ce9, 0x4a5274a4e539ce72, 0x94e739ca7384a528, 0x421294e529467394, 0xe54952749ce5394e, 0x528ca1294a518ca5, 0x2946528c25194630]
+def z197 : ℕ := limbs [0xa56, 0xb5ad2739ce749ce9, 0x4a5274a4e739ce93, 0x9d294a4e948c6318, 0xc6318ca529467394, 0xe549ce749ce539d2, 0x73946318c6518ca5, 0x2946528c63194630]
+def z198 : ℕ := limbs [0xa56, 0xb5ad2729ce749ce9, 0x4a5274a4e539ce93, 0x9d294a4e94846318, 0x42118ca529467394, 0xe549ce749ce539d2, 0x73946118c6518ca5, 0x2946528c63194630]
+def z199 : ℕ := limbs [0xad6, 0xb5a5293a4e949ca9, 0x49d2549d2749d293, 0x95293a4a938ca328, 0xc63194a51942728c, 0xe339d2749ca549d2, 0x7294a328ca5184a5, 0x1942518c65194610]
+def z200 : ℕ := limbs [0xad6, 0xb5a5292a4e949ca9, 0x49d2549d2549d293, 0x95293a4a9384a328, 0x421194a51942728c, 0xe339d2749ca549d2, 0x7294a128ca5184a5, 0x1942518c65194610]
+def z201 : ℕ := limbs [0xad6, 0x95ad293a52939ce9, 0x39ce74a5274a5273, 0x9d2739ce948ca528, 0xc63294e318c6738c, 0xa349d2739ce549ce, 0x7394a3294a318ca3, 0x18c6528c6518c630]
+def z202 : ℕ := limbs [0xad6, 0x95ad292a52939ce9, 0x39ce74a5254a5273, 0x9d2739ce9484a528, 0x421294e318c6738c, 0xa349d2739ce549ce, 0x7394a1294a318ca3, 0x18c6528c6518c630]
+def z203 : ℕ := limbs [0xad6, 0xb4ad2939d29494e9, 0x3a5253a5273a5292, 0x9d274a4a748c6528, 0xc6318ce32942538c, 0xa539d27494e549d2, 0x5394a3194a508ca3, 0x2942328c65194230]
+def z204 : ℕ := limbs [0xad6, 0xb4ad2929d29494e9, 0x3a5253a5253a5292, 0x9d274a4a74846528, 0x42118ce32942538c, 0xa539d27494e549d2, 0x5394a1194a508ca3, 0x2942328c65194230]
+def z205 : ℕ := limbs [0xad6, 0xb5ad293a52949ce9, 0x4a5274a5274a5293, 0x9d294a4e948ca528, 0xc63294e529467394, 0xe549d2749ce549d2, 0x7394a3294a518ca5, 0x2946528c65194630]
+def z206 : ℕ := limbs [0xad6, 0xb5ad292a52949ce9, 0x4a5274a5254a5293, 0x9d294a4e9484a528, 0x421294e529467394, 0xe549d2749ce549d2, 0x7394a1294a518ca5, 0x2946528c65194630]
+def z207 : ℕ := limbs [0x9d6, 0xb5ad25394a549ce9, 0x4a5274a4a7294a93, 0x9d294a4e948c2108, 0xc630846529467394, 0xe549ca749ce529d2, 0x7394230842518ca5, 0x2946528c61194630]
+def z208 : ℕ := limbs [0x9d6, 0xb5ad25294a549ce9, 0x4a5274a4a5294a93, 0x9d294a4e94842108, 0x4210846529467394, 0xe549ca749ce529d2, 0x7394210842518ca5, 0x2946528c61194630]
+def z209 : ℕ := limbs [0x9d6, 0x75ad25294a529ce9, 0x294a74a4a5294a53, 0x9d25294e94842108, 0x4210846108467384, 0x6149ca729ce529ca, 0x7394210842118ca1, 0x846528c61184630]
+def z210 : ℕ := limbs [0xad6, 0x75ad293a52929ce9, 0x294a74a5274a5253, 0x9d25294e948ca528, 0xc63294e108467384, 0x6149d2729ce549ca, 0x7394a3294a118ca1, 0x846528c65184630]
+def z211 : ℕ := limbs [0xad6, 0x75ad292a52929ce9, 0x294a74a5254a5253, 0x9d25294e9484a528, 0x421294e108467384, 0x6149d2729ce549ca, 0x7394a1294a118ca1, 0x846528c65184630]
+def z212 : ℕ := limbs [0xad6, 0xb4ad2959d29494e9, 0x3a5253a52b3a5292, 0x9d274a4a749c6529, 0x4e718ce32942538c, 0xa539d27494e549d2, 0x5394a7194a508ca3, 0x2942328c65194230]
+def z213 : ℕ := limbs [0xad6, 0x94ad2949d29394e9, 0x29ce53a5293a5272, 0x9d2539ca74946528, 0xca518ce118c25384, 0x6339d27394e549ce, 0x5394a5194a308ca1, 0x18c2328c6518c230]
+def z214 : ℕ := limbs [0xad6, 0x95a5294a4e939ca9, 0x394e549d2949d273, 0x952729ca9394a329, 0x465194a308c27284, 0xa139d2739ca549ce, 0x7294a528ca3184a3, 0x8c2518c6518c610]
+def z215 : ℕ := limbs [0xad2, 0x73a4e949d2928ca7, 0x194a329d6b4ad672, 0x9d2539ca749ca739, 0x4e72952118c25384, 0x633952528ca359ce, 0x5394e729ce308ca1, 0x18c232846718c230]
+def z216 : ℕ := limbs [0xad2, 0x93a4eb6a56b494e9, 0x3a5253a52b3a5271, 0x94e539c653a4a739, 0xd29295232942538c, 0xa539567494e5494e, 0x328ce929ce508ca3, 0x2942328c27194230]
+def z217 : ℕ := limbs [0xad2, 0x73a4eb5a56b394e9, 0x29ce53a5293a5251, 0x94e32946539ca739, 0x4e72952118c25384, 0x6339567394e5494a, 0x328ce729ce308ca1, 0x18c2328c2718c230]
+def z218 : ℕ := limbs [0xad2, 0x93a4e959d2938ca7, 0x19ce329d6d4ad692, 0x9d254a4a74a4a739, 0x5292952129425384, 0x653952538ca359d2, 0x5394e929ce508ca1, 0x2942328467194230]
+def z219 : ℕ := limbs [0xad2, 0x93a4eb6a56b494e9, 0x2a5253a52b3a5271, 0x94e339c653a4a739, 0x5292952129425384, 0x6539567494e5494e, 0x328ce929ce508ca1, 0x2942328c27194230]
+def z220 : ℕ := limbs [0xa56, 0xb4ad27494e7494e9, 0x2a5253a4e929ce92, 0x9d254a4a74942319, 0x4a5084a129425384, 0x6539ce7494e539d2, 0x53946508c6508ca1, 0x2942328c63194230]
+def z221 : ℕ := limbs [0xad6, 0xb4ad2959d29494e9, 0x2a5253a52b3a5292, 0x9d254a4a749c6528, 0xce718ce129425384, 0x6539d27494e549d2, 0x5394a7194a508ca1, 0x2942328c65194230]
+def z222 : ℕ := limbs [0xa56, 0xb4ad27494e7494e9, 0x2a5253a4e929ce92, 0x9d254a4a74942318, 0xca5084a129425384, 0x6539ce7494e539d2, 0x53946508c6508ca1, 0x2942328c63194230]
+def z223 : ℕ := limbs [0xa56, 0x94ad27494e7394e9, 0x29ce53a4e929ce72, 0x9d2539ca74942318, 0xca5084a118c25384, 0x6339ce7394e539ce, 0x53946508c6308ca1, 0x18c2328c6318c230]
+def z224 : ℕ := limbs [0xad2, 0x749ce94a4e929467, 0x28ca33956b5a5673, 0x952729ca939ce539, 0xca729ce308c27284, 0xa1395252946359ce, 0x7294e7394e3184a3, 0x8c251846718c610]
+def z225 : ℕ := limbs [0xad2, 0x949ceb6ad2b49ca9, 0x49d2549d2b49d272, 0x8ce729c672a4e53a, 0x4e929ce51942728c, 0xe33956749ca5494e, 0x518ce9394e5184a5, 0x1942518c27194610]
+def z226 : ℕ := limbs [0xad2, 0x749ceb5ad2b39ca9, 0x394e549d2949d252, 0x8ce51946729ce539, 0xca729ce308c27284, 0xa13956739ca5494a, 0x518ce7394e3184a3, 0x8c2518c2718c610]
+def z227 : ℕ := limbs [0xad2, 0x949ce95a4e939467, 0x38ce33956d5a5693, 0x95292a4a93a4e53a, 0x4a929ce509427284, 0xe1395253946359d2, 0x7294e9394e5184a5, 0x942518467194610]
+def z228 : ℕ := limbs [0xad2, 0x949ceb6ad2b49ca9, 0x4952549d2b49d272, 0x8ce719c672a4e53a, 0x4a929ce509427284, 0xe13956749ca5494e, 0x518ce9394e5184a5, 0x942518c27194610]
+def z229 : ℕ := limbs [0xa56, 0xb5a52749ca749ca9, 0x4952549ce9394e93, 0x95292a4a93946119, 0x4a508c6509427284, 0xe139ce749ca539d2, 0x72946518465184a5, 0x942518c63194610]
+def z230 : ℕ := limbs [0xad6, 0xb5a5295a4e949ca9, 0x4952549d2b49d293, 0x95292a4a939ca329, 0xc67194a509427284, 0xe139d2749ca549d2, 0x7294a728ca5184a5, 0x942518c65194610]
+def z231 : ℕ := limbs [0xa56, 0xb5a52749ca749ca9, 0x4952549ce9394e93, 0x95292a4a93946119, 0x46508c6509427284, 0xe139ce749ca539d2, 0x72946518465184a5, 0x942518c63194610]
 noncomputable def engine0 : Checker := look (lz 0) (mz 0) (pL (projections.map fun _ => 16))
 noncomputable def engine1 : Checker := look1 (lz 0) (mz 0) (pL (projections.map fun _ => 16)) 14
 lemma discharge (cs : List GateState) (H : ℕ)
@@ -6178,1463 +6302,666 @@ lemma discharge (cs : List GateState) (H : ℕ)
   have hv : ∀ s ∈ cs, evalState engine0 engine1 s = false := fun s hs => by simpa using List.all_eq_true.mp hc s hs
   rw [useCache_eq cs engine0 engine1 false hv, useCache_eq cs engine0 engine1 true hv] at ht
   exact (cutTwo_original projections 0 14 1 H 0).symm.trans ht
-def block0 : List GateState := [(false, 14, 12, 1, z0, [w5, w4, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z1, [w5, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z2, [w3, w0, w2, w6, w7, w8, w9, w10, w13]),
-  (false, 14, 12, 1, z3, [w16, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z4, [w18, w4, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block0 : List GateState := [(true, 13, 12, 1, z0, [w2, w4, w5, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z1, [w2, w10, w5, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z2, [w2, w11, w5, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z3, [w2, w1, w12, w5, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z4, [w2, w1, w5, w13, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok0 : block0.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block1 : List GateState := [(false, 14, 12, 1, z5, [w3, w0, w2, w6, w7, w8, w9, w10, w21]),
-  (false, 14, 12, 1, z6, [w23, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z7, [w25, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z8, [w3, w2, w6, w31, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z9, [w3, w0, w2, w6, w35, w7, w8, w9, w10])]
+def block1 : List GateState := [(true, 13, 12, 1, z1, [w2, w1, w5, w14, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z2, [w2, w1, w5, w15, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z5, [w2, w1, w5, w0, w16, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z6, [w2, w1, w5, w0, w17, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z7, [w19, w2, w1, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok1 : block1.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block2 : List GateState := [(false, 14, 11, 0, z10, [w3, w0, w2, w6, w7, w8, w39, w9, w10]),
-  (false, 14, 11, 0, z9, [w41, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z11, [w40, w41, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z12, [w42, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z11, [w42, w4, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block2 : List GateState := [(false, 14, 12, 1, z8, [w19, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z9, [w1, w5, w0, w3, w6, w7, w8, w9, w22]),
+  (false, 14, 12, 1, z10, [w25, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z11, [w27, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z12, [w1, w5, w0, w3, w6, w7, w8, w9, w30])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok2 : block2.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block3 : List GateState := [(false, 14, 11, 0, z13, [w43, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z14, [w44, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z15, [w4, w3, w0, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z16, [w40, w4, w3, w0, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z17, [w46, w4, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block3 : List GateState := [(false, 14, 12, 1, z1, [w31, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z13, [w31, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z2, [w32, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z14, [w32, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z15, [w1, w0, w3, w38, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok3 : block3.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block4 : List GateState := [(false, 14, 11, 0, z18, [w47, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z10, [w49, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z19, [w48, w49, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z20, [w50, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z19, [w50, w4, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block4 : List GateState := [(false, 14, 11, 0, z16, [w1, w5, w0, w3, w42, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z17, [w1, w5, w0, w3, w6, w7, w46, w8, w9]),
+  (false, 14, 11, 0, z16, [w48, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z18, [w47, w48, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z19, [w49, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok4 : block4.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block5 : List GateState := [(false, 14, 11, 0, z21, [w51, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z15, [w4, w3, w0, w2, w6, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z22, [w48, w4, w3, w0, w2, w6, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z23, [w54, w4, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z24, [w55, w4, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block5 : List GateState := [(false, 14, 11, 0, z18, [w49, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z20, [w50, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z21, [w51, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z22, [w2, w1, w5, w0, w3, w6, w7, w52, w8, w9]),
+  (false, 14, 11, 0, z23, [w47, w2, w1, w5, w0, w3, w6, w7, w52, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok5 : block5.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block6 : List GateState := [(false, 14, 11, 0, z25, [w57, w4, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block6 : List GateState := [(false, 14, 11, 0, z24, [w53, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z25, [w54, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z17, [w56, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z26, [w55, w56, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z27, [w57, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok6 : block6.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block7 : List GateState := [(true, 13, 12, 1, z26, [w4, w3, w0, w2, w58, w6, w7, w8, w9, w10])]
+def block7 : List GateState := [(false, 14, 11, 0, z26, [w57, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z28, [w58, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z22, [w2, w1, w5, w0, w3, w60, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z29, [w55, w2, w1, w5, w0, w3, w60, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z30, [w61, w2, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok7 : block7.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block8 : List GateState := [(false, 14, 12, 1, z27, [w5, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z28, [w5, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block8 : List GateState := [(false, 14, 11, 0, z31, [w62, w2, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z32, [w64, w2, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok8 : block8.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block9 : List GateState := [(true, 13, 12, 1, z29, [w4, w59, w0, w2, w6, w7, w8, w9, w10])]
+def block9 : List GateState := [(false, 14, 12, 1, z33, [w19, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z34, [w19, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok9 : block9.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block10 : List GateState := [(false, 14, 12, 1, z29, [w18, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block10 : List GateState := [(true, 13, 12, 1, z4, [w2, w65, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z4, [w27, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok10 : block10.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block11 : List GateState := [(true, 13, 12, 1, z30, [w4, w60, w0, w2, w6, w7, w8, w9, w10])]
+def block11 : List GateState := [(true, 13, 12, 1, z0, [w2, w1, w5, w24, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z0, [w25, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok11 : block11.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block12 : List GateState := [(false, 14, 12, 1, z30, [w23, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block12 : List GateState := [(true, 13, 12, 1, z35, [w2, w1, w66, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok12 : block12.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block13 : List GateState := [(true, 13, 12, 1, z31, [w4, w3, w0, w15, w6, w7, w8, w9, w10])]
+def block13 : List GateState := [(true, 13, 12, 1, z36, [w2, w1, w5, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z37, [w2, w1, w5, w0, w68, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok13 : block13.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block14 : List GateState := [(false, 14, 12, 1, z31, [w16, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block14 : List GateState := [(true, 13, 12, 1, z38, [w2, w1, w5, w0, w3, w6, w43, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok14 : block14.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block15 : List GateState := [(true, 13, 12, 1, z32, [w4, w3, w61, w0, w2, w6, w7, w8, w9, w10])]
+def block15 : List GateState := [(true, 13, 12, 1, z39, [w2, w1, w5, w0, w3, w69, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok15 : block15.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block16 : List GateState := [(true, 13, 12, 1, z33, [w4, w3, w0, w2, w62, w6, w7, w8, w9, w10])]
+def block16 : List GateState := [(true, 13, 12, 1, z40, [w70, w11, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z4, [w70, w1, w13, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z1, [w70, w1, w14, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z2, [w70, w1, w15, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z41, [w70, w1, w0, w16, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok16 : block16.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block17 : List GateState := [(true, 13, 12, 1, z34, [w4, w3, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z35, [w4, w3, w0, w2, w64, w6, w7, w8, w9, w10])]
+def block17 : List GateState := [(true, 13, 12, 1, z42, [w70, w1, w0, w17, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z43, [w19, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z44, [w70, w1, w0, w3, w72, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z45, [w73, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z46, [w74, w70, w1, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok17 : block17.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block18 : List GateState := [(true, 13, 12, 1, z36, [w4, w3, w0, w65, w6, w7, w8, w9, w10])]
+def block18 : List GateState := [(false, 14, 12, 1, z47, [w70, w1, w0, w3, w6, w7, w76, w8, w9]),
+  (false, 14, 12, 1, z48, [w77, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z49, [w78, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z50, [w70, w80, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z51, [w70, w1, w0, w3, w83, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok18 : block18.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block19 : List GateState := [(false, 14, 12, 1, z36, [w25, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block19 : List GateState := [(false, 14, 11, 0, z52, [w70, w1, w0, w3, w6, w7, w87, w8, w9]),
+  (false, 14, 11, 0, z51, [w70, w88, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z53, [w47, w70, w88, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z54, [w89, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z55, [w90, w70, w1, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok19 : block19.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block20 : List GateState := [(true, 13, 12, 1, z37, [w4, w3, w0, w2, w6, w7, w36, w8, w9, w10])]
+def block20 : List GateState := [(false, 14, 11, 0, z56, [w51, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z57, [w70, w1, w0, w3, w6, w7, w52, w8, w9]),
+  (false, 14, 11, 0, z58, [w47, w70, w1, w0, w3, w6, w7, w52, w8, w9]),
+  (false, 14, 11, 0, z59, [w53, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z60, [w54, w70, w1, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok20 : block20.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block21 : List GateState := [(true, 13, 12, 1, z31, [w4, w66, w0, w2, w6, w7, w8, w9, w10])]
+def block21 : List GateState := [(false, 14, 11, 0, z52, [w70, w91, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z61, [w55, w70, w91, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z62, [w92, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z63, [w93, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z57, [w70, w1, w0, w3, w60, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok21 : block21.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block22 : List GateState := [(true, 13, 12, 1, z29, [w4, w3, w0, w67, w6, w7, w8, w9, w10])]
+def block22 : List GateState := [(false, 14, 11, 0, z64, [w55, w70, w1, w0, w3, w60, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z65, [w61, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z66, [w62, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z67, [w64, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z34, [w70, w1, w94, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok22 : block22.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block23 : List GateState := [(true, 13, 12, 1, z30, [w4, w3, w0, w22, w6, w7, w8, w9, w10])]
+def block23 : List GateState := [(true, 13, 12, 1, z68, [w70, w1, w12, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z3, [w70, w1, w5, w14, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z69, [w19, w70, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z70, [w1, w5, w0, w3, w72, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z71, [w73, w70, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok23 : block23.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block24 : List GateState := [(true, 13, 12, 1, z38, [w4, w3, w68, w0, w2, w6, w7, w8, w9, w10])]
+def block24 : List GateState := [(false, 14, 12, 1, z72, [w1, w5, w0, w3, w6, w7, w76, w8, w9]),
+  (false, 14, 12, 1, z68, [w77, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z73, [w77, w70, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z74, [w1, w5, w0, w3, w83, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z75, [w1, w5, w0, w3, w6, w7, w87, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok24 : block24.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block25 : List GateState := [(true, 13, 12, 1, z36, [w4, w24, w0, w2, w6, w7, w8, w9, w10])]
+def block25 : List GateState := [(false, 14, 11, 0, z74, [w88, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z76, [w50, w70, w1, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z77, [w70, w1, w5, w0, w3, w6, w7, w52, w8, w9]),
+  (false, 14, 11, 0, z75, [w91, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z78, [w58, w70, w1, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok25 : block25.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block26 : List GateState := [(true, 13, 12, 1, z39, [w4, w3, w0, w2, w6, w69, w7, w8, w9, w10])]
+def block26 : List GateState := [(false, 14, 11, 0, z77, [w70, w1, w5, w0, w3, w60, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok26 : block26.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block27 : List GateState := [(false, 14, 12, 1, z40, [w70, w3, w0, w2, w58, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z41, [w3, w0, w71, w2, w58, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z42, [w3, w0, w2, w6, w7, w8, w9, w72, w10]),
-  (false, 14, 12, 1, z43, [w3, w0, w2, w73, w58, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z44, [w3, w0, w2, w6, w7, w8, w77, w9, w10])]
+def block27 : List GateState := [(true, 13, 12, 1, z79, [w70, w65, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok27 : block27.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block28 : List GateState := [(false, 14, 11, 0, z44, [w3, w0, w2, w78, w6, w7, w8, w9, w10])]
+def block28 : List GateState := [(true, 13, 12, 1, z0, [w70, w1, w24, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z35, [w70, w1, w5, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok28 : block28.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block29 : List GateState := [(true, 13, 12, 1, z45, [w79, w3, w2, w58, w6, w7, w8, w9, w10])]
+def block29 : List GateState := [(true, 13, 12, 1, z80, [w70, w1, w66, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z80, [w73, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok29 : block29.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block30 : List GateState := [(true, 13, 12, 1, z46, [w60, w3, w0, w2, w58, w6, w7, w8, w9, w10])]
+def block30 : List GateState := [(true, 13, 12, 1, z81, [w70, w1, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z82, [w70, w1, w0, w68, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z83, [w70, w1, w5, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z84, [w70, w1, w5, w0, w68, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok30 : block30.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block31 : List GateState := [(true, 13, 12, 1, z47, [w3, w0, w15, w2, w58, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z48, [w3, w0, w15, w2, w58, w6, w7, w8, w9, w10])]
+def block31 : List GateState := [(true, 13, 12, 1, z85, [w70, w1, w0, w3, w6, w43, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok31 : block31.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block32 : List GateState := [(false, 14, 12, 1, z47, [w3, w0, w71, w2, w6, w7, w8, w9, w10])]
+def block32 : List GateState := [(true, 13, 12, 1, z86, [w70, w1, w0, w3, w69, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok32 : block32.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block33 : List GateState := [(true, 13, 12, 1, z49, [w3, w0, w2, w64, w58, w6, w7, w8, w9, w10])]
+def block33 : List GateState := [(true, 13, 12, 1, z86, [w65, w10, w5, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z4, [w65, w1, w94, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z4, [w65, w1, w5, w13, w0, w3, w7, w8, w9]),
+  (true, 13, 12, 1, z39, [w65, w1, w5, w14, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z41, [w65, w1, w5, w0, w16, w3, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok33 : block33.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block34 : List GateState := [(false, 14, 12, 1, z50, [w3, w0, w2, w73, w6, w7, w8, w9, w10])]
+def block34 : List GateState := [(false, 14, 12, 1, z87, [w27, w65, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z88, [w1, w5, w0, w3, w6, w95, w7, w8, w9]),
+  (false, 14, 12, 1, z41, [w96, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z89, [w96, w65, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z90, [w1, w5, w0, w3, w6, w7, w8, w9, w98])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok34 : block34.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block35 : List GateState := [(true, 13, 12, 1, z47, [w3, w0, w65, w2, w58, w6, w7, w8, w10])]
+def block35 : List GateState := [(false, 14, 12, 1, z91, [w99, w65, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z92, [w1, w5, w0, w3, w102, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z93, [w1, w5, w0, w3, w6, w7, w104, w8, w9]),
+  (false, 14, 11, 0, z92, [w105, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z94, [w65, w1, w5, w0, w3, w6, w7, w52, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok35 : block35.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block36 : List GateState := [(true, 13, 12, 1, z50, [w3, w0, w2, w58, w6, w7, w36, w8, w10])]
+def block36 : List GateState := [(false, 14, 11, 0, z93, [w106, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z94, [w65, w1, w5, w0, w3, w60, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok36 : block36.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block37 : List GateState := [(true, 13, 12, 1, z47, [w3, w80, w2, w58, w6, w7, w8, w9, w10])]
+def block37 : List GateState := [(true, 13, 12, 1, z5, [w65, w1, w5, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok37 : block37.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block38 : List GateState := [(true, 13, 12, 1, z45, [w66, w3, w0, w2, w58, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z51, [w66, w3, w0, w2, w58, w6, w7, w8, w9, w10])]
+def block38 : List GateState := [(true, 13, 12, 1, z95, [w65, w1, w5, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z96, [w65, w1, w5, w0, w68, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok38 : block38.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block39 : List GateState := [(false, 14, 12, 1, z45, [w70, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block39 : List GateState := [(true, 13, 12, 1, z86, [w65, w1, w5, w0, w3, w69, w7, w8, w9]),
+  (false, 14, 12, 1, z86, [w99, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok39 : block39.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block40 : List GateState := [(true, 13, 12, 1, z52, [w3, w0, w22, w2, w58, w6, w7, w8, w9, w10])]
+def block40 : List GateState := [(true, 13, 12, 1, z0, [w4, w1, w5, w24, w0, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z97, [w4, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z37, [w10, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z6, [w11, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z98, [w1, w12, w5, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok40 : block40.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block41 : List GateState := [(true, 13, 12, 1, z45, [w24, w3, w0, w2, w58, w6, w7, w8, w10])]
+def block41 : List GateState := [(true, 13, 12, 1, z99, [w1, w5, w24, w14, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z100, [w1, w5, w24, w15, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z101, [w1, w5, w24, w0, w16, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z102, [w1, w5, w24, w0, w16, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z100, [w1, w5, w24, w0, w17, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok41 : block41.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block42 : List GateState := [(false, 14, 12, 1, z53, [w5, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z54, [w79, w3, w2, w6, w82, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z55, [w83, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z56, [w84, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z57, [w79, w3, w2, w6, w7, w8, w86, w9, w10])]
+def block42 : List GateState := [(true, 13, 12, 1, z103, [w1, w5, w24, w0, w17, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z104, [w25, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z105, [w1, w107, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z101, [w1, w5, w108, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z106, [w1, w5, w108, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok42 : block42.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block43 : List GateState := [(false, 14, 12, 1, z58, [w87, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z59, [w88, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z60, [w79, w90, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z61, [w79, w3, w2, w6, w93, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z62, [w79, w3, w2, w6, w7, w8, w97, w9, w10])]
+def block43 : List GateState := [(false, 14, 12, 1, z107, [w1, w5, w0, w3, w6, w7, w8, w9, w109]),
+  (false, 14, 12, 1, z108, [w1, w5, w24, w0, w3, w6, w7, w8, w9, w109]),
+  (false, 14, 12, 1, z109, [w1, w5, w110, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z100, [w1, w5, w111, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z110, [w1, w5, w111, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok43 : block43.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block44 : List GateState := [(false, 14, 11, 0, z61, [w79, w98, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z63, [w40, w79, w98, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z64, [w99, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z65, [w100, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z66, [w44, w79, w3, w2, w6, w7, w8, w9, w10])]
+def block44 : List GateState := [(false, 14, 11, 0, z111, [w113, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z112, [w113, w112, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z113, [w114, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z114, [w114, w112, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z115, [w117, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok44 : block44.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block45 : List GateState := [(false, 14, 11, 0, z67, [w79, w3, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z68, [w40, w79, w3, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z69, [w46, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z70, [w47, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z62, [w79, w101, w3, w2, w6, w7, w8, w9, w10])]
+def block45 : List GateState := [(false, 14, 11, 0, z116, [w117, w112, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z117, [w119, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z118, [w119, w112, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z119, [w1, w5, w0, w3, w6, w7, w122, w8, w9]),
+  (false, 14, 11, 0, z120, [w112, w1, w5, w0, w3, w6, w7, w122, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok45 : block45.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block46 : List GateState := [(false, 14, 11, 0, z71, [w48, w79, w101, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z72, [w102, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z73, [w103, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z67, [w79, w3, w2, w6, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z74, [w48, w79, w3, w2, w6, w53, w7, w8, w9, w10])]
+def block46 : List GateState := [(false, 14, 11, 0, z121, [w125, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z122, [w125, w112, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z123, [w129, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z124, [w129, w112, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z112, [w113, w1, w5, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok46 : block46.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block47 : List GateState := [(false, 14, 11, 0, z75, [w54, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z76, [w55, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z77, [w57, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z78, [w5, w79, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z79, [w3, w0, w2, w6, w82, w7, w8, w9, w10])]
+def block47 : List GateState := [(false, 14, 11, 0, z114, [w114, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z125, [w130, w1, w5, w24, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z126, [w130, w112, w1, w5, w24, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z125, [w117, w1, w5, w24, w0, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z126, [w117, w112, w1, w5, w24, w0, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok47 : block47.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block48 : List GateState := [(false, 14, 12, 1, z80, [w83, w79, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z81, [w3, w0, w2, w6, w7, w8, w86, w9, w10]),
-  (false, 14, 12, 1, z82, [w87, w79, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z83, [w3, w0, w2, w6, w93, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z84, [w3, w0, w2, w6, w7, w8, w97, w9, w10])]
+def block48 : List GateState := [(false, 14, 11, 0, z116, [w117, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z118, [w119, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z120, [w1, w5, w24, w0, w3, w6, w7, w122, w8, w9]),
+  (false, 14, 11, 0, z127, [w112, w1, w5, w24, w0, w3, w6, w7, w122, w8, w9]),
+  (false, 14, 11, 0, z122, [w125, w1, w5, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok48 : block48.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block49 : List GateState := [(false, 14, 11, 0, z83, [w98, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z85, [w43, w79, w3, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z86, [w79, w3, w0, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z84, [w101, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z87, [w51, w79, w3, w2, w6, w7, w8, w9, w10])]
+def block49 : List GateState := [(false, 14, 11, 0, z124, [w129, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z128, [w1, w5, w0, w131, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z129, [w1, w5, w24, w0, w131, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z130, [w1, w5, w24, w0, w3, w6, w7, w52, w8, w9]),
+  (false, 14, 11, 0, z131, [w132, w1, w5, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok49 : block49.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block50 : List GateState := [(false, 14, 11, 0, z86, [w79, w3, w0, w2, w6, w53, w7, w8, w9, w10])]
+def block50 : List GateState := [(false, 14, 11, 0, z132, [w58, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z119, [w1, w5, w133, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z133, [w55, w1, w5, w133, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z120, [w1, w5, w24, w133, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z134, [w55, w1, w5, w24, w133, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok50 : block50.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block51 : List GateState := [(true, 13, 12, 1, z88, [w79, w59, w2, w6, w7, w8, w9, w10])]
+def block51 : List GateState := [(false, 14, 11, 0, z135, [w134, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z133, [w134, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z136, [w1, w5, w24, w0, w60, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z137, [w55, w1, w5, w24, w0, w60, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z130, [w1, w5, w24, w0, w3, w60, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok51 : block51.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block52 : List GateState := [(false, 14, 12, 1, z89, [w87, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block52 : List GateState := [(false, 14, 11, 0, z138, [w55, w1, w5, w24, w0, w3, w60, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z137, [w61, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z139, [w62, w1, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z140, [w64, w1, w5, w24, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok52 : block52.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block53 : List GateState := [(true, 13, 12, 1, z31, [w79, w3, w15, w2, w6, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z32, [w79, w3, w0, w15, w2, w6, w7, w8, w9, w10])]
+def block53 : List GateState := [(true, 13, 12, 1, z141, [w1, w66, w5, w24, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z142, [w1, w107, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok53 : block53.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block54 : List GateState := [(true, 13, 12, 1, z90, [w79, w3, w61, w2, w6, w7, w8, w9, w10])]
+def block54 : List GateState := [(true, 13, 12, 1, z143, [w1, w5, w24, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z99, [w1, w5, w24, w0, w68, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z144, [w1, w5, w24, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z99, [w1, w5, w110, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok54 : block54.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block55 : List GateState := [(false, 14, 12, 1, z90, [w83, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block55 : List GateState := [(true, 13, 12, 1, z145, [w1, w5, w24, w0, w3, w6, w43, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok55 : block55.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block56 : List GateState := [(true, 13, 12, 1, z91, [w79, w3, w2, w62, w6, w7, w8, w9, w10])]
+def block56 : List GateState := [(true, 13, 12, 1, z146, [w1, w5, w24, w0, w3, w69, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok56 : block56.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block57 : List GateState := [(true, 13, 12, 1, z92, [w79, w3, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z93, [w79, w3, w2, w64, w6, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z94, [w79, w3, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z95, [w79, w3, w0, w2, w64, w6, w7, w8, w9, w10])]
+def block57 : List GateState := [(true, 13, 12, 1, z147, [w4, w1, w66, w5, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z84, [w10, w1, w66, w5, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z142, [w1, w94, w66, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z148, [w1, w66, w12, w0, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z98, [w1, w66, w5, w14, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok57 : block57.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block58 : List GateState := [(true, 13, 12, 1, z36, [w79, w3, w65, w2, w6, w7, w8, w9, w10])]
+def block58 : List GateState := [(false, 14, 12, 1, z149, [w73, w1, w66, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z150, [w1, w107, w66, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z151, [w1, w5, w0, w3, w6, w7, w135, w8, w9]),
+  (false, 14, 12, 1, z152, [w1, w136, w66, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z153, [w1, w5, w0, w3, w6, w7, w137, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok58 : block58.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block59 : List GateState := [(true, 13, 12, 1, z96, [w79, w3, w2, w6, w7, w36, w8, w9, w10])]
+def block59 : List GateState := [(false, 14, 11, 0, z153, [w1, w138, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok59 : block59.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block60 : List GateState := [(true, 13, 12, 1, z28, [w79, w3, w80, w2, w6, w7, w8, w9, w10])]
+def block60 : List GateState := [(true, 13, 12, 1, z154, [w1, w66, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z148, [w1, w136, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok60 : block60.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block61 : List GateState := [(true, 13, 12, 1, z29, [w79, w3, w67, w2, w6, w7, w8, w9, w10])]
+def block61 : List GateState := [(true, 13, 12, 1, z155, [w4, w1, w5, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z156, [w10, w1, w5, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z157, [w11, w1, w5, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z158, [w1, w94, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z159, [w1, w94, w5, w0, w3, w6, w7, w8, w9, w67])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok61 : block61.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block62 : List GateState := [(true, 13, 12, 1, z30, [w79, w3, w22, w2, w6, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z38, [w79, w3, w0, w22, w2, w6, w7, w8, w9, w10])]
+def block62 : List GateState := [(true, 13, 12, 1, z160, [w1, w5, w13, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z161, [w1, w5, w14, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z162, [w1, w5, w15, w0, w3, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z163, [w1, w5, w0, w68, w6, w8, w9, w67]),
+  (true, 13, 12, 1, z164, [w1, w5, w0, w68, w3, w6, w8, w9, w67])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok62 : block62.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block63 : List GateState := [(true, 13, 12, 1, z89, [w79, w3, w68, w2, w6, w7, w8, w9, w10])]
+def block63 : List GateState := [(true, 13, 12, 1, z165, [w1, w5, w0, w68, w6, w7, w8, w9, w67]),
+  (true, 13, 12, 1, z166, [w1, w5, w0, w68, w3, w6, w7, w8, w9, w67]),
+  (false, 14, 12, 1, z163, [w139, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z167, [w139, w5, w0, w3, w6, w7, w8, w9, w67]),
+  (false, 14, 12, 1, z81, [w139, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok63 : block63.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block64 : List GateState := [(true, 13, 12, 1, z97, [w79, w24, w2, w6, w7, w8, w9, w10])]
+def block64 : List GateState := [(false, 14, 12, 1, z168, [w139, w1, w5, w0, w3, w6, w7, w8, w9, w67]),
+  (false, 14, 12, 1, z163, [w1, w140, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z167, [w1, w140, w0, w3, w6, w7, w8, w9, w67]),
+  (false, 14, 12, 1, z169, [w1, w140, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z163, [w1, w5, w141, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok64 : block64.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block65 : List GateState := [(true, 13, 12, 1, z98, [w79, w3, w2, w6, w69, w7, w8, w9, w10])]
+def block65 : List GateState := [(false, 14, 12, 1, z167, [w1, w5, w141, w3, w6, w7, w8, w9, w67]),
+  (false, 14, 12, 1, z158, [w1, w5, w141, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z170, [w1, w5, w141, w0, w3, w6, w7, w8, w9, w67]),
+  (false, 14, 12, 1, z163, [w1, w5, w0, w3, w142, w7, w8, w9]),
+  (false, 14, 12, 1, z167, [w1, w5, w0, w3, w142, w7, w8, w9, w67])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok65 : block65.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block66 : List GateState := [(false, 14, 12, 1, z99, [w18, w59, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z100, [w3, w0, w2, w6, w7, w104, w8, w9, w10]),
-  (false, 14, 12, 1, z101, [w105, w59, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z102, [w3, w0, w2, w6, w7, w8, w9, w10, w107]),
-  (false, 14, 12, 1, z103, [w108, w59, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block66 : List GateState := [(false, 14, 12, 1, z171, [w1, w5, w0, w3, w142, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z163, [w1, w5, w0, w3, w6, w7, w143, w9]),
+  (false, 14, 12, 1, z167, [w1, w5, w0, w3, w6, w7, w143, w9, w67]),
+  (false, 14, 12, 1, z172, [w1, w5, w0, w3, w6, w7, w143, w8, w9]),
+  (false, 14, 12, 1, z163, [w1, w5, w0, w3, w6, w7, w8, w145])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok66 : block66.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block67 : List GateState := [(false, 14, 11, 0, z104, [w3, w0, w2, w6, w111, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z105, [w3, w0, w2, w6, w7, w8, w113, w9, w10]),
-  (false, 14, 11, 0, z104, [w114, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z106, [w59, w3, w0, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z105, [w115, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block67 : List GateState := [(false, 14, 12, 1, z167, [w1, w5, w0, w3, w6, w7, w8, w145, w67]),
+  (false, 14, 11, 0, z173, [w148, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z174, [w1, w150, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z175, [w1, w5, w151, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z176, [w1, w5, w0, w3, w153, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok67 : block67.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block68 : List GateState := [(false, 14, 11, 0, z106, [w59, w3, w0, w2, w6, w53, w7, w8, w9, w10])]
+def block68 : List GateState := [(false, 14, 11, 0, z177, [w1, w5, w0, w3, w6, w7, w156, w9]),
+  (true, 13, 12, 1, z82, [w4, w1, w5, w0, w68, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z178, [w4, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z82, [w10, w1, w5, w0, w68, w3, w6, w8, w9]),
+  (true, 13, 12, 1, z179, [w10, w1, w5, w0, w68, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok68 : block68.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block69 : List GateState := [(true, 13, 12, 1, z98, [w59, w60, w0, w2, w6, w7, w8, w9, w10])]
+def block69 : List GateState := [(true, 13, 12, 1, z180, [w11, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z99, [w1, w94, w0, w68, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z98, [w1, w94, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z181, [w1, w12, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z146, [w1, w5, w13, w0, w68, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok69 : block69.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block70 : List GateState := [(false, 14, 12, 1, z98, [w108, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block70 : List GateState := [(true, 13, 12, 1, z99, [w1, w5, w14, w0, w68, w3, w6, w8, w9]),
+  (true, 13, 12, 1, z182, [w1, w5, w14, w0, w68, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z145, [w1, w5, w15, w0, w68, w3, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z183, [w1, w5, w0, w68, w16, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z184, [w1, w5, w0, w68, w16, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok70 : block70.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block71 : List GateState := [(true, 13, 12, 1, z33, [w59, w3, w0, w15, w2, w6, w7, w8, w9, w10])]
+def block71 : List GateState := [(true, 13, 12, 1, z185, [w1, w5, w0, w68, w17, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z82, [w157, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z186, [w157, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z187, [w1, w136, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z188, [w1, w5, w110, w0, w68, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok71 : block71.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block72 : List GateState := [(true, 13, 12, 1, z91, [w59, w3, w0, w2, w62, w6, w8, w9, w10])]
+def block72 : List GateState := [(false, 14, 12, 1, z189, [w1, w5, w0, w158, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z190, [w1, w5, w0, w159, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z191, [w161, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z192, [w161, w162, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z193, [w163, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok72 : block72.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block73 : List GateState := [(false, 14, 12, 1, z91, [w105, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block73 : List GateState := [(false, 14, 11, 0, z194, [w163, w162, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z195, [w164, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z196, [w164, w162, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z197, [w166, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z198, [w166, w162, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok73 : block73.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block74 : List GateState := [(true, 13, 12, 1, z107, [w59, w3, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z108, [w59, w3, w0, w2, w64, w6, w7, w8, w9, w10])]
+def block74 : List GateState := [(false, 14, 11, 0, z199, [w167, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z200, [w167, w162, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z201, [w169, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z202, [w169, w162, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z203, [w171, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok74 : block74.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block75 : List GateState := [(true, 13, 12, 1, z29, [w59, w3, w80, w2, w6, w7, w8, w9, w10])]
+def block75 : List GateState := [(false, 14, 11, 0, z204, [w171, w162, w1, w5, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z192, [w161, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z194, [w163, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z196, [w164, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z205, [w166, w1, w5, w0, w68, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok75 : block75.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block76 : List GateState := [(true, 13, 12, 1, z29, [w59, w3, w0, w67, w2, w6, w8, w9, w10])]
+def block76 : List GateState := [(false, 14, 11, 0, z206, [w166, w162, w1, w5, w0, w68, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z198, [w166, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z200, [w167, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z205, [w169, w1, w5, w0, w68, w3, w6, w8, w9]),
+  (false, 14, 11, 0, z206, [w169, w162, w1, w5, w0, w68, w3, w6, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok76 : block76.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block77 : List GateState := [(true, 13, 12, 1, z39, [w59, w3, w0, w22, w2, w6, w7, w8, w9, w10])]
+def block77 : List GateState := [(false, 14, 11, 0, z202, [w169, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z204, [w171, w1, w5, w0, w68, w3, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z207, [w1, w5, w0, w3, w6, w7, w165, w8, w9]),
+  (false, 14, 11, 0, z208, [w1, w5, w0, w68, w3, w6, w7, w165, w8, w9]),
+  (false, 14, 11, 0, z209, [w1, w5, w0, w68, w3, w6, w7, w52, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok77 : block77.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block78 : List GateState := [(true, 13, 12, 1, z98, [w59, w3, w0, w2, w6, w69, w8, w9, w10])]
+def block78 : List GateState := [(false, 14, 11, 0, z210, [w1, w5, w0, w3, w168, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z211, [w1, w5, w0, w68, w3, w168, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z209, [w1, w5, w0, w68, w3, w60, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok78 : block78.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block79 : List GateState := [(false, 14, 12, 1, z109, [w87, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z110, [w23, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z111, [w3, w0, w2, w6, w7, w8, w9, w10, w116]),
-  (false, 14, 12, 1, z112, [w60, w3, w0, w2, w6, w7, w8, w9, w10, w116]),
-  (false, 14, 12, 1, z113, [w117, w60, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block79 : List GateState := [(true, 13, 12, 1, z212, [w1, w5, w0, w68, w3, w6, w43, w8, w9]),
+  (true, 13, 12, 1, z213, [w1, w5, w0, w68, w3, w6, w43, w7, w8, w9]),
+  (false, 14, 12, 1, z212, [w1, w5, w0, w159, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok79 : block79.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block80 : List GateState := [(false, 14, 12, 1, z114, [w108, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z115, [w118, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z116, [w3, w120, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z117, [w3, w120, w0, w121, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z118, [w3, w0, w124, w2, w6, w7, w8, w9, w10])]
+def block80 : List GateState := [(true, 13, 12, 1, z214, [w1, w5, w0, w68, w3, w69, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z183, [w1, w5, w0, w158, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok80 : block80.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block81 : List GateState := [(false, 14, 11, 0, z119, [w3, w0, w124, w121, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z120, [w3, w0, w2, w6, w127, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z121, [w3, w0, w121, w2, w6, w127, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z122, [w3, w0, w130, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z123, [w3, w0, w130, w121, w2, w6, w7, w8, w9, w10])]
+def block81 : List GateState := [(true, 13, 12, 1, z180, [w4, w1, w5, w0, w3, w6, w43, w7, w8, w9]),
+  (true, 13, 12, 1, z85, [w10, w1, w5, w0, w3, w6, w43, w8, w9]),
+  (true, 13, 12, 1, z215, [w10, w1, w5, w0, w3, w6, w43, w7, w8, w9]),
+  (true, 13, 12, 1, z85, [w11, w1, w5, w0, w3, w6, w43, w7, w9]),
+  (true, 13, 12, 1, z216, [w1, w94, w0, w3, w6, w43, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok81 : block81.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block82 : List GateState := [(false, 14, 11, 0, z124, [w3, w0, w132, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z125, [w3, w0, w132, w121, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z126, [w3, w0, w133, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z127, [w3, w0, w133, w121, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z128, [w3, w0, w134, w2, w6, w7, w8, w9, w10])]
+def block82 : List GateState := [(true, 13, 12, 1, z216, [w1, w5, w14, w0, w3, w6, w43, w8, w9]),
+  (true, 13, 12, 1, z217, [w1, w5, w14, w0, w3, w6, w43, w7, w8, w9]),
+  (true, 13, 12, 1, z216, [w1, w5, w15, w0, w3, w6, w43, w7, w9]),
+  (true, 13, 12, 1, z212, [w1, w5, w0, w17, w3, w6, w43, w7, w9]),
+  (false, 14, 12, 1, z85, [w172, w1, w5, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok82 : block82.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block83 : List GateState := [(false, 14, 11, 0, z129, [w3, w0, w134, w121, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z130, [w136, w60, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z131, [w136, w60, w0, w121, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z117, [w60, w3, w120, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z119, [w60, w3, w0, w124, w2, w6, w7, w8, w9, w10])]
+def block83 : List GateState := [(false, 14, 12, 1, z218, [w172, w1, w5, w0, w3, w6, w43, w7, w8, w9]),
+  (false, 14, 12, 1, z216, [w1, w5, w173, w0, w3, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z219, [w1, w5, w173, w0, w3, w6, w43, w7, w8, w9]),
+  (false, 14, 12, 1, z220, [w1, w5, w0, w3, w6, w7, w8, w9, w174]),
+  (false, 14, 12, 1, z221, [w1, w5, w0, w159, w3, w6, w43, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok83 : block83.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block84 : List GateState := [(false, 14, 11, 0, z121, [w60, w3, w0, w2, w6, w127, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z132, [w60, w3, w0, w121, w2, w6, w127, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z123, [w60, w3, w0, w130, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z125, [w60, w3, w0, w132, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z130, [w60, w3, w0, w133, w2, w6, w7, w9, w10])]
+def block84 : List GateState := [(false, 14, 11, 0, z222, [w1, w5, w0, w3, w6, w175, w7, w8, w9]),
+  (false, 14, 11, 0, z223, [w1, w5, w0, w3, w6, w43, w52, w8, w9]),
+  (false, 14, 11, 0, z222, [w1, w5, w0, w3, w177, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok84 : block84.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block85 : List GateState := [(false, 14, 11, 0, z131, [w60, w3, w0, w133, w121, w2, w6, w7, w9, w10]),
-  (false, 14, 11, 0, z127, [w60, w3, w0, w133, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z129, [w60, w3, w0, w134, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z120, [w137, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z133, [w40, w137, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block85 : List GateState := [(true, 13, 12, 1, z96, [w4, w1, w5, w0, w3, w69, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z86, [w10, w1, w5, w0, w3, w69, w6, w8, w9]),
+  (true, 13, 12, 1, z224, [w10, w1, w5, w0, w3, w69, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z225, [w1, w94, w0, w3, w69, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z225, [w1, w5, w13, w0, w3, w69, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok85 : block85.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block86 : List GateState := [(false, 14, 11, 0, z121, [w60, w137, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z134, [w40, w60, w137, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z135, [w138, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z133, [w138, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z136, [w43, w60, w3, w0, w2, w6, w7, w8, w9, w10])]
+def block86 : List GateState := [(true, 13, 12, 1, z225, [w1, w5, w14, w0, w3, w69, w6, w8, w9]),
+  (true, 13, 12, 1, z226, [w1, w5, w14, w0, w3, w69, w6, w7, w8, w9]),
+  (true, 13, 12, 1, z183, [w1, w5, w0, w16, w3, w69, w7, w8, w9]),
+  (false, 14, 12, 1, z227, [w99, w1, w5, w0, w3, w69, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z225, [w1, w5, w178, w0, w3, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok86 : block86.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block87 : List GateState := [(false, 14, 11, 0, z137, [w100, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z138, [w44, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z67, [w60, w3, w0, w2, w6, w7, w45, w9, w10]),
-  (false, 14, 11, 0, z68, [w40, w60, w3, w0, w2, w6, w7, w45, w9, w10]),
-  (false, 14, 11, 0, z74, [w60, w3, w0, w2, w6, w7, w8, w45, w9, w10])]
+def block87 : List GateState := [(false, 14, 12, 1, z228, [w1, w5, w178, w0, w3, w69, w6, w7, w8, w9]),
+  (false, 14, 12, 1, z229, [w1, w5, w0, w3, w6, w179, w7, w8, w9]),
+  (false, 14, 12, 1, z230, [w1, w5, w0, w158, w3, w69, w6, w7, w8, w9]),
+  (false, 14, 11, 0, z231, [w1, w5, w0, w3, w6, w180, w7, w8, w9]),
+  (false, 14, 11, 0, z231, [w1, w5, w0, w3, w183, w6, w7, w8, w9])]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma ok87 : block87.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block88 : List GateState := [(false, 14, 11, 0, z139, [w40, w60, w3, w0, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z68, [w46, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z140, [w47, w60, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z141, [w3, w139, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z142, [w60, w3, w139, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok88 : block88.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block89 : List GateState := [(false, 14, 11, 0, z74, [w60, w3, w0, w2, w6, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok89 : block89.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block90 : List GateState := [(true, 13, 12, 1, z35, [w60, w3, w0, w15, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok90 : block90.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block91 : List GateState := [(true, 13, 12, 1, z95, [w60, w3, w61, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok91 : block91.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block92 : List GateState := [(true, 13, 12, 1, z108, [w60, w3, w0, w2, w62, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok92 : block92.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block93 : List GateState := [(true, 13, 12, 1, z143, [w60, w3, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z93, [w60, w3, w0, w2, w64, w6, w7, w9, w10]),
-  (true, 13, 12, 1, z144, [w60, w3, w0, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok93 : block93.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block94 : List GateState := [(false, 14, 12, 1, z93, [w117, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok94 : block94.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block95 : List GateState := [(true, 13, 12, 1, z37, [w60, w3, w0, w65, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok95 : block95.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block96 : List GateState := [(true, 13, 12, 1, z96, [w60, w3, w0, w2, w6, w7, w36, w9, w10]),
-  (true, 13, 12, 1, z145, [w60, w3, w0, w2, w6, w7, w36, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok96 : block96.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block97 : List GateState := [(false, 14, 12, 1, z96, [w118, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok97 : block97.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block98 : List GateState := [(true, 13, 12, 1, z30, [w60, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z38, [w60, w3, w80, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok98 : block98.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block99 : List GateState := [(true, 13, 12, 1, z93, [w66, w60, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok99 : block99.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block100 : List GateState := [(true, 13, 12, 1, z39, [w60, w3, w0, w67, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok100 : block100.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block101 : List GateState := [(true, 13, 12, 1, z30, [w60, w3, w0, w22, w2, w6, w7, w9, w10]),
-  (true, 13, 12, 1, z146, [w60, w3, w0, w22, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok101 : block101.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block102 : List GateState := [(true, 13, 12, 1, z147, [w60, w3, w68, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok102 : block102.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block103 : List GateState := [(true, 13, 12, 1, z98, [w60, w3, w0, w2, w6, w69, w7, w9, w10]),
-  (true, 13, 12, 1, z148, [w60, w3, w0, w2, w6, w69, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok103 : block103.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block104 : List GateState := [(false, 14, 12, 1, z149, [w16, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z150, [w3, w140, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z151, [w3, w0, w141, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z152, [w3, w0, w2, w6, w7, w8, w9, w10, w142]),
-  (false, 14, 12, 1, z153, [w3, w0, w15, w2, w6, w7, w8, w9, w10, w142])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok104 : block104.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block105 : List GateState := [(false, 14, 12, 1, z154, [w3, w0, w143, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z155, [w3, w0, w71, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z156, [w145, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z157, [w145, w144, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z158, [w146, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok105 : block105.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block106 : List GateState := [(false, 14, 11, 0, z159, [w146, w144, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z160, [w149, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z161, [w149, w144, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z162, [w151, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z163, [w151, w144, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok106 : block106.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block107 : List GateState := [(false, 14, 11, 0, z164, [w3, w0, w2, w6, w7, w8, w154, w9, w10]),
-  (false, 14, 11, 0, z165, [w144, w3, w0, w2, w6, w7, w8, w154, w9, w10]),
-  (false, 14, 11, 0, z166, [w157, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z167, [w157, w144, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z168, [w161, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok107 : block107.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block108 : List GateState := [(false, 14, 11, 0, z169, [w161, w144, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z157, [w145, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z159, [w146, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z170, [w162, w3, w0, w15, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z171, [w162, w144, w3, w0, w15, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok108 : block108.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block109 : List GateState := [(false, 14, 11, 0, z170, [w149, w3, w0, w15, w2, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z171, [w149, w144, w3, w0, w15, w2, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z161, [w149, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z163, [w151, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z165, [w3, w0, w15, w2, w6, w7, w8, w154, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok109 : block109.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block110 : List GateState := [(false, 14, 11, 0, z172, [w144, w3, w0, w15, w2, w6, w7, w8, w154, w9, w10]),
-  (false, 14, 11, 0, z167, [w157, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z169, [w161, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z173, [w3, w0, w2, w163, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z174, [w3, w0, w15, w2, w163, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok110 : block110.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block111 : List GateState := [(false, 14, 11, 0, z175, [w3, w0, w15, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z176, [w164, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z177, [w51, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z164, [w3, w0, w165, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z178, [w48, w3, w0, w165, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok111 : block111.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block112 : List GateState := [(false, 14, 11, 0, z165, [w3, w0, w15, w165, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z179, [w48, w3, w0, w15, w165, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z180, [w166, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z178, [w166, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z181, [w3, w0, w15, w2, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok112 : block112.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block113 : List GateState := [(false, 14, 11, 0, z182, [w48, w3, w0, w15, w2, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z175, [w3, w0, w15, w2, w6, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z183, [w48, w3, w0, w15, w2, w6, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z182, [w54, w3, w0, w15, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z184, [w55, w3, w0, w15, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok113 : block113.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block114 : List GateState := [(false, 14, 11, 0, z185, [w57, w3, w0, w15, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok114 : block114.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block115 : List GateState := [(true, 13, 12, 1, z186, [w3, w61, w0, w15, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok115 : block115.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block116 : List GateState := [(false, 14, 12, 1, z187, [w3, w140, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok116 : block116.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block117 : List GateState := [(true, 13, 12, 1, z188, [w3, w0, w15, w2, w62, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z189, [w3, w0, w15, w2, w62, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok117 : block117.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block118 : List GateState := [(false, 14, 12, 1, z188, [w3, w0, w141, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok118 : block118.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block119 : List GateState := [(true, 13, 12, 1, z190, [w3, w0, w15, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z191, [w3, w0, w15, w2, w64, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z192, [w3, w0, w15, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok119 : block119.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block120 : List GateState := [(false, 14, 12, 1, z191, [w3, w0, w143, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok120 : block120.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block121 : List GateState := [(true, 13, 12, 1, z47, [w3, w0, w15, w65, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok121 : block121.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block122 : List GateState := [(true, 13, 12, 1, z52, [w3, w0, w15, w2, w6, w7, w36, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok122 : block122.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block123 : List GateState := [(true, 13, 12, 1, z31, [w66, w3, w0, w15, w2, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z193, [w66, w3, w0, w15, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok123 : block123.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block124 : List GateState := [(true, 13, 12, 1, z191, [w3, w0, w15, w22, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok124 : block124.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block125 : List GateState := [(true, 13, 12, 1, z194, [w3, w68, w0, w15, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok125 : block125.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block126 : List GateState := [(true, 13, 12, 1, z26, [w24, w3, w0, w15, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok126 : block126.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block127 : List GateState := [(true, 13, 12, 1, z195, [w3, w0, w15, w2, w6, w69, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok127 : block127.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block128 : List GateState := [(false, 14, 12, 1, z196, [w83, w3, w61, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z197, [w3, w140, w61, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z198, [w3, w0, w2, w6, w7, w8, w167, w9, w10]),
-  (false, 14, 12, 1, z199, [w3, w168, w61, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z200, [w3, w0, w2, w6, w7, w8, w169, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok128 : block128.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block129 : List GateState := [(false, 14, 11, 0, z200, [w3, w170, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok129 : block129.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block130 : List GateState := [(true, 13, 12, 1, z201, [w3, w61, w0, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok130 : block130.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block131 : List GateState := [(false, 14, 12, 1, z202, [w3, w168, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok131 : block131.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block132 : List GateState := [(true, 13, 12, 1, z187, [w3, w80, w61, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok132 : block132.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block133 : List GateState := [(true, 13, 12, 1, z203, [w66, w3, w61, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok133 : block133.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block134 : List GateState := [(true, 13, 12, 1, z194, [w3, w61, w0, w22, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok134 : block134.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block135 : List GateState := [(true, 13, 12, 1, z202, [w3, w61, w68, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok135 : block135.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block136 : List GateState := [(false, 14, 12, 1, z204, [w105, w3, w0, w2, w62, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z205, [w3, w0, w141, w2, w62, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z206, [w3, w0, w2, w6, w7, w8, w9, w10, w171]),
-  (false, 14, 12, 1, z207, [w3, w0, w2, w172, w62, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z208, [w3, w0, w2, w6, w7, w8, w173, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok136 : block136.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block137 : List GateState := [(false, 14, 11, 0, z208, [w3, w0, w2, w174, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z209, [w3, w0, w2, w62, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok137 : block137.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block138 : List GateState := [(true, 13, 12, 1, z210, [w3, w0, w2, w64, w62, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z211, [w3, w0, w2, w64, w62, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok138 : block138.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block139 : List GateState := [(false, 14, 12, 1, z210, [w3, w0, w2, w172, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok139 : block139.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block140 : List GateState := [(true, 13, 12, 1, z188, [w3, w80, w2, w62, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok140 : block140.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block141 : List GateState := [(true, 13, 12, 1, z91, [w66, w3, w0, w2, w62, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z212, [w66, w3, w0, w2, w62, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok141 : block141.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block142 : List GateState := [(true, 13, 12, 1, z188, [w3, w0, w67, w2, w62, w6, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok142 : block142.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block143 : List GateState := [(true, 13, 12, 1, z195, [w3, w0, w22, w2, w62, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok143 : block143.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block144 : List GateState := [(true, 13, 12, 1, z210, [w3, w0, w2, w62, w6, w69, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok144 : block144.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block145 : List GateState := [(true, 13, 12, 1, z213, [w3, w0, w2, w64, w7, w9, w10, w63]),
-  (true, 13, 12, 1, z214, [w3, w0, w2, w64, w6, w7, w9, w10, w63]),
-  (true, 13, 12, 1, z215, [w3, w0, w2, w64, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z216, [w3, w0, w2, w64, w6, w7, w8, w9, w10, w63]),
-  (false, 14, 12, 1, z213, [w175, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok145 : block145.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block146 : List GateState := [(false, 14, 12, 1, z217, [w175, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (false, 14, 12, 1, z92, [w175, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z218, [w175, w3, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (false, 14, 12, 1, z213, [w3, w176, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z217, [w3, w176, w2, w6, w7, w8, w9, w10, w63])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok146 : block146.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block147 : List GateState := [(false, 14, 12, 1, z219, [w3, w176, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z213, [w3, w0, w177, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z217, [w3, w0, w177, w6, w7, w8, w9, w10, w63]),
-  (false, 14, 12, 1, z220, [w3, w0, w177, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z221, [w3, w0, w177, w2, w6, w7, w8, w9, w10, w63])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok147 : block147.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block148 : List GateState := [(false, 14, 12, 1, z213, [w3, w0, w2, w6, w178, w8, w9, w10]),
-  (false, 14, 12, 1, z217, [w3, w0, w2, w6, w178, w8, w9, w10, w63]),
-  (false, 14, 12, 1, z222, [w3, w0, w2, w6, w178, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z213, [w3, w0, w2, w6, w7, w8, w179, w10]),
-  (false, 14, 12, 1, z217, [w3, w0, w2, w6, w7, w8, w179, w10, w63])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok148 : block148.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block149 : List GateState := [(false, 14, 12, 1, z223, [w3, w0, w2, w6, w7, w8, w179, w9, w10]),
-  (false, 14, 12, 1, z213, [w3, w0, w2, w6, w7, w8, w9, w181]),
-  (false, 14, 12, 1, z217, [w3, w0, w2, w6, w7, w8, w9, w181, w63]),
-  (false, 14, 11, 0, z224, [w184, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z225, [w3, w186, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok149 : block149.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block150 : List GateState := [(false, 14, 11, 0, z226, [w3, w0, w187, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z227, [w3, w0, w2, w6, w189, w8, w9, w10]),
-  (false, 14, 11, 0, z228, [w3, w0, w2, w6, w7, w8, w192, w10]),
-  (false, 14, 12, 1, z229, [w117, w3, w0, w2, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z230, [w3, w168, w0, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok150 : block150.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block151 : List GateState := [(false, 14, 12, 1, z231, [w3, w0, w143, w2, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z232, [w3, w0, w2, w172, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z233, [w3, w0, w2, w73, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z234, [w193, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z235, [w193, w194, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok151 : block151.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block152 : List GateState := [(false, 14, 11, 0, z236, [w195, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z237, [w195, w194, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z238, [w196, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z239, [w196, w194, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z240, [w198, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok152 : block152.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block153 : List GateState := [(false, 14, 11, 0, z241, [w198, w194, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z242, [w199, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z243, [w199, w194, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z244, [w201, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z245, [w201, w194, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok153 : block153.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block154 : List GateState := [(false, 14, 11, 0, z246, [w203, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z247, [w203, w194, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z235, [w193, w3, w0, w2, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z237, [w195, w3, w0, w2, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z239, [w196, w3, w0, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok154 : block154.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block155 : List GateState := [(false, 14, 11, 0, z248, [w198, w3, w0, w2, w64, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z249, [w198, w194, w3, w0, w2, w64, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z241, [w198, w3, w0, w2, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z243, [w199, w3, w0, w2, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z248, [w201, w3, w0, w2, w64, w6, w7, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok155 : block155.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block156 : List GateState := [(false, 14, 11, 0, z249, [w201, w194, w3, w0, w2, w64, w6, w7, w9, w10]),
-  (false, 14, 11, 0, z245, [w201, w3, w0, w2, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z247, [w203, w3, w0, w2, w64, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z250, [w3, w0, w2, w6, w7, w8, w197, w9, w10]),
-  (false, 14, 11, 0, z251, [w3, w0, w2, w64, w6, w7, w8, w197, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok156 : block156.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block157 : List GateState := [(false, 14, 11, 0, z252, [w3, w0, w2, w64, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z253, [w3, w0, w2, w6, w200, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z254, [w3, w0, w2, w64, w6, w200, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z252, [w3, w0, w2, w64, w6, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok157 : block157.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block158 : List GateState := [(true, 13, 12, 1, z255, [w3, w0, w65, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z52, [w3, w0, w65, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok158 : block158.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block159 : List GateState := [(true, 13, 12, 1, z50, [w3, w0, w2, w64, w6, w7, w36, w9, w10]),
-  (true, 13, 12, 1, z256, [w3, w0, w2, w64, w6, w7, w36, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok159 : block159.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block160 : List GateState := [(true, 13, 12, 1, z220, [w3, w80, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z257, [w3, w80, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z191, [w3, w80, w2, w64, w6, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z194, [w3, w80, w0, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok160 : block160.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block161 : List GateState := [(true, 13, 12, 1, z258, [w66, w3, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z93, [w66, w3, w0, w2, w64, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z259, [w66, w3, w0, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok161 : block161.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block162 : List GateState := [(true, 13, 12, 1, z260, [w3, w0, w67, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z195, [w3, w0, w67, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok162 : block162.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block163 : List GateState := [(true, 13, 12, 1, z261, [w3, w0, w22, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z191, [w3, w0, w22, w2, w64, w6, w7, w9, w10]),
-  (true, 13, 12, 1, z262, [w3, w0, w22, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok163 : block163.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block164 : List GateState := [(true, 13, 12, 1, z263, [w3, w68, w0, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok164 : block164.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block165 : List GateState := [(true, 13, 12, 1, z264, [w24, w3, w0, w2, w6, w7, w8, w9, w10, w63]),
-  (true, 13, 12, 1, z46, [w24, w3, w0, w2, w64, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok165 : block165.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block166 : List GateState := [(true, 13, 12, 1, z265, [w3, w0, w2, w64, w6, w69, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok166 : block166.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block167 : List GateState := [(false, 14, 12, 1, z266, [w25, w3, w0, w65, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z267, [w3, w0, w2, w6, w7, w8, w9, w10, w204]),
-  (false, 14, 12, 1, z268, [w3, w0, w71, w65, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z269, [w3, w0, w2, w6, w7, w8, w9, w205, w10]),
-  (false, 14, 12, 1, z270, [w3, w0, w206, w65, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok167 : block167.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block168 : List GateState := [(false, 14, 11, 0, z271, [w3, w0, w2, w6, w208, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z272, [w3, w0, w2, w6, w7, w8, w209, w9, w10]),
-  (false, 14, 11, 0, z271, [w3, w0, w210, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z273, [w3, w0, w65, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z272, [w3, w0, w211, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok168 : block168.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block169 : List GateState := [(false, 14, 11, 0, z273, [w3, w0, w65, w2, w6, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok169 : block169.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block170 : List GateState := [(true, 13, 12, 1, z274, [w3, w0, w65, w2, w6, w7, w36, w8, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok170 : block170.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block171 : List GateState := [(false, 14, 12, 1, z274, [w3, w0, w206, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok171 : block171.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block172 : List GateState := [(true, 13, 12, 1, z275, [w3, w80, w65, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok172 : block172.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block173 : List GateState := [(true, 13, 12, 1, z26, [w66, w3, w0, w65, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok173 : block173.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block174 : List GateState := [(true, 13, 12, 1, z36, [w24, w3, w0, w65, w2, w6, w7, w8, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok174 : block174.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block175 : List GateState := [(false, 14, 12, 1, z276, [w118, w3, w0, w2, w6, w7, w36, w8, w9, w10]),
-  (false, 14, 12, 1, z277, [w3, w0, w206, w2, w6, w7, w36, w8, w9, w10]),
-  (false, 14, 12, 1, z278, [w3, w0, w2, w6, w7, w8, w9, w10, w212]),
-  (false, 14, 12, 1, z279, [w3, w0, w2, w73, w6, w7, w36, w8, w9, w10]),
-  (false, 14, 11, 0, z280, [w3, w0, w2, w6, w7, w213, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok175 : block175.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block176 : List GateState := [(false, 14, 11, 0, z281, [w3, w0, w2, w6, w7, w36, w45, w9, w10]),
-  (false, 14, 11, 0, z280, [w3, w0, w2, w6, w215, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok176 : block176.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block177 : List GateState := [(true, 13, 12, 1, z274, [w3, w80, w2, w6, w7, w36, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok177 : block177.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block178 : List GateState := [(true, 13, 12, 1, z46, [w66, w3, w0, w2, w6, w7, w36, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok178 : block178.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block179 : List GateState := [(true, 13, 12, 1, z274, [w3, w0, w22, w2, w6, w7, w36, w9, w10]),
-  (true, 13, 12, 1, z282, [w3, w0, w22, w2, w6, w7, w36, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok179 : block179.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block180 : List GateState := [(true, 13, 12, 1, z96, [w24, w3, w0, w2, w6, w7, w36, w8, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok180 : block180.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block181 : List GateState := [(false, 14, 12, 1, z283, [w5, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z284, [w3, w80, w2, w6, w216, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z285, [w3, w140, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z286, [w3, w217, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z287, [w3, w80, w2, w6, w7, w8, w218, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok181 : block181.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block182 : List GateState := [(false, 14, 12, 1, z288, [w3, w219, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z289, [w3, w220, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z290, [w3, w80, w222, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z291, [w3, w80, w2, w6, w225, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z292, [w3, w80, w2, w6, w7, w8, w226, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok182 : block182.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block183 : List GateState := [(false, 14, 11, 0, z293, [w227, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z291, [w3, w80, w228, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z294, [w40, w3, w80, w228, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z295, [w229, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z296, [w44, w3, w80, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok183 : block183.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block184 : List GateState := [(false, 14, 11, 0, z181, [w3, w80, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z175, [w40, w3, w80, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z297, [w46, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z298, [w47, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z299, [w164, w3, w80, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok184 : block184.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block185 : List GateState := [(false, 14, 11, 0, z292, [w3, w80, w230, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z300, [w48, w3, w80, w230, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z301, [w231, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z181, [w3, w80, w2, w6, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z182, [w48, w3, w80, w2, w6, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok185 : block185.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block186 : List GateState := [(false, 14, 11, 0, z302, [w54, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z303, [w55, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z304, [w57, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z305, [w5, w3, w80, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z306, [w3, w0, w2, w6, w216, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok186 : block186.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block187 : List GateState := [(false, 14, 12, 1, z307, [w3, w140, w80, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z308, [w3, w0, w2, w6, w7, w8, w218, w9, w10]),
-  (false, 14, 12, 1, z309, [w3, w219, w80, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z310, [w3, w0, w2, w6, w225, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z311, [w3, w0, w2, w6, w7, w8, w226, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok187 : block187.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block188 : List GateState := [(false, 14, 11, 0, z310, [w3, w228, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z312, [w43, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z313, [w3, w80, w0, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z311, [w3, w230, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z314, [w51, w3, w80, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok188 : block188.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block189 : List GateState := [(false, 14, 11, 0, z313, [w3, w80, w0, w2, w6, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok189 : block189.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block190 : List GateState := [(true, 13, 12, 1, z31, [w66, w3, w80, w2, w6, w7, w8, w9, w10]),
-  (true, 13, 12, 1, z32, [w66, w3, w80, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok190 : block190.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block191 : List GateState := [(true, 13, 12, 1, z315, [w3, w80, w67, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok191 : block191.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block192 : List GateState := [(false, 14, 12, 1, z316, [w3, w219, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok192 : block192.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block193 : List GateState := [(true, 13, 12, 1, z316, [w3, w80, w68, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok193 : block193.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block194 : List GateState := [(true, 13, 12, 1, z36, [w24, w3, w80, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok194 : block194.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block195 : List GateState := [(true, 13, 12, 1, z317, [w3, w80, w2, w6, w69, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok195 : block195.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block196 : List GateState := [(false, 14, 12, 1, z318, [w83, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z319, [w16, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z320, [w105, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z321, [w3, w0, w2, w6, w7, w8, w9, w10, w232]),
-  (false, 14, 12, 1, z322, [w66, w3, w0, w2, w6, w7, w8, w9, w10, w232])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok196 : block196.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block197 : List GateState := [(false, 14, 12, 1, z323, [w117, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z324, [w70, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z325, [w3, w234, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z326, [w3, w234, w0, w235, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z327, [w3, w0, w237, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok197 : block197.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block198 : List GateState := [(false, 14, 11, 0, z328, [w3, w0, w237, w235, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z329, [w3, w0, w239, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z330, [w3, w0, w239, w235, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z331, [w3, w0, w240, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z332, [w3, w0, w240, w235, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok198 : block198.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block199 : List GateState := [(false, 14, 11, 0, z333, [w3, w0, w2, w6, w7, w8, w241, w9, w10]),
-  (false, 14, 11, 0, z334, [w3, w0, w235, w2, w6, w7, w8, w241, w9, w10]),
-  (false, 14, 11, 0, z335, [w3, w0, w243, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z336, [w3, w0, w243, w235, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z337, [w3, w0, w245, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok199 : block199.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block200 : List GateState := [(false, 14, 11, 0, z338, [w3, w0, w245, w235, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z339, [w247, w66, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z340, [w247, w66, w0, w235, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z326, [w66, w3, w234, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z328, [w66, w3, w0, w237, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok200 : block200.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block201 : List GateState := [(false, 14, 11, 0, z339, [w66, w3, w0, w239, w2, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z340, [w66, w3, w0, w239, w235, w2, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z330, [w66, w3, w0, w239, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z332, [w66, w3, w0, w240, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z334, [w66, w3, w0, w2, w6, w7, w8, w241, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok201 : block201.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block202 : List GateState := [(false, 14, 11, 0, z341, [w66, w3, w0, w235, w2, w6, w7, w8, w241, w9, w10]),
-  (false, 14, 11, 0, z336, [w66, w3, w0, w243, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z338, [w66, w3, w0, w245, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z342, [w3, w238, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z343, [w66, w3, w238, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok202 : block202.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block203 : List GateState := [(false, 14, 11, 0, z68, [w66, w3, w0, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z333, [w248, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z344, [w48, w248, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z334, [w66, w248, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z345, [w48, w66, w248, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok203 : block203.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block204 : List GateState := [(false, 14, 11, 0, z346, [w128, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z344, [w128, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z347, [w51, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z348, [w103, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z67, [w66, w3, w0, w2, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok204 : block204.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block205 : List GateState := [(false, 14, 11, 0, z74, [w48, w66, w3, w0, w2, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z68, [w66, w3, w0, w2, w6, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z139, [w48, w66, w3, w0, w2, w6, w53, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z74, [w54, w66, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z349, [w55, w66, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok205 : block205.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block206 : List GateState := [(false, 14, 11, 0, z350, [w57, w66, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok206 : block206.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block207 : List GateState := [(true, 13, 12, 1, z33, [w66, w3, w0, w67, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok207 : block207.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block208 : List GateState := [(true, 13, 12, 1, z35, [w66, w3, w0, w22, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok208 : block208.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block209 : List GateState := [(true, 13, 12, 1, z95, [w66, w3, w68, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok209 : block209.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block210 : List GateState := [(true, 13, 12, 1, z45, [w66, w24, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok210 : block210.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block211 : List GateState := [(true, 13, 12, 1, z108, [w66, w3, w0, w2, w6, w69, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok211 : block211.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block212 : List GateState := [(false, 14, 12, 1, z351, [w18, w3, w0, w67, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z352, [w3, w0, w2, w6, w7, w250, w8, w9, w10]),
-  (false, 14, 12, 1, z353, [w3, w0, w141, w67, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z354, [w3, w0, w2, w6, w7, w8, w9, w10, w251]),
-  (false, 14, 12, 1, z355, [w3, w0, w252, w67, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok212 : block212.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block213 : List GateState := [(false, 14, 11, 0, z356, [w3, w0, w2, w6, w256, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z357, [w3, w0, w2, w6, w7, w8, w257, w9, w10]),
-  (false, 14, 11, 0, z356, [w3, w0, w258, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z358, [w3, w0, w67, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z357, [w3, w0, w259, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok213 : block213.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block214 : List GateState := [(false, 14, 11, 0, z358, [w3, w0, w67, w2, w6, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok214 : block214.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block215 : List GateState := [(true, 13, 12, 1, z317, [w3, w0, w67, w22, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok215 : block215.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block216 : List GateState := [(false, 14, 12, 1, z317, [w3, w0, w252, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok216 : block216.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block217 : List GateState := [(true, 13, 12, 1, z317, [w3, w0, w67, w2, w6, w69, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok217 : block217.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block218 : List GateState := [(false, 14, 12, 1, z359, [w23, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z360, [w3, w219, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z361, [w3, w0, w2, w6, w7, w8, w9, w10, w260]),
-  (false, 14, 12, 1, z362, [w3, w0, w22, w2, w6, w7, w8, w9, w10, w260]),
-  (false, 14, 12, 1, z363, [w3, w0, w143, w22, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok218 : block218.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block219 : List GateState := [(false, 14, 12, 1, z364, [w3, w0, w252, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z365, [w3, w0, w206, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z366, [w262, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z367, [w262, w263, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z368, [w265, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok219 : block219.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block220 : List GateState := [(false, 14, 11, 0, z369, [w265, w263, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z370, [w3, w0, w2, w6, w266, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z371, [w263, w3, w0, w2, w6, w266, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z372, [w267, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z373, [w267, w263, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok220 : block220.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block221 : List GateState := [(false, 14, 11, 0, z374, [w269, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z375, [w269, w263, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z376, [w271, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z377, [w271, w263, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z378, [w273, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok221 : block221.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block222 : List GateState := [(false, 14, 11, 0, z379, [w273, w263, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z367, [w262, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z369, [w265, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z380, [w275, w3, w0, w22, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z381, [w275, w263, w3, w0, w22, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok222 : block222.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block223 : List GateState := [(false, 14, 11, 0, z371, [w3, w0, w22, w2, w6, w266, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z382, [w263, w3, w0, w22, w2, w6, w266, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z373, [w267, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z375, [w269, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z380, [w271, w3, w0, w22, w2, w6, w7, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok223 : block223.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block224 : List GateState := [(false, 14, 11, 0, z381, [w271, w263, w3, w0, w22, w2, w6, w7, w9, w10]),
-  (false, 14, 11, 0, z377, [w271, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z379, [w273, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z383, [w227, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z384, [w43, w3, w0, w22, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok224 : block224.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block225 : List GateState := [(false, 14, 11, 0, z370, [w3, w0, w276, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z385, [w40, w3, w0, w276, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z371, [w3, w0, w22, w276, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z386, [w40, w3, w0, w22, w276, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z387, [w156, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok225 : block225.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block226 : List GateState := [(false, 14, 11, 0, z385, [w156, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z388, [w44, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z181, [w3, w0, w22, w2, w6, w7, w45, w9, w10]),
-  (false, 14, 11, 0, z175, [w40, w3, w0, w22, w2, w6, w7, w45, w9, w10]),
-  (false, 14, 11, 0, z182, [w3, w0, w22, w2, w6, w7, w8, w45, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok226 : block226.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block227 : List GateState := [(false, 14, 11, 0, z183, [w40, w3, w0, w22, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z175, [w46, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z389, [w47, w3, w0, w22, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z390, [w3, w0, w2, w277, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z391, [w3, w0, w22, w2, w277, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok227 : block227.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block228 : List GateState := [(false, 14, 11, 0, z182, [w3, w0, w22, w2, w6, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok228 : block228.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block229 : List GateState := [(true, 13, 12, 1, z392, [w3, w68, w0, w22, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok229 : block229.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block230 : List GateState := [(true, 13, 12, 1, z37, [w24, w3, w0, w22, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok230 : block230.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block231 : List GateState := [(true, 13, 12, 1, z317, [w3, w0, w22, w2, w6, w69, w7, w9, w10]),
-  (true, 13, 12, 1, z393, [w3, w0, w22, w2, w6, w69, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok231 : block231.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block232 : List GateState := [(false, 14, 12, 1, z394, [w87, w3, w68, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z395, [w3, w219, w68, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z396, [w3, w0, w2, w6, w278, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z397, [w3, w168, w68, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z398, [w3, w0, w2, w6, w279, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok232 : block232.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block233 : List GateState := [(false, 14, 11, 0, z398, [w3, w0, w280, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok233 : block233.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block234 : List GateState := [(false, 14, 12, 1, z399, [w25, w24, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z400, [w3, w0, w2, w6, w7, w8, w9, w10, w281]),
-  (false, 14, 12, 1, z401, [w70, w24, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z402, [w3, w0, w2, w6, w7, w8, w9, w282, w10]),
-  (false, 14, 12, 1, z403, [w118, w24, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok234 : block234.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block235 : List GateState := [(false, 14, 11, 0, z404, [w3, w0, w2, w6, w284, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z405, [w3, w0, w2, w6, w7, w8, w286, w9, w10]),
-  (false, 14, 11, 0, z404, [w287, w3, w0, w2, w6, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z406, [w24, w3, w0, w2, w6, w7, w8, w45, w9, w10]),
-  (false, 14, 11, 0, z405, [w288, w3, w0, w2, w6, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok235 : block235.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block236 : List GateState := [(false, 14, 11, 0, z406, [w24, w3, w0, w2, w6, w53, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok236 : block236.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block237 : List GateState := [(false, 14, 12, 1, z407, [w108, w3, w0, w2, w6, w69, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z408, [w3, w0, w252, w2, w6, w69, w7, w8, w9, w10]),
-  (false, 14, 12, 1, z409, [w3, w0, w2, w6, w7, w289, w8, w9, w10]),
-  (false, 14, 12, 1, z410, [w3, w0, w2, w172, w6, w69, w7, w8, w9, w10]),
-  (false, 14, 11, 0, z411, [w3, w0, w2, w6, w7, w290, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok237 : block237.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def block238 : List GateState := [(false, 14, 11, 0, z411, [w3, w0, w2, w6, w293, w7, w8, w9, w10])]
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma ok238 : block238.all (fun s => !(evalState engine0 engine1 s)) = true := by decide +kernel
-def cache38 := block0 ++ block1 ++ block2 ++ block3 ++ block4 ++ block5 ++ block6 ++ block7 ++ block8 ++ block9 ++ block10 ++ block11 ++ block12 ++ block13 ++ block14 ++ block15 ++ block16 ++ block17 ++ block18 ++ block19 ++ block20 ++ block21 ++ block22 ++ block23 ++ block24 ++ block25 ++ block26
+def cache38 := block0 ++ block1 ++ block2 ++ block3 ++ block4 ++ block5 ++ block6 ++ block7 ++ block8 ++ block9 ++ block10 ++ block11 ++ block12 ++ block13 ++ block14 ++ block15
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma result38 : chk [] projections 0 14 1 (2 ^ 38) 0 = false := by
   apply discharge cache38 _ ?_ (by decide +kernel)
-  simp only [cache38, List.all_append, ok0, ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10, ok11, ok12, ok13, ok14, ok15, ok16, ok17, ok18, ok19, ok20, ok21, ok22, ok23, ok24, ok25, ok26, Bool.and_self]
-def cache42 := block7 ++ block27 ++ block28 ++ block29 ++ block30 ++ block31 ++ block32 ++ block33 ++ block34 ++ block35 ++ block36 ++ block37 ++ block38 ++ block39 ++ block40 ++ block41
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result42 : chk [] projections 0 14 1 (2 ^ 42) 0 = false := by
-  apply discharge cache42 _ ?_ (by decide +kernel)
-  simp only [cache42, List.all_append, ok7, ok27, ok28, ok29, ok30, ok31, ok32, ok33, ok34, ok35, ok36, ok37, ok38, ok39, ok40, ok41, Bool.and_self]
-def cache45 := block8 ++ block29 ++ block42 ++ block43 ++ block44 ++ block45 ++ block46 ++ block47 ++ block48 ++ block49 ++ block50 ++ block51 ++ block52 ++ block53 ++ block54 ++ block55 ++ block56 ++ block57 ++ block58 ++ block59 ++ block60 ++ block61 ++ block62 ++ block63 ++ block64 ++ block65
+  simp only [cache38, List.all_append, ok0, ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10, ok11, ok12, ok13, ok14, ok15, Bool.and_self]
+def cache45 := block9 ++ block16 ++ block17 ++ block18 ++ block19 ++ block20 ++ block21 ++ block22 ++ block23 ++ block24 ++ block25 ++ block26 ++ block27 ++ block28 ++ block29 ++ block30 ++ block31 ++ block32
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma result45 : chk [] projections 0 14 1 (2 ^ 45) 0 = false := by
   apply discharge cache45 _ ?_ (by decide +kernel)
-  simp only [cache45, List.all_append, ok8, ok29, ok42, ok43, ok44, ok45, ok46, ok47, ok48, ok49, ok50, ok51, ok52, ok53, ok54, ok55, ok56, ok57, ok58, ok59, ok60, ok61, ok62, ok63, ok64, ok65, Bool.and_self]
-def cache57 := block9 ++ block10 ++ block51 ++ block66 ++ block67 ++ block68 ++ block69 ++ block70 ++ block71 ++ block72 ++ block73 ++ block74 ++ block75 ++ block76 ++ block77 ++ block78
+  simp only [cache45, List.all_append, ok9, ok16, ok17, ok18, ok19, ok20, ok21, ok22, ok23, ok24, ok25, ok26, ok27, ok28, ok29, ok30, ok31, ok32, Bool.and_self]
+def cache57 := block10 ++ block27 ++ block33 ++ block34 ++ block35 ++ block36 ++ block37 ++ block38 ++ block39
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma result57 : chk [] projections 0 14 1 (2 ^ 57) 0 = false := by
   apply discharge cache57 _ ?_ (by decide +kernel)
-  simp only [cache57, List.all_append, ok9, ok10, ok51, ok66, ok67, ok68, ok69, ok70, ok71, ok72, ok73, ok74, ok75, ok76, ok77, ok78, Bool.and_self]
-def cache61 := block11 ++ block12 ++ block30 ++ block52 ++ block69 ++ block70 ++ block79 ++ block80 ++ block81 ++ block82 ++ block83 ++ block84 ++ block85 ++ block86 ++ block87 ++ block88 ++ block89 ++ block90 ++ block91 ++ block92 ++ block93 ++ block94 ++ block95 ++ block96 ++ block97 ++ block98 ++ block99 ++ block100 ++ block101 ++ block102 ++ block103
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result61 : chk [] projections 0 14 1 (2 ^ 61) 0 = false := by
-  apply discharge cache61 _ ?_ (by decide +kernel)
-  simp only [cache61, List.all_append, ok11, ok12, ok30, ok52, ok69, ok70, ok79, ok80, ok81, ok82, ok83, ok84, ok85, ok86, ok87, ok88, ok89, ok90, ok91, ok92, ok93, ok94, ok95, ok96, ok97, ok98, ok99, ok100, ok101, ok102, ok103, Bool.and_self]
-def cache90 := block13 ++ block14 ++ block31 ++ block32 ++ block53 ++ block71 ++ block90 ++ block104 ++ block105 ++ block106 ++ block107 ++ block108 ++ block109 ++ block110 ++ block111 ++ block112 ++ block113 ++ block114 ++ block115 ++ block116 ++ block117 ++ block118 ++ block119 ++ block120 ++ block121 ++ block122 ++ block123 ++ block124 ++ block125 ++ block126 ++ block127
+  simp only [cache57, List.all_append, ok10, ok27, ok33, ok34, ok35, ok36, ok37, ok38, ok39, Bool.and_self]
+def cache90 := block11 ++ block28 ++ block37 ++ block40 ++ block41 ++ block42 ++ block43 ++ block44 ++ block45 ++ block46 ++ block47 ++ block48 ++ block49 ++ block50 ++ block51 ++ block52 ++ block53 ++ block54 ++ block55 ++ block56
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma result90 : chk [] projections 0 14 1 (2 ^ 90) 0 = false := by
   apply discharge cache90 _ ?_ (by decide +kernel)
-  simp only [cache90, List.all_append, ok13, ok14, ok31, ok32, ok53, ok71, ok90, ok104, ok105, ok106, ok107, ok108, ok109, ok110, ok111, ok112, ok113, ok114, ok115, ok116, ok117, ok118, ok119, ok120, ok121, ok122, ok123, ok124, ok125, ok126, ok127, Bool.and_self]
-def cache97 := block15 ++ block54 ++ block55 ++ block91 ++ block115 ++ block116 ++ block128 ++ block129 ++ block130 ++ block131 ++ block132 ++ block133 ++ block134 ++ block135
+  simp only [cache90, List.all_append, ok11, ok28, ok37, ok40, ok41, ok42, ok43, ok44, ok45, ok46, ok47, ok48, ok49, ok50, ok51, ok52, ok53, ok54, ok55, ok56, Bool.and_self]
+def cache97 := block12 ++ block29 ++ block53 ++ block57 ++ block58 ++ block59 ++ block60
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma result97 : chk [] projections 0 14 1 (2 ^ 97) 0 = false := by
   apply discharge cache97 _ ?_ (by decide +kernel)
-  simp only [cache97, List.all_append, ok15, ok54, ok55, ok91, ok115, ok116, ok128, ok129, ok130, ok131, ok132, ok133, ok134, ok135, Bool.and_self]
-def cache109 := block16 ++ block56 ++ block72 ++ block73 ++ block92 ++ block117 ++ block118 ++ block136 ++ block137 ++ block138 ++ block139 ++ block140 ++ block141 ++ block142 ++ block143 ++ block144
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result109 : chk [] projections 0 14 1 (2 ^ 109) 0 = false := by
-  apply discharge cache109 _ ?_ (by decide +kernel)
-  simp only [cache109, List.all_append, ok16, ok56, ok72, ok73, ok92, ok117, ok118, ok136, ok137, ok138, ok139, ok140, ok141, ok142, ok143, ok144, Bool.and_self]
-def cache113 := block17 ++ block33 ++ block34 ++ block57 ++ block74 ++ block93 ++ block94 ++ block119 ++ block120 ++ block130 ++ block131 ++ block138 ++ block139 ++ block145 ++ block146 ++ block147 ++ block148 ++ block149 ++ block150 ++ block151 ++ block152 ++ block153 ++ block154 ++ block155 ++ block156 ++ block157 ++ block158 ++ block159 ++ block160 ++ block161 ++ block162 ++ block163 ++ block164 ++ block165 ++ block166
+  simp only [cache97, List.all_append, ok12, ok29, ok53, ok57, ok58, ok59, ok60, Bool.and_self]
+def cache113 := block13 ++ block30 ++ block38 ++ block54 ++ block60 ++ block61 ++ block62 ++ block63 ++ block64 ++ block65 ++ block66 ++ block67 ++ block68 ++ block69 ++ block70 ++ block71 ++ block72 ++ block73 ++ block74 ++ block75 ++ block76 ++ block77 ++ block78 ++ block79 ++ block80
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma result113 : chk [] projections 0 14 1 (2 ^ 113) 0 = false := by
   apply discharge cache113 _ ?_ (by decide +kernel)
-  simp only [cache113, List.all_append, ok17, ok33, ok34, ok57, ok74, ok93, ok94, ok119, ok120, ok130, ok131, ok138, ok139, ok145, ok146, ok147, ok148, ok149, ok150, ok151, ok152, ok153, ok154, ok155, ok156, ok157, ok158, ok159, ok160, ok161, ok162, ok163, ok164, ok165, ok166, Bool.and_self]
-def cache116 := block18 ++ block19 ++ block32 ++ block35 ++ block58 ++ block95 ++ block121 ++ block158 ++ block167 ++ block168 ++ block169 ++ block170 ++ block171 ++ block172 ++ block173 ++ block174
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result116 : chk [] projections 0 14 1 (2 ^ 116) 0 = false := by
-  apply discharge cache116 _ ?_ (by decide +kernel)
-  simp only [cache116, List.all_append, ok18, ok19, ok32, ok35, ok58, ok95, ok121, ok158, ok167, ok168, ok169, ok170, ok171, ok172, ok173, ok174, Bool.and_self]
-def cache139 := block20 ++ block34 ++ block36 ++ block59 ++ block96 ++ block97 ++ block122 ++ block159 ++ block170 ++ block171 ++ block175 ++ block176 ++ block177 ++ block178 ++ block179 ++ block180
+  simp only [cache113, List.all_append, ok13, ok30, ok38, ok54, ok60, ok61, ok62, ok63, ok64, ok65, ok66, ok67, ok68, ok69, ok70, ok71, ok72, ok73, ok74, ok75, ok76, ok77, ok78, ok79, ok80, Bool.and_self]
+def cache139 := block14 ++ block31 ++ block55 ++ block79 ++ block81 ++ block82 ++ block83 ++ block84
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma result139 : chk [] projections 0 14 1 (2 ^ 139) 0 = false := by
   apply discharge cache139 _ ?_ (by decide +kernel)
-  simp only [cache139, List.all_append, ok20, ok34, ok36, ok59, ok96, ok97, ok122, ok159, ok170, ok171, ok175, ok176, ok177, ok178, ok179, ok180, Bool.and_self]
-def cache171 := block8 ++ block37 ++ block60 ++ block75 ++ block98 ++ block116 ++ block132 ++ block140 ++ block160 ++ block172 ++ block177 ++ block181 ++ block182 ++ block183 ++ block184 ++ block185 ++ block186 ++ block187 ++ block188 ++ block189 ++ block190 ++ block191 ++ block192 ++ block193 ++ block194 ++ block195
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result171 : chk [] projections 0 14 1 (2 ^ 171) 0 = false := by
-  apply discharge cache171 _ ?_ (by decide +kernel)
-  simp only [cache171, List.all_append, ok8, ok37, ok60, ok75, ok98, ok116, ok132, ok140, ok160, ok172, ok177, ok181, ok182, ok183, ok184, ok185, ok186, ok187, ok188, ok189, ok190, ok191, ok192, ok193, ok194, ok195, Bool.and_self]
-def cache178 := block14 ++ block21 ++ block38 ++ block39 ++ block55 ++ block73 ++ block94 ++ block99 ++ block123 ++ block133 ++ block141 ++ block161 ++ block173 ++ block178 ++ block190 ++ block196 ++ block197 ++ block198 ++ block199 ++ block200 ++ block201 ++ block202 ++ block203 ++ block204 ++ block205 ++ block206 ++ block207 ++ block208 ++ block209 ++ block210 ++ block211
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result178 : chk [] projections 0 14 1 (2 ^ 178) 0 = false := by
-  apply discharge cache178 _ ?_ (by decide +kernel)
-  simp only [cache178, List.all_append, ok14, ok21, ok38, ok39, ok55, ok73, ok94, ok99, ok123, ok133, ok141, ok161, ok173, ok178, ok190, ok196, ok197, ok198, ok199, ok200, ok201, ok202, ok203, ok204, ok205, ok206, ok207, ok208, ok209, ok210, ok211, Bool.and_self]
-def cache183 := block10 ++ block22 ++ block61 ++ block76 ++ block100 ++ block118 ++ block142 ++ block162 ++ block191 ++ block207 ++ block212 ++ block213 ++ block214 ++ block215 ++ block216 ++ block217
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result183 : chk [] projections 0 14 1 (2 ^ 183) 0 = false := by
-  apply discharge cache183 _ ?_ (by decide +kernel)
-  simp only [cache183, List.all_append, ok10, ok22, ok61, ok76, ok100, ok118, ok142, ok162, ok191, ok207, ok212, ok213, ok214, ok215, ok216, ok217, Bool.and_self]
-def cache187 := block12 ++ block23 ++ block40 ++ block62 ++ block77 ++ block101 ++ block120 ++ block124 ++ block134 ++ block143 ++ block163 ++ block171 ++ block179 ++ block192 ++ block208 ++ block215 ++ block216 ++ block218 ++ block219 ++ block220 ++ block221 ++ block222 ++ block223 ++ block224 ++ block225 ++ block226 ++ block227 ++ block228 ++ block229 ++ block230 ++ block231
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result187 : chk [] projections 0 14 1 (2 ^ 187) 0 = false := by
-  apply discharge cache187 _ ?_ (by decide +kernel)
-  simp only [cache187, List.all_append, ok12, ok23, ok40, ok62, ok77, ok101, ok120, ok124, ok134, ok143, ok163, ok171, ok179, ok192, ok208, ok215, ok216, ok218, ok219, ok220, ok221, ok222, ok223, ok224, ok225, ok226, ok227, ok228, ok229, ok230, ok231, Bool.and_self]
-def cache194 := block24 ++ block52 ++ block63 ++ block102 ++ block125 ++ block131 ++ block135 ++ block164 ++ block192 ++ block193 ++ block209 ++ block229 ++ block232 ++ block233
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result194 : chk [] projections 0 14 1 (2 ^ 194) 0 = false := by
-  apply discharge cache194 _ ?_ (by decide +kernel)
-  simp only [cache194, List.all_append, ok24, ok52, ok63, ok102, ok125, ok131, ok135, ok164, ok192, ok193, ok209, ok229, ok232, ok233, Bool.and_self]
-def cache204 := block19 ++ block25 ++ block39 ++ block41 ++ block64 ++ block97 ++ block126 ++ block165 ++ block174 ++ block180 ++ block194 ++ block210 ++ block230 ++ block234 ++ block235 ++ block236
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma result204 : chk [] projections 0 14 1 (2 ^ 204) 0 = false := by
-  apply discharge cache204 _ ?_ (by decide +kernel)
-  simp only [cache204, List.all_append, ok19, ok25, ok39, ok41, ok64, ok97, ok126, ok165, ok174, ok180, ok194, ok210, ok230, ok234, ok235, ok236, Bool.and_self]
-def cache206 := block26 ++ block65 ++ block70 ++ block78 ++ block103 ++ block127 ++ block139 ++ block144 ++ block166 ++ block195 ++ block211 ++ block216 ++ block217 ++ block231 ++ block237 ++ block238
+  simp only [cache139, List.all_append, ok14, ok31, ok55, ok79, ok81, ok82, ok83, ok84, Bool.and_self]
+def cache206 := block15 ++ block32 ++ block39 ++ block56 ++ block80 ++ block85 ++ block86 ++ block87
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma result206 : chk [] projections 0 14 1 (2 ^ 206) 0 = false := by
   apply discharge cache206 _ ?_ (by decide +kernel)
-  simp only [cache206, List.all_append, ok26, ok65, ok70, ok78, ok103, ok127, ok139, ok144, ok166, ok195, ok211, ok216, ok217, ok231, ok237, ok238, Bool.and_self]
+  simp only [cache206, List.all_append, ok15, ok32, ok39, ok56, ok80, ok85, ok86, ok87, Bool.and_self]
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_0_14_1_0 : chk [] projections 0 14 1 (remainder cuts0) 1 = false := by decide +kernel
@@ -7643,13 +6970,7 @@ set_option maxHeartbeats 0 in
 lemma h_0_14_1_1 : chk [] projections 0 14 1 (2 ^ 6) 0 = false := by decide +kernel
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_0_14_1_2 : chk [] projections 0 14 1 (2 ^ 10) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_0_14_1_3 : chk [] projections 0 14 1 (2 ^ 38) 0 = false := result38
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_4 : chk [] projections 0 14 1 (2 ^ 42) 0 = false := result42
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_0_14_1_5 : chk [] projections 0 14 1 (2 ^ 45) 0 = false := result45
@@ -7658,25 +6979,13 @@ set_option maxHeartbeats 0 in
 lemma h_0_14_1_6 : chk [] projections 0 14 1 (2 ^ 57) 0 = false := result57
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_0_14_1_7 : chk [] projections 0 14 1 (2 ^ 61) 0 = false := result61
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_8 : chk [] projections 0 14 1 (2 ^ 75) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_0_14_1_9 : chk [] projections 0 14 1 (2 ^ 90) 0 = false := result90
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_0_14_1_10 : chk [] projections 0 14 1 (2 ^ 97) 0 = false := result97
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_0_14_1_11 : chk [] projections 0 14 1 (2 ^ 109) 0 = false := result109
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_0_14_1_12 : chk [] projections 0 14 1 (2 ^ 113) 0 = false := result113
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_13 : chk [] projections 0 14 1 (2 ^ 116) 0 = false := result116
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_0_14_1_14 : chk [] projections 0 14 1 (2 ^ 123) 0 = false := by decide +kernel
@@ -7691,71 +7000,32 @@ set_option maxHeartbeats 0 in
 lemma h_0_14_1_17 : chk [] projections 0 14 1 (2 ^ 139) 0 = false := result139
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
-lemma h_0_14_1_18 : chk [] projections 0 14 1 (2 ^ 153) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_19 : chk [] projections 0 14 1 (2 ^ 171) 0 = false := result171
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_20 : chk [] projections 0 14 1 (2 ^ 178) 0 = false := result178
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_21 : chk [] projections 0 14 1 (2 ^ 183) 0 = false := result183
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_22 : chk [] projections 0 14 1 (2 ^ 187) 0 = false := result187
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_23 : chk [] projections 0 14 1 (2 ^ 190) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_24 : chk [] projections 0 14 1 (2 ^ 194) 0 = false := result194
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
 lemma h_0_14_1_25 : chk [] projections 0 14 1 (2 ^ 201) 0 = false := by decide +kernel
-set_option maxRecDepth 100000 in
-set_option maxHeartbeats 0 in
-lemma h_0_14_1_26 : chk [] projections 0 14 1 (2 ^ 204) 0 = false := result204
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_0_14_1_27 : chk [] projections 0 14 1 (2 ^ 206) 0 = false := result206
 set_option maxRecDepth 100000 in
 set_option maxHeartbeats 0 in
 lemma h_0_14_1_28 : chk [] projections 0 14 1 (2 ^ 208) 0 = false := by decide +kernel
-lemma split_0_14_1 : ∃ M : List (ℕ × ℕ), mFull M = true ∧ ∀ p ∈ M, chk [] projections 0 14 1 p.1 p.2 = false := by
-  refine ⟨bucketList cuts0, cover0, ?_⟩
+lemma split_0_14_1 : ∀ p ∈ permutationParts0, chk [] projections 0 14 1 p.1 p.2 = false := by
   intro p hp
-  simp only [bucketList, List.mem_cons, List.mem_map] at hp
-  rcases hp with rfl | ⟨r, hr, rfl⟩
+  simp only [permutationParts0,List.mem_cons,List.mem_map] at hp
+  rcases hp with rfl | ⟨r,hr,rfl⟩
   · exact h_0_14_1_0
-  simp only [cuts0, List.mem_cons, List.not_mem_nil, or_false] at hr
-  rcases hr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at hr
+  rcases hr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact h_0_14_1_1
-  · exact h_0_14_1_2
   · exact h_0_14_1_3
-  · exact h_0_14_1_4
   · exact h_0_14_1_5
   · exact h_0_14_1_6
-  · exact h_0_14_1_7
-  · exact h_0_14_1_8
   · exact h_0_14_1_9
   · exact h_0_14_1_10
-  · exact h_0_14_1_11
   · exact h_0_14_1_12
-  · exact h_0_14_1_13
   · exact h_0_14_1_14
   · exact h_0_14_1_15
   · exact h_0_14_1_16
   · exact h_0_14_1_17
-  · exact h_0_14_1_18
-  · exact h_0_14_1_19
-  · exact h_0_14_1_20
-  · exact h_0_14_1_21
-  · exact h_0_14_1_22
-  · exact h_0_14_1_23
-  · exact h_0_14_1_24
   · exact h_0_14_1_25
-  · exact h_0_14_1_26
   · exact h_0_14_1_27
   · exact h_0_14_1_28
 theorem small : Imp [] 0 14 :=
@@ -7763,8 +7033,9 @@ theorem small : Imp [] 0 14 :=
 
 theorem positive (S : Finset ℕ) (hS : (S : Set ℕ) ⊆ C (mz 0) (WZ [] 0))
     (hl : Live Z0 (mz 0) (tz 0) 14 1 S) : False := by
-  exact imp_of_live (L := 15) (Or.inl rfl) wellFormed (by decide) soundProjections
-    (by decide) hS hl small (Or.inr split_0_14_1)
+  obtain ⟨A,hA,ha,sel⟩ := chooseFront everyRotation0 everyPair0 small hS hl
+  exact imp_selected (L := 15) (Or.inl rfl) wellFormed (by decide) soundProjections
+    (by decide) hA ha small (Or.inr ⟨permutationParts0,phase0,sel,split_0_14_1⟩)
 open PEqualNP.CircuitLowerBounds
 
 def monoGates : List Gate := [⟨.or, [1, 0]⟩, ⟨.or, [2, 0]⟩, ⟨.or, [9, 1]⟩, ⟨.or, [5, 8]⟩, ⟨.or, [7, 6]⟩, ⟨.or, [12, 9]⟩, ⟨.or, [12, 4]⟩, ⟨.or, [12, 11]⟩, ⟨.and, [14, 10]⟩, ⟨.and, [15, 3]⟩, ⟨.and, [13, 5]⟩, ⟨.and, [7, 6]⟩, ⟨.or, [16, 17]⟩, ⟨.or, [18, 19]⟩, ⟨.or, [20, 21]⟩]
