@@ -6,7 +6,7 @@ namespace PEqualNP.Outside.L_meta_53175_aux
 open PEqualNP.CircuitLowerBounds PEqualNP.MetaComplexity PEqualNP.MetaComplexity.NestedCover
 open PEqualNP.NotBracket PEqualNP.MarkedInversionRank
 
-/-! ### 1. Straight-line circuit builder with NOT-count tracking -/
+-- 1. Straight-line circuit builder with NOT-count tracking
 
 lemma getD_append_left {α : Type*} (l₁ l₂ : List α) (i : ℕ) (d : α) (h : i < l₁.length) :
     (l₁ ++ l₂).getD i d = l₁.getD i d := by
@@ -244,7 +244,7 @@ lemma mkOrListAux_spec (b : Builder) (hv : b.Valid) (acc : ℕ) (hacc : acc < b.
       list_any_congr ws (fun u hu => ho1 _ (by have := hws u (by simp [hu]); omega))
     rw [hany]; simp [Bool.or_assoc]
 
-/-! ### 2. Schedule-to-circuit compiler and equivalence `fit ↔ HasSchedule` -/
+-- 2. Schedule-to-circuit compiler and equivalence fit <-> HasSchedule
 
 def HasSchedule (a n b e : ℕ) (cost : Fin (n + 1) → (Fin a → Bool) → ℕ)
     (T : Finset (Fin (n + 1))) : Prop :=
@@ -996,7 +996,7 @@ lemma fit_iff_schedule (a n b e : ℕ) (cost : Fin (n + 1) → (Fin a → Bool) 
         exact h
       simpa only [hfun] using hsum
 
-/-! ### 3. DP, critical thresholds `q`, and sparse witness subset `S` -/
+-- 3. DP, critical thresholds q, and sparse witness subset S
 
 def dp (a n : ℕ) (cost : Fin (n + 1) → (Fin a → Bool) → ℕ) (T : Finset (Fin (n + 1))) :
     ℕ → ℕ → (Fin a → Bool) → ℕ
@@ -1447,11 +1447,9 @@ lemma minDp_antitone (a n : ℕ) (cost : Fin (n + 1) → (Fin a → Bool) → �
 
 end PEqualNP.Outside.L_meta_53175_aux
 
-namespace PEqualNP.Outside
-
 open PEqualNP.Outside.L_meta_53175_aux
 
-theorem L_meta_53175 :
+theorem PEqualNP.Outside.L_meta_53175 :
   let fit := fun (a n b e : Nat) (cost : Fin (n+1) → (Fin a → Bool) → Nat)
       (S : Finset (Fin (n+1))) =>
     ∃ (C : PEqualNP.CircuitLowerBounds.Circuit) (tap : Fin a → Nat),
@@ -1675,5 +1673,3 @@ theorem L_meta_53175 :
             have hmin := hprefix (n + 1) le_rfl r hr w
             have hdp_univ : dp a n cost Finset.univ (n + 1) r w ≤ e := by omega
             exact (hasSchedule_iff_dp a n b e cost Finset.univ).mpr ⟨r, hr, w, hdp_univ⟩
-
-end PEqualNP.Outside
